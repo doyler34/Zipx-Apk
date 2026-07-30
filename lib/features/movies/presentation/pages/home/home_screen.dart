@@ -13,6 +13,9 @@ import 'package:movie_bloc_app/features/personalization/presentation/blocs/setti
 import '../../widgets/home/movie_carousel.dart';
 import '../../widgets/home/movie_genres.dart';
 import '../../../../../common/widgets/movie/movies_section.dart';
+import '../../../../../core/dependency_injection/di.dart';
+import '../../../../../core/playback/presentation/widgets/continue_watching_section.dart';
+import '../../../../../core/playback/services/playback_history_service.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -92,6 +95,7 @@ class HomeScreen extends StatelessWidget {
                         child: Column(
                           children: [
                             MovieCarousel(movies: state2.showAdultContent ? state.trendingMovies.movies! : state.trendingMovies.movies!.where((movie) => !movie.adult).toList()),
+                            ContinueWatchingSection(historyService: sl<PlaybackHistoryService>()),
                             Header(
                               title: 'Upcoming Movies',
                               onTap: () {

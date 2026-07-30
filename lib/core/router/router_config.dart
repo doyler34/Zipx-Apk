@@ -7,7 +7,15 @@ import 'package:movie_bloc_app/features/movies/presentation/pages/details/all_re
 import 'package:movie_bloc_app/features/movies/presentation/pages/home/all_movies_screen.dart';
 import 'package:movie_bloc_app/features/movies/presentation/pages/details/details_screen.dart';
 import 'package:movie_bloc_app/features/movies/presentation/pages/home/genre_movies_screen.dart';
+import 'package:movie_bloc_app/features/tv/data/models/tv_model.dart';
+import 'package:movie_bloc_app/features/tv/presentation/pages/tv_details_screen.dart';
 import 'package:movie_bloc_app/navigation_menu.dart';
+
+import '../../core/dependency_injection/di.dart';
+import '../../core/playback/domain/entities/playback_request.dart';
+import '../../core/playback/presentation/pages/player_screen.dart';
+import '../../core/playback/services/playback_history_service.dart';
+import '../../core/playback/services/playback_provider_service.dart';
 
 class CustomGoRouterConfig {
   final GoRouter config = GoRouter(
@@ -64,6 +72,22 @@ class CustomGoRouterConfig {
         path: '/reviews/:movieId',
         builder: (BuildContext context, GoRouterState state) {
           return AllReviewsScreen(movieId: state.pathParameters['movieId']!);
+        },
+      ),
+      GoRoute(
+        path: '/tv/:id',
+        builder: (BuildContext context, GoRouterState state) {
+          return TvDetailsScreen(show: state.extra as TvModel);
+        },
+      ),
+      GoRoute(
+        path: '/player',
+        builder: (BuildContext context, GoRouterState state) {
+          return PlayerScreen(
+            request: state.extra as PlaybackRequest,
+            playbackProviderService: sl<PlaybackProviderService>(),
+            historyService: sl<PlaybackHistoryService>(),
+          );
         },
       ),
     ],

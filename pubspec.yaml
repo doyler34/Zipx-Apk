@@ -62,6 +62,10 @@ dependencies:
   extended_image: ^8.2.1
   dio: ^5.4.3+1
 
+  #Embedded playback (in-app WebView for streaming providers)
+  webview_flutter: ^4.8.0
+  webview_flutter_android: ^3.16.6
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

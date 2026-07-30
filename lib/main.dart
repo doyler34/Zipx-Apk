@@ -16,6 +16,7 @@ import 'package:movie_bloc_app/features/personalization/presentation/blocs/setti
 import 'common/blocs/bloc/nav_bar_bloc.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
+import 'core/playback/services/provider_preferences_service.dart';
 import 'core/settings/user_settings.dart';
 import 'features/personalization/data/models/bookmarked_movie_hive.dart';
 
@@ -31,7 +32,14 @@ Future<void> main() async {
   await Hive.openBox('settings');
   await Hive.openBox('theme_mode');
 
+  // Streaming provider configuration is stored separately from TMDB
+  // settings above, so it can never accidentally mix with it.
+  await Hive.openBox('provider_preferences');
+  await Hive.openBox('playback_history');
+  await Hive.openBox('favourites');
+
   await initDependencyInjection();
+  await sl<ProviderPreferencesService>().initialize();
 
   // Used only for testing on different devices
   // FlutterNativeSplash.remove();

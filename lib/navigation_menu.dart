@@ -10,6 +10,7 @@ import 'package:movie_bloc_app/features/personalization/presentation/pages/setti
 import 'common/widgets/appbars_navbars/custom_bottom_navbar.dart';
 import 'features/movies/presentation/pages/home/home_screen.dart';
 import 'features/personalization/presentation/pages/bookmarks/bookmarks_screen.dart';
+import 'features/tv/presentation/pages/tv_home_screen.dart';
 
 class NavigationMenu extends StatelessWidget {
   const NavigationMenu({super.key});
@@ -47,8 +48,10 @@ class NavigationMenu extends StatelessWidget {
                 } else if (state.currentIndex == 1) {
                   return const SearchScreen();
                 } else if (state.currentIndex == 2) {
-                  return const BookmarksScreen();
+                  return const TvHomeScreen();
                 } else if (state.currentIndex == 3) {
+                  return const BookmarksScreen();
+                } else if (state.currentIndex == 4) {
                   return const SettingsScreen();
                 }
               }

@@ -30,6 +30,10 @@ class CustomBottomNavbar extends StatelessWidget implements PreferredSizeWidget 
               label: 'Search',
             ),
             BottomNavigationBarItem(
+              icon: FaIcon(FontAwesomeIcons.tv),
+              label: 'TV Shows',
+            ),
+            BottomNavigationBarItem(
               icon: FaIcon(FontAwesomeIcons.solidBookmark),
               label: 'Bookmarks',
             ),

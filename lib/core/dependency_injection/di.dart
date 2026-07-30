@@ -2,6 +2,15 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:movie_bloc_app/common/blocs/bloc/nav_bar_bloc.dart';
+import 'package:movie_bloc_app/core/playback/domain/providers/mock/mock_reliable_provider.dart';
+import 'package:movie_bloc_app/core/playback/domain/providers/mock/mock_unreliable_provider.dart';
+import 'package:movie_bloc_app/core/playback/domain/providers/streaming_provider.dart';
+import 'package:movie_bloc_app/core/playback/domain/providers/streaming_provider_registry.dart';
+import 'package:movie_bloc_app/core/playback/domain/providers/vidsrc_provider.dart';
+import 'package:movie_bloc_app/core/playback/services/favourite_service.dart';
+import 'package:movie_bloc_app/core/playback/services/playback_history_service.dart';
+import 'package:movie_bloc_app/core/playback/services/playback_provider_service.dart';
+import 'package:movie_bloc_app/core/playback/services/provider_preferences_service.dart';
 import 'package:movie_bloc_app/core/settings/user_settings.dart';
 import 'package:movie_bloc_app/features/movies/data/datasources/remote/tmdb_datasource.dart';
 import 'package:movie_bloc_app/features/movies/data/models/movie_model.dart';
@@ -26,6 +35,9 @@ import 'package:movie_bloc_app/features/movies/presentation/blocs/home/home/home
 import 'package:movie_bloc_app/features/movies/presentation/blocs/search/search/search_bloc.dart';
 import 'package:movie_bloc_app/features/personalization/presentation/blocs/bookmarks/bookmarks_bloc.dart';
 import 'package:movie_bloc_app/features/personalization/presentation/blocs/settings/settings_bloc.dart';
+import 'package:movie_bloc_app/features/tv/data/datasources/remote/tmdb_tv_datasource.dart';
+import 'package:movie_bloc_app/features/tv/presentation/blocs/tv_details_cubit.dart';
+import 'package:movie_bloc_app/features/tv/presentation/blocs/tv_home_cubit.dart';
 
 import '../../features/movies/presentation/blocs/details/details/details_bloc.dart';
 
@@ -36,6 +48,27 @@ Future initDependencyInjection() async {
   sl.registerLazySingleton<Dio>(() => Dio());
   sl.registerLazySingleton<TmdbDatasource>(() => TmdbDatasource(sl()));
   sl.registerLazySingleton<MovieRepo>(() => MovieRepoImpl(tmdbDatasource: sl()));
+  sl.registerLazySingleton<TmdbTvDatasource>(() => TmdbTvDatasource(sl()));
+
+  // --- Streaming provider architecture -------------------------------
+  // Every embedded playback provider is registered exactly once, here.
+  // To add a new provider later: implement `StreamingProvider` in its own
+  // file under core/playback/domain/providers/, then add one line to this
+  // list. Nothing else in the app (registry, services, player UI,
+  // settings screen) needs to change.
+  sl.registerLazySingleton<StreamingProviderRegistry>(
+    () => StreamingProviderRegistry(<StreamingProvider>[
+      VidSrcProvider(),
+      // <-- Register additional real providers here, e.g.:
+      // SomeOtherProvider(),
+      MockReliableProvider(),
+      MockUnreliableProvider(),
+    ]),
+  );
+  sl.registerLazySingleton<ProviderPreferencesService>(() => ProviderPreferencesService(sl()));
+  sl.registerLazySingleton<PlaybackProviderService>(() => PlaybackProviderService(sl(), sl()));
+  sl.registerLazySingleton<PlaybackHistoryService>(() => PlaybackHistoryService());
+  sl.registerLazySingleton<FavouriteService>(() => FavouriteService());
 
   //Others
   sl.registerSingleton<TextEditingController>(TextEditingController(), instanceName: 'search_controller');
@@ -104,4 +137,7 @@ Future initDependencyInjection() async {
   );
 
   sl.registerFactory(() => SettingsBloc());
+
+  sl.registerFactory(() => TvHomeCubit(sl()));
+  sl.registerFactory(() => TvDetailsCubit(sl()));
 }

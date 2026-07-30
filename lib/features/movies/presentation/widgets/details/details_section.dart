@@ -16,6 +16,7 @@ import 'movie_reviews_section.dart';
 import 'movie_title_section.dart';
 import 'movie_video_section.dart';
 import 'movie_year_section.dart';
+import 'watch_now_button.dart';
 
 class DetailsSection extends StatelessWidget {
   const DetailsSection({super.key, required this.movie});
@@ -57,6 +58,7 @@ class DetailsSection extends StatelessWidget {
               child: Column(
                 children: [
                   MovieImageSection(movie: movie),
+                  WatchNowButton(movie: movie),
                   if (movie.title.trim() != '') MovieTitleSection(title: movie.title),
                   if (movie.releaseDate.trim() != '' || state.details.budget != -1 || state.details.originalLanguage.trim() != 'UNKNOWN' || state.details.runtime != -1)
                     MovieYearSection(

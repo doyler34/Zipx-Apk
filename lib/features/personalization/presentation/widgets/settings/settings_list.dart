@@ -8,6 +8,7 @@ import '../../blocs/settings/settings_bloc.dart';
 import 'change_language_tile.dart';
 import 'clear_bookmarks_tile.dart';
 import 'set_api_key_tile.dart';
+import 'streaming_providers_section.dart';
 
 class SettingsList extends StatelessWidget {
   const SettingsList({super.key});
@@ -28,6 +29,7 @@ class SettingsList extends StatelessWidget {
                     ChangeLanguageTile(),
                     ThemeModeTile(),
                     SetApiKeyTile(),
+                    StreamingProvidersSection(),
                   ],
                 ),
               ),
