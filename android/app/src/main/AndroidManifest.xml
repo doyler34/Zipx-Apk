@@ -1,6 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Fire TV / Android TV support: declare that this app does NOT require
+         a touchscreen or the phone-only features, so TV devices (which have
+         neither) are allowed to install it and it shows up in the TV app
+         store / launcher. -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.faketouch" android:required="false" />
+
     <application
+        android:banner="@mipmap/launcher_icon"
         android:label="Zipx Movies"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
@@ -24,6 +34,10 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+                <!-- Makes the app appear on the Fire TV / Android TV home
+                     screen (the "leanback" launcher), not just in phone
+                     launchers. -->
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
