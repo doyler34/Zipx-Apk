@@ -64,11 +64,19 @@ class _TvHomeViewState extends State<_TvHomeView> {
                 if (shows.isEmpty) {
                   return const Center(child: Text('No TV shows found.'));
                 }
+                // Responsive columns: keeps posters a sensible size instead
+                // of two giant ones on a wide TV screen (~2 on a phone, up to
+                // 6 on a TV).
+                final width = MediaQuery.of(context).size.width;
+                final crossAxisCount = (width / 200).floor().clamp(2, 6);
                 return GridView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 0.62),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    childAspectRatio: 0.62,
+                  ),
                   itemCount: shows.length,
-                  itemBuilder: (context, index) => TvCard(show: shows[index]),
+                  itemBuilder: (context, index) => TvCard(show: shows[index], autofocus: index == 0),
                 );
               },
             ),

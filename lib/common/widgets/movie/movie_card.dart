@@ -38,17 +38,7 @@ class MovieCard extends StatelessWidget {
     return BlocBuilder<SettingsBloc, SettingsState>(
       builder: (context, state) {
         if (state is SettingsChanged) {
-          return TvFocusable(
-            onPressed: touchable
-                ? () {
-                    if (isHomePage) {
-                      context.push('/details/${movie.id}', extra: movie);
-                    } else {
-                      context.pushReplacement('/details/${movie.id}', extra: movie);
-                    }
-                  }
-                : () {},
-            child: Padding(
+          final card = Padding(
               padding: const EdgeInsets.only(top: 16, left: 12, right: 12, bottom: 16),
               child: SizedBox(
                 child: AspectRatio(
@@ -85,7 +75,22 @@ class MovieCard extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
+            );
+
+          // Only make it a focusable/tappable target when it actually
+          // navigates. A non-touchable card (e.g. the poster on the details
+          // header) stays a plain image so it isn't a dead D-pad stop.
+          if (!touchable) return card;
+
+          return TvFocusable(
+            onPressed: () {
+              if (isHomePage) {
+                context.push('/details/${movie.id}', extra: movie);
+              } else {
+                context.pushReplacement('/details/${movie.id}', extra: movie);
+              }
+            },
+            child: card,
           );
         } else {
           return const SizedBox.shrink();
