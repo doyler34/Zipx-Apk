@@ -137,7 +137,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     final controller = WebViewController();
     _configureController(controller, provider, token);
-    controller.loadRequest(result.embedUrl);
+    // Providers publish these as *embed* URLs meant to sit inside an
+    // <iframe> on a hosting page - loading one directly as the WebView's
+    // top-level document makes `window.top === window.self` true, which
+    // several providers use to detect "not actually embedded" and respond
+    // with a blank page instead of an error. Wrapping it in a minimal local
+    // HTML page with the real URL in an iframe reproduces how it's actually
+    // meant to be consumed. baseUrl is set to the provider's own origin so
+    // the iframe isn't loaded from a bare `about:blank` parent.
+    controller.loadHtmlString(
+      _embedWrapperHtml(result.embedUrl),
+      baseUrl: '${result.embedUrl.scheme}://${result.embedUrl.host}',
+    );
     _controller = controller;
 
     _loadTimeoutTimer?.cancel();
@@ -166,10 +177,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
           },
           onWebResourceError: (error) {
             if (token != _attemptToken) return; // stale WebView we've since abandoned
-            // Sub-resource failures (ad scripts, tracking pixels, blocked
-            // trackers) are extremely common on embed pages and must not be
-            // treated as the provider failing.
-            if (error.isForMainFrame == false) return;
+            // The actual provider content now loads inside an iframe (see
+            // `_embedWrapperHtml`), so it's technically a "sub-frame" from
+            // the WebView's point of view even though it's the whole reason
+            // we're here. Treat a failure as fatal if it's either our own
+            // wrapper's main frame (should basically never happen, it's
+            // static local HTML) or that specific provider iframe - anything
+            // else is an ad/tracker sub-resource and gets ignored.
+            final erroringUrl = error.url != null ? Uri.tryParse(error.url!) : null;
+            if (error.isForMainFrame == false && !_isPendingEmbedUrl(erroringUrl)) return;
             _handleFailure(provider, error.description);
           },
           onHttpError: (error) {
@@ -179,12 +195,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
             // can return a non-2xx status for a block/challenge page while
             // the WebView still considers that a "successful" load - which
             // otherwise shows up as a blank player with no error at all.
-            // Only the main document's own response counts as fatal here;
+            // Only the provider's own embed response counts as fatal here;
             // sub-resources (ads, trackers) 404ing constantly is normal.
-            final requestUri = error.request?.uri;
             final statusCode = error.response?.statusCode;
-            if (requestUri == null || statusCode == null) return;
-            if (requestUri.host != _pendingUrl?.host || requestUri.path != _pendingUrl?.path) return;
+            if (statusCode == null || !_isPendingEmbedUrl(error.request?.uri)) return;
             if (statusCode >= 400) {
               _handleFailure(provider, 'Provider returned an error (HTTP $statusCode).');
             }
@@ -193,27 +207,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
             final uri = Uri.tryParse(navRequest.url);
             if (uri == null) return NavigationDecision.prevent;
 
-            // Only gate top-level navigations. Sub-frames (the actual video
-            // player is very often an iframe) stay untouched so playback
-            // keeps working; they can't replace the app screen on their own.
-            if (!navRequest.isMainFrame) return NavigationDecision.navigate;
+            // The top-level document is always our own static wrapper (see
+            // `_embedWrapperHtml`) - nothing should ever legitimately
+            // navigate it away, so any attempt is blocked outright. This
+            // also covers "frame-busting": some providers' JS tries to
+            // redirect `window.top` to their own domain when it detects it
+            // isn't the top frame, which would otherwise silently undo the
+            // iframe embedding and reintroduce the direct-navigation bug.
+            // It doubles as the pop-up/ad-redirect block this always was.
+            if (navRequest.isMainFrame) return NavigationDecision.prevent;
 
+            // Sub-frames (the provider's own iframe, and whatever it nests
+            // inside itself) are left free to navigate so playback keeps
+            // working - they can't replace the app screen on their own.
             if (uri.scheme != 'http' && uri.scheme != 'https') {
               // Blocks intent://, market://, etc - the classic ad-redirect
-              // trick to kick the user out to another app/browser.
+              // trick to kick the user out to another app/browser, even from
+              // a sub-frame.
               return NavigationDecision.prevent;
             }
-
-            if (provider.canHandleNavigation(uri)) {
-              return NavigationDecision.navigate;
-            }
-            // Unrelated domain trying to take over the main frame - this is
-            // what keeps the app screen from being replaced by ad pages, and
-            // covers the common "fake window.open, then navigate top frame"
-            // pop-up pattern (real window.open popups are already dropped by
-            // default since this WebView never registers multi-window
-            // support).
-            return NavigationDecision.prevent;
+            return NavigationDecision.navigate;
           },
         ),
       );
@@ -222,6 +235,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (platformController is AndroidWebViewController) {
       platformController.setMediaPlaybackRequiresUserGesture(false);
     }
+  }
+
+  /// Whether [uri] is the provider embed URL currently being loaded (same
+  /// host + path as [_pendingUrl], ignoring query string). Used to recognize
+  /// an error/response as "the provider's own iframe failed" even though it
+  /// is technically a sub-frame of our wrapper document.
+  bool _isPendingEmbedUrl(Uri? uri) {
+    final pending = _pendingUrl;
+    return uri != null && pending != null && uri.host == pending.host && uri.path == pending.path;
+  }
+
+  /// Minimal local page that embeds [embedUrl] in an iframe instead of
+  /// navigating the WebView to it directly. See the comment at the call
+  /// site for why: several providers only serve real content when they
+  /// detect they're actually inside an iframe.
+  String _embedWrapperHtml(Uri embedUrl) {
+    return '''
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<style>
+  html, body { margin: 0; padding: 0; background: #000; height: 100%; overflow: hidden; }
+  iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
+</style>
+</head>
+<body>
+<iframe src="$embedUrl" allow="autoplay; fullscreen; encrypted-media" allowfullscreen></iframe>
+</body>
+</html>
+''';
   }
 
   void _handleFailure(StreamingProvider provider, String message) {
