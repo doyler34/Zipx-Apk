@@ -40,7 +40,7 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver {
+class _PlayerScreenState extends State<PlayerScreen> {
   static const Duration _loadTimeout = Duration(seconds: 25);
 
   WebViewController? _controller;
@@ -78,7 +78,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     // The app is portrait-locked by default (see main.dart); the player is
     // the one screen that needs landscape too, both for manual rotation and
     // for HTML5 fullscreen video.
@@ -92,7 +91,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _loadTimeoutTimer?.cancel();
     SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -102,13 +100,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// Rotating to landscape is treated as "go fullscreen": hides our own app
   /// bar and the system status/nav bars so the video actually fills the
   /// screen, rather than just reflowing wider underneath them.
+  ///
+  /// Reading MediaQuery here (an inherited dependency) rather than in a
+  /// WidgetsBindingObserver.didChangeMetrics callback matters: that observer
+  /// fires before the inherited MediaQuery rebuilds, so it reads the
+  /// orientation one rotation behind and fullscreen never engages.
   @override
-  void didChangeMetrics() {
-    if (!mounted) return;
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     if (isLandscape == _isFullScreen) return;
 
-    setState(() => _isFullScreen = isLandscape);
+    // No setState: didChangeDependencies is always followed by a build.
+    _isFullScreen = isLandscape;
     SystemChrome.setEnabledSystemUIMode(isLandscape ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge);
   }
 
