@@ -40,7 +40,7 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
+class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver {
   static const Duration _loadTimeout = Duration(seconds: 25);
 
   WebViewController? _controller;
@@ -67,11 +67,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// with a non-2xx status) versus a harmless ad/tracker asset 404ing.
   Uri? _pendingUrl;
 
+  /// True while the device is in landscape - drives immersive fullscreen
+  /// (see [didChangeMetrics]). Landscape is the only fullscreen trigger:
+  /// there's no separate manual toggle, matching how video players
+  /// conventionally behave on rotation.
+  bool _isFullScreen = false;
+
   StreamingProvider? get _currentProvider => (_currentIndex >= 0 && _currentIndex < _attemptQueue.length) ? _attemptQueue[_currentIndex] : null;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // The app is portrait-locked by default (see main.dart); the player is
     // the one screen that needs landscape too, both for manual rotation and
     // for HTML5 fullscreen video.
@@ -85,9 +92,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _loadTimeoutTimer?.cancel();
     SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
+  }
+
+  /// Rotating to landscape is treated as "go fullscreen": hides our own app
+  /// bar and the system status/nav bars so the video actually fills the
+  /// screen, rather than just reflowing wider underneath them.
+  @override
+  void didChangeMetrics() {
+    if (!mounted) return;
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    if (isLandscape == _isFullScreen) return;
+
+    setState(() => _isFullScreen = isLandscape);
+    SystemChrome.setEnabledSystemUIMode(isLandscape ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge);
   }
 
   Future<void> _openSelector() async {
@@ -326,12 +348,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        appBar: PlayerStatusBar(
-          title: widget.request.title,
-          activeProviderName: provider?.displayName,
-          onSwitchProvider: _openSelector,
-          onClose: () => Navigator.of(context).pop(),
-        ),
+        extendBodyBehindAppBar: true,
+        // Landscape = fullscreen: the app bar (and the system status/nav
+        // bars, toggled in didChangeMetrics) get out of the way so the
+        // video actually fills the screen instead of being squeezed under
+        // our own chrome.
+        appBar: _isFullScreen
+            ? null
+            : PlayerStatusBar(
+                title: widget.request.title,
+                activeProviderName: provider?.displayName,
+                onSwitchProvider: _openSelector,
+                onClose: () => Navigator.of(context).pop(),
+              ),
         body: SafeArea(
           child: Stack(
             // Without this, non-positioned Stack children get loose
@@ -352,9 +381,47 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ),
               if (_status == _PlayerStatus.selectingProvider && _controller == null)
                 const ColoredBox(color: Colors.black, child: SizedBox.expand()),
+              // The app bar is hidden in fullscreen, so close/switch-provider
+              // need a minimal always-visible substitute.
+              if (_isFullScreen) ...[
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: _FullScreenButton(icon: Icons.close, tooltip: 'Close player', onPressed: () => Navigator.of(context).pop()),
+                ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: _FullScreenButton(icon: Icons.swap_horiz, tooltip: 'Switch provider', onPressed: _openSelector),
+                ),
+              ],
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Small semi-transparent icon button used to replace the app bar's
+/// close/switch-provider actions while the app bar itself is hidden for
+/// fullscreen landscape playback.
+class _FullScreenButton extends StatelessWidget {
+  const _FullScreenButton({required this.icon, required this.tooltip, required this.onPressed});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black45,
+      shape: const CircleBorder(),
+      child: IconButton(
+        icon: Icon(icon, color: Colors.white),
+        tooltip: tooltip,
+        onPressed: onPressed,
       ),
     );
   }
