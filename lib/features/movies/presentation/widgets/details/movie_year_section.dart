@@ -18,121 +18,56 @@ class MovieYearSection extends StatelessWidget {
   final String language;
   final int runtime;
 
+  static const double _boxHeight = 58;
+
+  Widget _detailBox(BuildContext context, String text) {
+    return Container(
+      height: _boxHeight,
+      decoration: Styles(context: context).cardBoxDecoration.copyWith(
+            color: Theme.of(context).colorScheme.secondary.withOpacity(1),
+          ),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: AutoSizeText(
+            text,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            style: Theme.of(context).textTheme.titleSmall!.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
     return Column(
       children: [
         const Header(title: 'Movie Details'),
-        SizedBox(
-          height: size.height * 0.2,
-          child: Align(
-            alignment: Alignment.center,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+          child: Column(
+            children: [
+              Row(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (year != '')
-                        Container(
-                          height: size.height * 0.1,
-                          decoration: Styles(context: context).cardBoxDecoration.copyWith(
-                                color: Theme.of(context).colorScheme.secondary.withOpacity(1),
-                              ),
-                          child: Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: AutoSizeText(
-                                'Release Date: ${year.displayDate()}',
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.titleMedium!.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      if (runtime != -1 && year != "") const SizedBox(width: 20),
-                      if (runtime != -1)
-                        Flexible(
-                          child: Container(
-                            height: size.height * 0.1,
-                            decoration: Styles(context: context).cardBoxDecoration.copyWith(
-                                  color: Theme.of(context).colorScheme.secondary.withOpacity(1),
-                                ),
-                            child: Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: AutoSizeText(
-                                  'Runtime: $runtime mins',
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.titleMedium!.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (budget != -1)
-                        Container(
-                          height: size.height * 0.1 - 20,
-                          decoration: Styles(context: context).cardBoxDecoration.copyWith(
-                                color: Theme.of(context).colorScheme.secondary.withOpacity(1),
-                              ),
-                          child: Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: AutoSizeText(
-                                'Budget: \$${budget.toString().changeToMilion()}',
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.titleMedium!.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      if (budget != -1 && language != "UNKNOWN") const SizedBox(width: 20),
-                      if (language != "UNKNOWN")
-                        Flexible(
-                          child: Container(
-                            height: size.height * 0.1 - 20,
-                            decoration: Styles(context: context).cardBoxDecoration.copyWith(
-                                  color: Theme.of(context).colorScheme.secondary.withOpacity(1),
-                                ),
-                            child: Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: AutoSizeText(
-                                  'Original language: ${language.toUpperCase()}',
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.titleMedium!.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                  if (year != '') Expanded(child: _detailBox(context, 'Release Date: ${year.displayDate()}')),
+                  if (runtime != -1 && year != "") const SizedBox(width: 16),
+                  if (runtime != -1) Expanded(child: _detailBox(context, 'Runtime: $runtime mins')),
                 ],
               ),
-            ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  if (budget != -1) Expanded(child: _detailBox(context, 'Budget: \$${budget.toString().changeToMilion()}')),
+                  if (budget != -1 && language != "UNKNOWN") const SizedBox(width: 16),
+                  if (language != "UNKNOWN") Expanded(child: _detailBox(context, 'Original language: ${language.toUpperCase()}')),
+                ],
+              ),
+            ],
           ),
         ),
       ],

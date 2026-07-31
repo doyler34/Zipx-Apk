@@ -11,31 +11,25 @@ class MovieTitleSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
     return FadeIn(
-      child: SizedBox(
-        height: size.height * 0.15,
-        child: Align(
-          alignment: Alignment.center,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 24, left: 12, right: 12),
-            child: Container(
-              decoration: Styles(context: context).cardBoxDecoration.copyWith(
-                    color: Theme.of(context).colorScheme.primary.withOpacity(1),
-                  ),
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: AutoSizeText(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineMedium!.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 16, left: 16, right: 16),
+        child: Container(
+          width: double.infinity,
+          decoration: Styles(context: context).cardBoxDecoration.copyWith(
+                color: Theme.of(context).colorScheme.primary.withOpacity(1),
               ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: AutoSizeText(
+              title,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge!.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ),
