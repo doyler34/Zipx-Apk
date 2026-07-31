@@ -334,6 +334,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ),
         body: SafeArea(
           child: Stack(
+            // Without this, non-positioned Stack children get loose
+            // constraints and the WebView platform view sizes itself small
+            // instead of filling the available space, which is why playback
+            // wasn't filling the screen.
+            fit: StackFit.expand,
             children: [
               if (_controller != null) WebViewWidget(controller: _controller!),
               if (_status == _PlayerStatus.loading) PlayerLoadingView(providerName: provider?.displayName ?? ''),
