@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:movie_bloc_app/common/blocs/bloc/nav_bar_bloc.dart';
 import 'package:movie_bloc_app/common/widgets/appbars_navbars/custom_appbar.dart';
+import 'package:movie_bloc_app/core/device/device_info.dart';
 import 'package:movie_bloc_app/core/dependency_injection/di.dart';
 import 'package:movie_bloc_app/features/movies/presentation/blocs/home/home/home_bloc.dart';
 import 'package:movie_bloc_app/features/movies/presentation/pages/search/search_screen.dart';
 import 'package:movie_bloc_app/features/personalization/presentation/pages/settings/settings_screen.dart';
+import 'package:movie_bloc_app/features/tv/presentation/pages/home_tv_screen.dart';
 
 import 'common/widgets/appbars_navbars/custom_bottom_navbar.dart';
 import 'features/movies/presentation/pages/home/home_screen.dart';
@@ -17,6 +19,7 @@ class NavigationMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isTv = sl<DeviceInfo>().isTv;
     return BlocProvider(
       create: (_) => sl<HomeBloc>(),
       child: Scaffold(
@@ -41,10 +44,10 @@ class NavigationMenu extends StatelessWidget {
           body: BlocBuilder<NavBarBloc, NavBarState>(
             builder: (context, state) {
               if (state is NavBarInitial) {
-                return const HomeScreen();
+                return isTv ? const HomeTvScreen() : const HomeScreen();
               } else if (state is NavBarChanged) {
                 if (state.currentIndex == 0) {
-                  return const HomeScreen();
+                  return isTv ? const HomeTvScreen() : const HomeScreen();
                 } else if (state.currentIndex == 1) {
                   return const SearchScreen();
                 } else if (state.currentIndex == 2) {
@@ -55,7 +58,7 @@ class NavigationMenu extends StatelessWidget {
                   return const SettingsScreen();
                 }
               }
-              return const HomeScreen();
+              return isTv ? const HomeTvScreen() : const HomeScreen();
             },
           ),
         ),
