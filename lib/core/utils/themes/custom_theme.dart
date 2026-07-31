@@ -3,9 +3,34 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class CustomTheme {
+  // Red & black brand palette (replaces the original indigo/blue scheme).
+  // `primary`/`secondary` drive card backgrounds and accents, `tertiary` is
+  // the action-button accent used across the app (Watch Now, Play, etc).
+  static const FlexSchemeColor _lightColors = FlexSchemeColor(
+    primary: Color(0xFFB71C1C),
+    primaryContainer: Color(0xFFFFCDD2),
+    secondary: Color(0xFFD32F2F),
+    secondaryContainer: Color(0xFFFFDAD6),
+    tertiary: Color(0xFFE53935),
+    tertiaryContainer: Color(0xFFFFB3AB),
+    appBarColor: Color(0xFFB71C1C),
+    error: Color(0xFFBA1A1A),
+  );
+
+  static const FlexSchemeColor _darkColors = FlexSchemeColor(
+    primary: Color(0xFFEF5350),
+    primaryContainer: Color(0xFF8E0000),
+    secondary: Color(0xFFE53935),
+    secondaryContainer: Color(0xFF7F0000),
+    tertiary: Color(0xFFFF5252),
+    tertiaryContainer: Color(0xFF5C0000),
+    appBarColor: Color(0xFF1A0000),
+    error: Color(0xFFFFB4AB),
+  );
+
   static ThemeData get lightTheme {
     return FlexThemeData.light(
-      scheme: FlexScheme.indigo,
+      colors: _lightColors,
       surfaceMode: FlexSurfaceMode.highBackgroundLowScaffold,
       blendLevel: 1,
       appBarStyle: FlexAppBarStyle.background,
@@ -81,9 +106,10 @@ class CustomTheme {
 
   static ThemeData get darkTheme {
     return FlexThemeData.dark(
-      scheme: FlexScheme.indigo,
-      surfaceMode: FlexSurfaceMode.highBackgroundLowScaffold,
-      blendLevel: 2,
+      colors: _darkColors,
+      surfaceMode: FlexSurfaceMode.highScaffoldLowSurface,
+      blendLevel: 6,
+      darkIsTrueBlack: true,
       appBarStyle: FlexAppBarStyle.background,
       bottomAppBarElevation: 2.0,
       subThemesData: const FlexSubThemesData(

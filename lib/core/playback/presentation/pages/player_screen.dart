@@ -385,47 +385,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ),
               if (_status == _PlayerStatus.selectingProvider && _controller == null)
                 const ColoredBox(color: Colors.black, child: SizedBox.expand()),
-              // The app bar is hidden in fullscreen, so close/switch-provider
-              // need a minimal always-visible substitute.
-              if (_isFullScreen) ...[
-                Positioned(
-                  top: 8,
-                  left: 8,
-                  child: _FullScreenButton(icon: Icons.close, tooltip: 'Close player', onPressed: () => Navigator.of(context).pop()),
-                ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: _FullScreenButton(icon: Icons.swap_horiz, tooltip: 'Switch provider', onPressed: _openSelector),
-                ),
-              ],
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// Small semi-transparent icon button used to replace the app bar's
-/// close/switch-provider actions while the app bar itself is hidden for
-/// fullscreen landscape playback.
-class _FullScreenButton extends StatelessWidget {
-  const _FullScreenButton({required this.icon, required this.tooltip, required this.onPressed});
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.black45,
-      shape: const CircleBorder(),
-      child: IconButton(
-        icon: Icon(icon, color: Colors.white),
-        tooltip: tooltip,
-        onPressed: onPressed,
       ),
     );
   }
