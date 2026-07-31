@@ -76,7 +76,7 @@ class MyApp extends StatelessWidget {
         builder: (theme, darkTheme) => MaterialApp.router(
           routerConfig: CustomGoRouterConfig().config,
           debugShowCheckedModeBanner: false,
-          title: 'FilmFolio',
+          title: 'Zipx Movies',
           theme: theme,
           // locale: DevicePreview.locale(context),
           // builder: DevicePreview.appBuilder,

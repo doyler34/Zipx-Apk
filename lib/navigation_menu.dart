@@ -30,7 +30,7 @@ class NavigationMenu extends StatelessWidget {
                 title: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Text(
-                    'FilmFolio',
+                    'Zipx Movies',
                     style: Theme.of(context).textTheme.displaySmall,
                   ),
                 ),

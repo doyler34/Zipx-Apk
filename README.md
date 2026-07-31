@@ -7,7 +7,7 @@
 <br></br></br>
 
 <p align="center">
-  FilmFolio - Your go-to Flutter app for discovering and exploring movies! Built with BLoC pattern, CLEAN Architecture & powered by TMDB API. Simple to use & easy to read the code.
+  Zipx Movies - Your go-to Flutter app for discovering and exploring movies! Built with BLoC pattern, CLEAN Architecture & powered by TMDB API. Simple to use & easy to read the code.
   <br><br>
   Don't forget to leave a star, thanks! 😃
 </p>
@@ -16,7 +16,7 @@
 
 ## Description
 
-FilmFolio is a Flutter application designed to provide users with a seamless experience for searching and browsing movies. Leveraging the power of the TMDB API, the app allows users to discover new releases, search for their favorite films, and bookmark movies locally without requiring account creation. The application is built using the BLoC pattern for state management and CLEAN architecture to ensure a maintainable and scalable codebase.
+Zipx Movies is a Flutter application designed to provide users with a seamless experience for searching and browsing movies. Leveraging the power of the TMDB API, the app allows users to discover new releases, search for their favorite films, and bookmark movies locally without requiring account creation. The application is built using the BLoC pattern for state management and CLEAN architecture to ensure a maintainable and scalable codebase.
 
 Key features include:
 *   **Movie Discovery:** Browse popular, top-rated, and upcoming movies.
@@ -32,11 +32,11 @@ The application is designed to be simple and intuitive, allowing users to quickl
 
 ## Installation
 
-Follow these steps to get FilmFolio up and running on your local machine:
+Follow these steps to get Zipx Movies up and running on your local machine:
 
 ### 1. Clone the Repository
 
-Clone the FilmFolio repository to your local machine using Git:
+Clone the Zipx Movies repository to your local machine using Git:
 
 
 flutter pub get
@@ -44,7 +44,7 @@ flutter pub get
 
 ### 2. Run the App
 
-Run the FilmFolio application on your preferred device or emulator:
+Run the Zipx Movies application on your preferred device or emulator:
 
 *   **API Key Issues:** Ensure you have correctly entered your TMDB API key in the settings page. Double-check for any typos.
 *   **Dependency Conflicts:** If you encounter any dependency conflicts, try running `flutter pub upgrade` to update the packages to their latest compatible versions.
@@ -55,7 +55,7 @@ Run the FilmFolio application on your preferred device or emulator:
 
 ## Usage
 
-FilmFolio is designed to be intuitive and easy to use. Here's a quick guide to the main features:
+Zipx Movies is designed to be intuitive and easy to use. Here's a quick guide to the main features:
 
 *   **Home Screen:** Displays a list of popular, top-rated, and upcoming movies. Scroll through the lists to discover new movies.
 *   **Search:** Tap the search icon in the navigation bar to search for movies by title. Enter your search query and press Enter to view the results.
@@ -68,7 +68,7 @@ FilmFolio is designed to be intuitive and easy to use. Here's a quick guide to t
 
 ## Packages
 
-Here's a brief overview of the packages used in FilmFolio:
+Here's a brief overview of the packages used in Zipx Movies:
 
 *   **adaptive_theme:** Provides adaptive theme support (light/dark mode).
 *   **animate_do:**  Offers various animation effects.
@@ -91,7 +91,7 @@ Here's a brief overview of the packages used in FilmFolio:
 *   **internet_connection_checker:** Checks for internet connectivity.
 *   **loading_animation_widget:** Offers a variety of loading animations.
 *   **readmore:**  A widget that allows you to collapse and expand long text.
-*   **youtube_player_flutter:**  A YouTube player widget for Flutter.
+*   **youtube_player_iframe:**  A YouTube player widget for Flutter, built on webview_flutter.
 *   **build_runner:**  A tool for generating code.
 *   **device_preview:**  Allows you to preview your app on different devices.
 *   **flutter_launcher_icons:**  Generates launcher icons for different platforms.
@@ -102,10 +102,10 @@ Here's a brief overview of the packages used in FilmFolio:
 
 ## Contributing
 
-Contributions are welcome! If you'd like to contribute to FilmFolio, please follow these guidelines:
+Contributions are welcome! If you'd like to contribute to Zipx Movies, please follow these guidelines:
 
-1.  **Reporting Bugs:** If you find a bug, please create a new issue on the [GitHub repository](https://github.com/AdamDybcio/FilmFolio/issues). Be sure to include detailed steps to reproduce the bug.
-2.  **Suggesting Enhancements:** If you have an idea for a new feature or enhancement, please create a new issue on the [GitHub repository](https://github.com/AdamDybcio/FilmFolio/issues).
+1.  **Reporting Bugs:** If you find a bug, please create a new issue on the [GitHub repository](https://github.com/doyler34/movie-apk/issues). Be sure to include detailed steps to reproduce the bug.
+2.  **Suggesting Enhancements:** If you have an idea for a new feature or enhancement, please create a new issue on the [GitHub repository](https://github.com/doyler34/movie-apk/issues).
 3.  **Submitting Pull Requests:** If you'd like to submit a pull request, please follow these steps:
     *   Fork the repository.
     *   Create a new branch for your changes.
@@ -124,7 +124,7 @@ Contributions are welcome! If you'd like to contribute to FilmFolio, please foll
 
 ## Support
 
-If you have any questions or need help, please contact me. You can also report issues on the [GitHub repository](https://github.com/AdamDybcio/FilmFolio/issues).
+If you have any questions or need help, please contact me. You can also report issues on the [GitHub repository](https://github.com/doyler34/movie-apk/issues).
 
 <br>
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
