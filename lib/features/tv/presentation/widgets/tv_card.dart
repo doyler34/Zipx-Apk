@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../common/styles/styles.dart';
+import '../../../../common/widgets/tv/tv_focusable.dart';
 import '../../../../common/widgets/movie/vote_avg_widget.dart';
 import '../../../../core/utils/strings/url_strings.dart';
 import '../../data/models/tv_model.dart';
@@ -17,8 +18,8 @@ class TvCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    return GestureDetector(
-      onTap: () => context.push('/tv/${show.id}', extra: show),
+    return TvFocusable(
+      onPressed: () => context.push('/tv/${show.id}', extra: show),
       child: Padding(
         padding: const EdgeInsets.only(top: 16, left: 12, right: 12, bottom: 16),
         child: AspectRatio(

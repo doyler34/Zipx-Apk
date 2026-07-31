@@ -16,6 +16,7 @@ import 'package:movie_bloc_app/features/personalization/presentation/blocs/setti
 import 'common/blocs/bloc/nav_bar_bloc.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
+import 'core/device/device_info.dart';
 import 'core/playback/services/provider_preferences_service.dart';
 import 'core/settings/user_settings.dart';
 import 'features/personalization/data/models/bookmarked_movie_hive.dart';
@@ -23,8 +24,6 @@ import 'features/personalization/data/models/bookmarked_movie_hive.dart';
 Future<void> main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
-
-  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   await Hive.initFlutter();
   Hive.registerAdapter(BookmarkedMovieAdapter());
@@ -40,6 +39,18 @@ Future<void> main() async {
 
   await initDependencyInjection();
   await sl<ProviderPreferencesService>().initialize();
+
+  // Detect Fire TV / Android TV before deciding orientation: TVs are fixed
+  // landscape, so we only portrait-lock on phones/tablets.
+  await sl<DeviceInfo>().initialize();
+  if (sl<DeviceInfo>().isTv) {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+  } else {
+    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  }
 
   // Used only for testing on different devices
   // FlutterNativeSplash.remove();

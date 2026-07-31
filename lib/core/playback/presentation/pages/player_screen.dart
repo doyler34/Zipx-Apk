@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
+import '../../../device/device_info.dart';
+import '../../../dependency_injection/di.dart';
 import '../../domain/entities/playback_request.dart';
 import '../../domain/providers/streaming_provider.dart';
 import '../../services/playback_history_service.dart';
@@ -108,6 +110,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // On a TV the screen is permanently landscape, so treating landscape as
+    // "hide all chrome" would leave a remote user with no on-screen close /
+    // switch-provider buttons. Keep the app bar (and its focusable buttons)
+    // visible there; the immersive-fullscreen-on-rotate behaviour is for
+    // phones only.
+    if (sl<DeviceInfo>().isTv) return;
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     if (isLandscape == _isFullScreen) return;
 

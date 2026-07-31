@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../common/styles/styles.dart';
+import '../../../../common/widgets/tv/tv_focusable.dart';
 import '../../../../common/widgets/texts/header.dart';
 import '../../../../core/utils/strings/url_strings.dart';
 import '../../domain/entities/playback_media_type.dart';
@@ -35,8 +36,8 @@ class ContinueWatchingSection extends StatelessWidget {
             itemCount: history.length,
             itemBuilder: (context, index) {
               final entry = history[index];
-              return GestureDetector(
-                onTap: () => context.push('/player', extra: entry.toPlaybackRequest()),
+              return TvFocusable(
+                onPressed: () => context.push('/player', extra: entry.toPlaybackRequest()),
                 child: Container(
                   width: 110,
                   margin: const EdgeInsets.only(right: 12),

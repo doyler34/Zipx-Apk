@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:movie_bloc_app/common/styles/styles.dart';
+import 'package:movie_bloc_app/common/widgets/tv/tv_focusable.dart';
 import 'package:movie_bloc_app/common/widgets/movie/adult_widget.dart';
 import 'package:movie_bloc_app/common/widgets/movie/mark_widget.dart';
 import 'package:movie_bloc_app/common/widgets/movie/vote_avg_widget.dart';
@@ -37,8 +38,8 @@ class MovieCard extends StatelessWidget {
     return BlocBuilder<SettingsBloc, SettingsState>(
       builder: (context, state) {
         if (state is SettingsChanged) {
-          return GestureDetector(
-            onTap: touchable
+          return TvFocusable(
+            onPressed: touchable
                 ? () {
                     if (isHomePage) {
                       context.push('/details/${movie.id}', extra: movie);
@@ -46,7 +47,7 @@ class MovieCard extends StatelessWidget {
                       context.pushReplacement('/details/${movie.id}', extra: movie);
                     }
                   }
-                : null,
+                : () {},
             child: Padding(
               padding: const EdgeInsets.only(top: 16, left: 12, right: 12, bottom: 16),
               child: SizedBox(

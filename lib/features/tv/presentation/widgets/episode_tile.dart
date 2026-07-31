@@ -2,23 +2,31 @@ import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../common/styles/styles.dart';
+import '../../../../common/widgets/tv/tv_focusable.dart';
 import '../../../../core/utils/strings/url_strings.dart';
 import '../../data/models/tv_episode_model.dart';
 
-/// Renders one episode row with a Play button. Purely presentational - the
-/// tap callback is supplied by the screen, which is the only place that
-/// knows how to build a [PlaybackRequest] for it.
+/// Renders one episode row. Tapping anywhere on the row (or pressing OK on a
+/// TV remote when it's focused) plays the episode - the callback is supplied
+/// by the screen, which is the only place that knows how to build a
+/// [PlaybackRequest] for it.
 class EpisodeTile extends StatelessWidget {
-  const EpisodeTile({super.key, required this.episode, required this.onPlay});
+  const EpisodeTile({super.key, required this.episode, required this.onPlay, this.autofocus = false});
 
   final TvEpisodeModel episode;
   final VoidCallback onPlay;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Container(
+      child: TvFocusable(
+        onPressed: onPlay,
+        autofocus: autofocus,
+        borderRadius: 8,
+        focusScale: 1.02,
+        child: Container(
         decoration: Styles(context: context).cardBoxDecoration,
         padding: const EdgeInsets.all(8),
         child: Row(
@@ -54,12 +62,12 @@ class EpisodeTile extends StatelessWidget {
                 ],
               ),
             ),
-            IconButton(
-              icon: Icon(Icons.play_circle_fill, color: Theme.of(context).colorScheme.tertiary, size: 36),
-              tooltip: 'Play episode',
-              onPressed: onPlay,
+            Padding(
+              padding: const EdgeInsets.only(left: 4, right: 4),
+              child: Icon(Icons.play_circle_fill, color: Theme.of(context).colorScheme.tertiary, size: 36),
             ),
           ],
+        ),
         ),
       ),
     );

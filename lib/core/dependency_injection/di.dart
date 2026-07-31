@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:movie_bloc_app/common/blocs/bloc/nav_bar_bloc.dart';
+import 'package:movie_bloc_app/core/device/device_info.dart';
 import 'package:movie_bloc_app/core/playback/domain/providers/mock/mock_reliable_provider.dart';
 import 'package:movie_bloc_app/core/playback/domain/providers/mock/mock_unreliable_provider.dart';
 import 'package:movie_bloc_app/core/playback/domain/providers/streaming_provider.dart';
@@ -44,6 +45,9 @@ import '../../features/movies/presentation/blocs/details/details/details_bloc.da
 final sl = GetIt.instance;
 
 Future initDependencyInjection() async {
+  //Device
+  sl.registerLazySingleton<DeviceInfo>(() => DeviceInfo());
+
   //Datasources
   sl.registerLazySingleton<Dio>(() => Dio());
   sl.registerLazySingleton<TmdbDatasource>(() => TmdbDatasource(sl()));
