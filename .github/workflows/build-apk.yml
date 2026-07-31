@@ -1,0 +1,92 @@
+name: Build APK
+
+# Builds a release APK and publishes it to a GitHub Release so it can be
+# sideloaded (e.g. via the Downloader app) from a public URL.
+#
+# Trigger it manually from the GitHub "Actions" tab (Run workflow), or by
+# pushing a tag like v1.0.0. Either way the APK ends up attached to the
+# "latest" release at a stable URL:
+#   https://github.com/doyler34/zipx-apk/releases/download/latest/zipx-movies.apk
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # Pinned to the version this project builds against - newer Flutter
+          # breaks the pinned flex_color_scheme/carousel_slider deps.
+          flutter-version: '3.22.3'
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Recreate the release keystore and key.properties from repository
+      # secrets so the APK is signed with a stable key (updates install over
+      # the top instead of needing an uninstall). Requires these secrets:
+      #   KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_PASSWORD, KEY_ALIAS
+      - name: Set up release signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::KEYSTORE_BASE64 secret is not set - add the signing secrets (see .github/workflows/build-apk.yml)."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.p12
+          cat > android/key.properties <<EOF
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=upload-keystore.p12
+          EOF
+
+      # Auto-bump the version on every build so each APK is recognized as
+      # newer than the last. versionCode = the CI run number (monotonically
+      # increasing); versionName = 1.0.<run number>.
+      - name: Build release APK
+        run: flutter build apk --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }}
+
+      - name: Rename APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk zipx-movies.apk
+
+      # Stable "latest" release, updated in place on every build so the
+      # Downloader URL never changes.
+      - name: Publish to "latest" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build
+          files: zipx-movies.apk
+          fail_on_unmatched_files: true
+
+      # Also attach to the version tag's own release when triggered by a tag.
+      - name: Publish to tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: zipx-movies.apk
+          fail_on_unmatched_files: true

@@ -1,0 +1,132 @@
+name: movie_bloc_app
+description: "A new Flutter project."
+publish_to: 'none' 
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+  #Fonts
+  google_fonts: ^6.2.1
+
+  #State Management
+  flutter_bloc: ^8.1.6
+  equatable: ^2.0.5
+
+  #Internet Connection
+  internet_connection_checker: ^1.0.0+1
+
+  #Routes
+  go_router: ^14.2.0
+
+  #Dependency Injection
+  get_it: ^7.7.0
+
+  #Local Storage
+  hive_flutter: ^1.1.0
+
+  #Youtube Player
+  youtube_player_iframe: ^4.0.4
+  url_launcher: ^6.3.1
+
+  #UI
+  carousel_slider: ^4.2.1
+  blur: ^4.0.0
+  custom_refresh_indicator: ^3.1.0
+  readmore: ^3.0.0
+  auto_size_text: ^3.0.0
+
+  #Theme
+  adaptive_theme: ^3.6.0
+
+  #Color Scheme
+  flex_color_scheme: ^7.3.1
+
+  #Animations
+  animate_do: ^3.3.4
+  loading_animation_widget: ^1.2.1
+
+  #Splash Screen
+  flutter_native_splash: ^2.4.0
+
+
+  #Icons
+  font_awesome_flutter: ^10.7.0
+
+  #Network
+  extended_image: ^8.2.1
+  dio: ^5.4.3+1
+
+  #Embedded playback (in-app WebView for streaming providers)
+  webview_flutter: ^4.8.0
+  webview_flutter_android: ^3.16.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^3.0.0
+
+  #Preview on other devices
+  device_preview: ^1.2.0
+
+  #Code Generator
+  build_runner: ^2.4.11
+  hive_generator: ^2.0.1
+
+  #Launcher Icons
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/logos/app_logo.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/logos/app_logo.png"
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/
+    - assets/placeholders/
+    - assets/logos/
+    - assets/splash/
+
+  
+  
+  
+  
+
+  
+  
+
+  
+  
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  

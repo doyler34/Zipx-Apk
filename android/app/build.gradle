@@ -1,0 +1,84 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader("UTF-8") { reader ->
+        localProperties.load(reader)
+    }
+}
+
+def flutterVersionCode = localProperties.getProperty("flutter.versionCode")
+if (flutterVersionCode == null) {
+    flutterVersionCode = "1"
+}
+
+def flutterVersionName = localProperties.getProperty("flutter.versionName")
+if (flutterVersionName == null) {
+    flutterVersionName = "1.0"
+}
+
+// Release signing config, loaded from android/key.properties when present.
+// The file (and the keystore it points at) are gitignored and never
+// committed - CI recreates them from repository secrets, and local release
+// builds use your own copy. When the file is absent, release builds fall
+// back to debug signing so a plain `flutter build apk` still works.
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("key.properties")
+def hasReleaseSigning = keystorePropertiesFile.exists()
+if (hasReleaseSigning) {
+    keystorePropertiesFile.withReader("UTF-8") { reader ->
+        keystoreProperties.load(reader)
+    }
+}
+
+android {
+    namespace = "com.example.movie_bloc_app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId "com.example.zipxmovies"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutterVersionCode.toInteger()
+        versionName = flutterVersionName
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                keyAlias = keystoreProperties["keyAlias"]
+                keyPassword = keystoreProperties["keyPassword"]
+                storeFile = keystoreProperties["storeFile"] ? file(keystoreProperties["storeFile"]) : null
+                storePassword = keystoreProperties["storePassword"]
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // Uses the real release key when key.properties is present
+            // (CI, or a local release build), otherwise falls back to the
+            // debug key so ordinary builds don't break.
+            signingConfig = hasReleaseSigning ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
