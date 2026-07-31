@@ -1,14 +1,11 @@
 import 'package:hive_flutter/hive_flutter.dart';
 
 class UserSettings {
-  /// Built-in TMDB key so a fresh install works without entering one. A key
-  /// the user sets in Settings always takes precedence over this default.
-  /// Can also be overridden at build time with
-  /// `--dart-define=TMDB_API_KEY=...`, but it's baked in by default.
-  static const String _buildTimeApiKey = String.fromEnvironment(
-    'TMDB_API_KEY',
-    defaultValue: 'd168cb7e62f9692894c20fdb039ae126',
-  );
+  /// TMDB key baked into the build via `--dart-define=TMDB_API_KEY=...` in CI.
+  /// Empty when not provided at build time; the app then falls back to a key
+  /// the user enters in Settings. A key the user sets themselves always wins
+  /// over this build-time default.
+  static const String _buildTimeApiKey = String.fromEnvironment('TMDB_API_KEY', defaultValue: '');
 
   static final Map<String, dynamic> _defaultSettings = {
     'api_key': '',

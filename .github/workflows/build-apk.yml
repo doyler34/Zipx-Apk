@@ -80,11 +80,11 @@ jobs:
       # Auto-bump the version on every build so each APK is recognized as
       # newer than the last. versionCode = the CI run number (monotonically
       # increasing); versionName = 1.0.<run number>.
-      # The TMDB key is baked into the app as a built-in default in source
-      # (see UserSettings._buildTimeApiKey), so no build-time secret is
-      # needed. A key the user enters in Settings still overrides it.
+      # TMDB_API_KEY is baked into the app via --dart-define so a fresh
+      # install works without entering a key. It's optional: if the secret
+      # isn't set, the app just falls back to asking for a key in Settings.
       - name: Build release APK
-        run: flutter build apk --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }}
+        run: flutter build apk --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }} --dart-define=TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
 
       - name: Rename APK
         run: cp build/app/outputs/flutter-apk/app-release.apk zipx-movies.apk
