@@ -1,6 +1,12 @@
 import 'package:hive_flutter/hive_flutter.dart';
 
 class UserSettings {
+  /// TMDB key baked into the build via `--dart-define=TMDB_API_KEY=...` in CI.
+  /// Empty when not provided at build time; the app then falls back to a key
+  /// the user enters in Settings. A key the user sets themselves always wins
+  /// over this build-time default.
+  static const String _buildTimeApiKey = String.fromEnvironment('TMDB_API_KEY', defaultValue: '');
+
   static final Map<String, dynamic> _defaultSettings = {
     'api_key': '',
     'language': 'en-US',
@@ -24,7 +30,13 @@ class UserSettings {
   }
 
   Map<String, dynamic> getSettings() {
-    return Map.from(_settings);
+    final settings = Map<String, dynamic>.from(_settings);
+    // Fall back to the build-time key when the user hasn't set their own.
+    final stored = (settings['api_key'] as String?)?.trim() ?? '';
+    if (stored.isEmpty && _buildTimeApiKey.isNotEmpty) {
+      settings['api_key'] = _buildTimeApiKey;
+    }
+    return settings;
   }
 
   void setThemeMode(String themeMode) {
@@ -48,7 +60,8 @@ class UserSettings {
   }
 
   String getApiKey() {
-    return _settings['api_key'];
+    final stored = (_settings['api_key'] as String?)?.trim() ?? '';
+    return stored.isNotEmpty ? stored : _buildTimeApiKey;
   }
 
   void saveToStorage() {
