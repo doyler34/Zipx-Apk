@@ -4,11 +4,35 @@ import 'streaming_provider.dart';
 ///
 /// Every VidSrc-specific detail (domain, path structure, query params, which
 /// hosts its player is allowed to navigate to) is contained in this file.
-/// No other file in the app should ever construct or parse a vidsrc.* URL.
+/// No other file in the app should ever construct or parse a vidsrc-embed.*
+/// URL.
+///
+/// Per VidSrc's own API docs (https://vidsrc-embed.ru/api/):
+///   Movie:   /embed/movie/{tmdb_id}
+///   Episode: /embed/tv/{tmdb_id}/{season}-{episode}   (hyphenated, not
+///            separate path segments)
+/// `imdb`/`tmdb` ids are accepted interchangeably in that path slot; this app
+/// only ever has TMDB ids (TMDB is the metadata provider), so that's all we
+/// send. `autoplay=1` is passed explicitly for a predictable start rather
+/// than relying on VidSrc's current default.
 class VidSrcProvider extends BaseStreamingProvider {
   VidSrcProvider({super.enabledByDefault = true});
 
-  static const String _host = 'vidsrc.to';
+  /// Primary embed domain. VidSrc publishes a handful of interchangeable
+  /// domains (see [_knownDomains]) - any of them work as the embed host.
+  static const String _host = 'vidsrc-embed.ru';
+
+  /// Every domain VidSrc's own docs list as valid for embed URLs, plus
+  /// `vidsrc.me` (referenced by their docs as the subtitle sample host).
+  /// Used to recognize in-family navigations/redirects so the player doesn't
+  /// block VidSrc's own mirrors while still blocking unrelated pages.
+  static const List<String> _knownDomains = [
+    'vidsrc-embed.ru',
+    'vidsrc-embed.su',
+    'vidsrcme.su',
+    'vsrc.su',
+    'vidsrc.me',
+  ];
 
   @override
   String get id => 'vidsrc';
@@ -21,26 +45,30 @@ class VidSrcProvider extends BaseStreamingProvider {
 
   @override
   Uri getMovieEmbedUrl(int tmdbId) {
-    return Uri.https(_host, '/embed/movie/$tmdbId');
+    return Uri.https(_host, '/embed/movie/$tmdbId', {'autoplay': '1'});
   }
 
   @override
   Uri getEpisodeEmbedUrl(int tmdbId, int season, int episode) {
-    return Uri.https(_host, '/embed/tv/$tmdbId/$season/$episode');
+    return Uri.https(_host, '/embed/tv/$tmdbId/$season-$episode', {'autoplay': '1'});
   }
 
   @override
   bool canHandleNavigation(Uri url) {
-    // VidSrc's player legitimately redirects across a handful of sibling
-    // domains for its CDN/ad-free sources. Anything outside that family is
-    // treated as an unrelated page and blocked by the player.
+    // VidSrc's player legitimately redirects across its own mirror domains
+    // and CDN sources. Anything outside that family is treated as an
+    // unrelated page and blocked by the player.
     final host = url.host.toLowerCase();
-    return host == _host || host.endsWith('.$_host') || host.contains('vidsrc');
+    return _isKnownDomain(host) || host.contains('vidsrc');
   }
 
   @override
   bool isPlaybackUrl(Uri url) {
     final host = url.host.toLowerCase();
-    return (host == _host || host.endsWith('.$_host')) && url.path.startsWith('/embed/');
+    return _isKnownDomain(host) && url.path.startsWith('/embed/');
+  }
+
+  bool _isKnownDomain(String host) {
+    return _knownDomains.any((domain) => host == domain || host.endsWith('.$domain'));
   }
 }
