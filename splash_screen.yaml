@@ -1,18 +1,16 @@
 flutter_native_splash:
-  color: "#ffffff"
+  # Black background on all devices, Zipx Movies image centered.
+  # No branding credit (removed the old FilmFolio "made by" image).
+  color: "#000000"
   color_dark: "#000000"
 
-  image: assets/splash/logo_light.png
-  image_dark: assets/splash/logo_dark.png
+  image: assets/splash/zipx_splash.png
+  image_dark: assets/splash/zipx_splash.png
 
-  branding: assets/splash/branding_light.png
-  branding_dark: assets/splash/branding_dark.png
+  fullscreen: true
 
   android_12:
-    color: "#ffffff"
+    color: "#000000"
     color_dark: "#000000"
-    image: assets/splash/logo_light.png
-    image_dark: assets/splash/logo_dark.png
-
-    branding: assets/splash/branding_light.png
-    branding_dark: assets/splash/branding_dark.png
+    image: assets/splash/zipx_splash.png
+    image_dark: assets/splash/zipx_splash.png
