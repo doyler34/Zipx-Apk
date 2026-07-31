@@ -80,21 +80,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
-    // The app is portrait-locked by default (see main.dart); the player is
-    // the one screen that needs landscape too, both for manual rotation and
-    // for HTML5 fullscreen video.
-    SystemChrome.setPreferredOrientations(const [
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+    // On TV stay landscape-only (TVs are fixed landscape - allowing portrait
+    // here is what made the player flip to a phone-style portrait view). On
+    // a phone, allow both so the player can rotate and go fullscreen.
+    SystemChrome.setPreferredOrientations(
+      sl<DeviceInfo>().isTv
+          ? const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+          : const [
+              DeviceOrientation.portraitUp,
+              DeviceOrientation.landscapeLeft,
+              DeviceOrientation.landscapeRight,
+            ],
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) => _openSelector());
   }
 
   @override
   void dispose() {
     _loadTimeoutTimer?.cancel();
-    SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
+    // Restore the app's default orientation for this device type: landscape
+    // on TV, portrait on phone.
+    SystemChrome.setPreferredOrientations(
+      sl<DeviceInfo>().isTv
+          ? const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+          : const [DeviceOrientation.portraitUp],
+    );
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
