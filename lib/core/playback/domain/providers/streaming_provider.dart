@@ -27,11 +27,16 @@ abstract class StreamingProvider {
   void setEnabled(bool enabled);
 
   /// Builds this provider's embed URL for a movie, given its TMDB id.
-  Uri getMovieEmbedUrl(int tmdbId);
+  ///
+  /// [subtitleLanguage] is the user's chosen language as a bare ISO 639-1
+  /// code (e.g. `en`), passed through to whatever the provider supports for a
+  /// default subtitle language; providers that don't support it ignore it.
+  Uri getMovieEmbedUrl(int tmdbId, {String? subtitleLanguage});
 
   /// Builds this provider's embed URL for a single TV episode, given the
-  /// TMDB show id plus season/episode numbers.
-  Uri getEpisodeEmbedUrl(int tmdbId, int season, int episode);
+  /// TMDB show id plus season/episode numbers. See [getMovieEmbedUrl] for
+  /// [subtitleLanguage].
+  Uri getEpisodeEmbedUrl(int tmdbId, int season, int episode, {String? subtitleLanguage});
 
   /// Whether an in-page navigation the WebView is about to perform should be
   /// allowed to happen *inside* the existing WebView (same provider domain,

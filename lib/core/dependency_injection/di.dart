@@ -70,7 +70,7 @@ Future initDependencyInjection() async {
     ]),
   );
   sl.registerLazySingleton<ProviderPreferencesService>(() => ProviderPreferencesService(sl()));
-  sl.registerLazySingleton<PlaybackProviderService>(() => PlaybackProviderService(sl(), sl()));
+  sl.registerLazySingleton<PlaybackProviderService>(() => PlaybackProviderService(sl(), sl(), sl()));
   sl.registerLazySingleton<PlaybackHistoryService>(() => PlaybackHistoryService());
   sl.registerLazySingleton<FavouriteService>(() => FavouriteService());
 

@@ -44,13 +44,22 @@ class VidSrcProvider extends BaseStreamingProvider {
   int get priority => 0;
 
   @override
-  Uri getMovieEmbedUrl(int tmdbId) {
-    return Uri.https(_host, '/embed/movie/$tmdbId', {'autoplay': '1'});
+  Uri getMovieEmbedUrl(int tmdbId, {String? subtitleLanguage}) {
+    return Uri.https(_host, '/embed/movie/$tmdbId', _query(subtitleLanguage));
   }
 
   @override
-  Uri getEpisodeEmbedUrl(int tmdbId, int season, int episode) {
-    return Uri.https(_host, '/embed/tv/$tmdbId/$season-$episode', {'autoplay': '1'});
+  Uri getEpisodeEmbedUrl(int tmdbId, int season, int episode, {String? subtitleLanguage}) {
+    return Uri.https(_host, '/embed/tv/$tmdbId/$season-$episode', _query(subtitleLanguage));
+  }
+
+  // VidSrc supports `ds_lang` (default subtitle language, ISO 639) alongside
+  // `autoplay`. Only included when a language is provided.
+  Map<String, String> _query(String? subtitleLanguage) {
+    final query = {'autoplay': '1'};
+    final lang = subtitleLanguage?.trim();
+    if (lang != null && lang.isNotEmpty) query['ds_lang'] = lang;
+    return query;
   }
 
   @override

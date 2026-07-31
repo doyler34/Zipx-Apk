@@ -22,12 +22,12 @@ class MockReliableProvider extends BaseStreamingProvider {
   int get priority => 90;
 
   @override
-  Uri getMovieEmbedUrl(int tmdbId) {
+  Uri getMovieEmbedUrl(int tmdbId, {String? subtitleLanguage}) {
     return Uri.https(_host, '/mock-embed/movie/$tmdbId');
   }
 
   @override
-  Uri getEpisodeEmbedUrl(int tmdbId, int season, int episode) {
+  Uri getEpisodeEmbedUrl(int tmdbId, int season, int episode, {String? subtitleLanguage}) {
     return Uri.https(_host, '/mock-embed/tv/$tmdbId/$season/$episode');
   }
 

@@ -7,7 +7,6 @@ import 'package:movie_bloc_app/features/personalization/presentation/widgets/set
 import '../../blocs/settings/settings_bloc.dart';
 import 'change_language_tile.dart';
 import 'clear_bookmarks_tile.dart';
-import 'set_api_key_tile.dart';
 import 'streaming_providers_section.dart';
 
 class SettingsList extends StatelessWidget {
@@ -28,7 +27,6 @@ class SettingsList extends StatelessWidget {
                     ClearBookmarksTile(),
                     ChangeLanguageTile(),
                     ThemeModeTile(),
-                    SetApiKeyTile(),
                     StreamingProvidersSection(),
                   ],
                 ),
