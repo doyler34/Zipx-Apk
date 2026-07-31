@@ -60,6 +60,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// told apart from the one that's actually on screen and ignored.
   int _attemptToken = 0;
 
+  /// The embed URL requested for the in-flight attempt. `onHttpError` gives
+  /// no way to tell a main-document response from a sub-resource one, so we
+  /// compare against this to decide whether an HTTP error status is the
+  /// provider itself failing (e.g. a Cloudflare block/challenge page served
+  /// with a non-2xx status) versus a harmless ad/tracker asset 404ing.
+  Uri? _pendingUrl;
+
   StreamingProvider? get _currentProvider => (_currentIndex >= 0 && _currentIndex < _attemptQueue.length) ? _attemptQueue[_currentIndex] : null;
 
   @override
@@ -124,6 +131,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _historyRecordedForCurrentAttempt = false;
     _failureHandledForCurrentAttempt = false;
     final token = ++_attemptToken;
+    _pendingUrl = result.embedUrl;
 
     setState(() => _status = _PlayerStatus.loading);
 
@@ -163,6 +171,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
             // treated as the provider failing.
             if (error.isForMainFrame == false) return;
             _handleFailure(provider, error.description);
+          },
+          onHttpError: (error) {
+            if (token != _attemptToken) return; // stale WebView we've since abandoned
+            // `onWebResourceError` only covers network/connection-level
+            // failures. A provider sitting behind Cloudflare (or similar)
+            // can return a non-2xx status for a block/challenge page while
+            // the WebView still considers that a "successful" load - which
+            // otherwise shows up as a blank player with no error at all.
+            // Only the main document's own response counts as fatal here;
+            // sub-resources (ads, trackers) 404ing constantly is normal.
+            final requestUri = error.request?.uri;
+            final statusCode = error.response?.statusCode;
+            if (requestUri == null || statusCode == null) return;
+            if (requestUri.host != _pendingUrl?.host || requestUri.path != _pendingUrl?.path) return;
+            if (statusCode >= 400) {
+              _handleFailure(provider, 'Provider returned an error (HTTP $statusCode).');
+            }
           },
           onNavigationRequest: (navRequest) {
             final uri = Uri.tryParse(navRequest.url);
