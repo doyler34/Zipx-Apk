@@ -56,7 +56,17 @@ jobs:
             echo "::error::KEYSTORE_BASE64 secret is not set - add the signing secrets (see .github/workflows/build-apk.yml)."
             exit 1
           fi
-          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.p12
+          # Strip any spaces/newlines a copy-paste may have introduced into
+          # the secret, then decode. The strict decoder otherwise fails with
+          # "base64: invalid input" on wrapped/whitespaced values.
+          echo "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > android/app/upload-keystore.p12
+          # Verify the keystore decoded correctly and the password matches,
+          # so a bad secret fails here with a clear message instead of deep
+          # inside the Gradle build.
+          if ! keytool -list -keystore android/app/upload-keystore.p12 -storetype PKCS12 -storepass "$KEYSTORE_PASSWORD" >/dev/null 2>&1; then
+            echo "::error::Keystore did not decode, or KEYSTORE_PASSWORD is wrong. Re-check the KEYSTORE_BASE64 and KEYSTORE_PASSWORD secrets."
+            exit 1
+          fi
           cat > android/key.properties <<EOF
           storePassword=$KEYSTORE_PASSWORD
           keyPassword=$KEY_PASSWORD
