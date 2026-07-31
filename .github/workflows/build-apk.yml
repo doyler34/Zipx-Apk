@@ -3,14 +3,16 @@ name: Build APK
 # Builds a release APK and publishes it to a GitHub Release so it can be
 # sideloaded (e.g. via the Downloader app) from a public URL.
 #
-# Trigger it manually from the GitHub "Actions" tab (Run workflow), or by
-# pushing a tag like v1.0.0. Either way the APK ends up attached to the
-# "latest" release at a stable URL:
+# Builds automatically on every push to main, and can also be run manually
+# from the "Actions" tab or by pushing a tag like v1.0.0. Either way the APK
+# ends up attached to the "latest" release at a stable URL:
 #   https://github.com/doyler34/zipx-apk/releases/download/latest/zipx-movies.apk
 
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
 
