@@ -97,8 +97,10 @@ class _TvDetailsBody extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (show.backdropPath.trim().isNotEmpty)
-                AspectRatio(
-                  aspectRatio: 16 / 9,
+                SizedBox(
+                  // Capped so the backdrop doesn't fill a whole wide TV screen.
+                  height: (MediaQuery.of(context).size.height * 0.45).clamp(180.0, 340.0),
+                  width: double.infinity,
                   child: ExtendedImage.network(UrlStrings.imageUrl + show.backdropPath, fit: BoxFit.cover, cache: true),
                 ),
               Padding(

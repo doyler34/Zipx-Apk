@@ -16,9 +16,12 @@ class MovieImageSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    // Capped so the header doesn't fill a whole wide TV screen.
+    final headerHeight = (size.height * 0.4).clamp(220.0, 380.0);
+    final posterHeight = headerHeight * 0.88;
     return FadeIn(
       child: SizedBox(
-        height: size.height * 0.4,
+        height: headerHeight,
         child: FadeIn(
           child: Stack(
             children: [
@@ -27,13 +30,13 @@ class MovieImageSection extends StatelessWidget {
                 blurColor: Colors.black,
                 child: Container(
                   width: double.infinity,
-                  height: size.height * 0.4,
+                  height: headerHeight,
                   decoration: Styles(context: context, imagePath: movie.backdropPath).cardBoxDecoration,
                 ),
               ),
               Center(
                 child: SizedBox(
-                  height: size.height * 0.35,
+                  height: posterHeight,
                   child: MovieCard(
                     movie: movie,
                     showInfo: false,
