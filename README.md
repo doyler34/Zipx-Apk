@@ -1,8 +1,5 @@
 <a id="readme-top"></a>
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/5bbf6aee-22f4-43d8-ae74-3ce296c74fae" width="800" height="400" />
-</p>
 
 <br></br></br>
 
