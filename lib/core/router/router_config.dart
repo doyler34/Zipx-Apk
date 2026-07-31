@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:movie_bloc_app/common/blocs/bloc/nav_bar_bloc.dart';
+import 'package:movie_bloc_app/common/widgets/splash/splash_screen.dart';
 import 'package:movie_bloc_app/features/movies/data/models/movie_model.dart';
 import 'package:movie_bloc_app/features/movies/presentation/pages/details/all_reviews_screen.dart';
 import 'package:movie_bloc_app/features/movies/presentation/pages/home/all_movies_screen.dart';
@@ -19,6 +20,7 @@ import '../../core/playback/services/playback_provider_service.dart';
 
 class CustomGoRouterConfig {
   final GoRouter config = GoRouter(
+    initialLocation: '/splash',
     errorBuilder: (context, state) {
       return BlocBuilder<NavBarBloc, NavBarState>(
         builder: (_, state2) {
@@ -44,6 +46,12 @@ class CustomGoRouterConfig {
       );
     },
     routes: [
+      GoRoute(
+        path: '/splash',
+        builder: (BuildContext context, GoRouterState state) {
+          return const SplashScreen();
+        },
+      ),
       GoRoute(
         path: '/',
         builder: (BuildContext context, GoRouterState state) {
