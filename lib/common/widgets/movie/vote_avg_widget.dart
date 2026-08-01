@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:movie_bloc_app/common/styles/styles.dart';
 
+/// Compact rating chip: a small translucent pill with an amber star and the
+/// vote average. Sized to sit unobtrusively in a poster corner rather than the
+/// old bright-yellow box. [width]/[height]/[hasShadow] are retained for call
+/// -site compatibility but no longer drive a fixed box.
 class VoteAvgWidget extends StatelessWidget {
   const VoteAvgWidget({
     super.key,
@@ -21,54 +24,28 @@ class VoteAvgWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final rating = voteAvg >= 10 ? '10' : voteAvg.toStringAsFixed(1);
     return Align(
       alignment: alignment,
       child: Padding(
-        padding: padding != null ? padding! : EdgeInsets.zero,
+        padding: padding ?? const EdgeInsets.all(8),
         child: Container(
-          width: width,
-          height: height,
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
           decoration: BoxDecoration(
-            color: Colors.yellow,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: hasShadow ? Styles(context: context).containerShadows : null,
+            color: Colors.black.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white24, width: 0.5),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(5),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: width,
-                  height: height,
-                  child: FittedBox(
-                    fit: BoxFit.cover,
-                    child: Opacity(
-                      opacity: 0.6,
-                      child: Icon(
-                        Icons.star,
-                        color: Colors.orangeAccent,
-                        shadows: Styles(context: context).iconShadows,
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(
-                  width: width,
-                  height: height,
-                  child: FittedBox(
-                    fit: BoxFit.cover,
-                    child: Text(
-                      voteAvg == 10 ? voteAvg.toStringAsFixed(0) : voteAvg.toStringAsFixed(1),
-                      style: Theme.of(context).textTheme.titleSmall!.copyWith(
-                            fontWeight: FontWeight.bold,
-                            shadows: Styles(context: context).textShadows,
-                          ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.star_rounded, color: Color(0xFFFFC529), size: 13),
+              const SizedBox(width: 3),
+              Text(
+                rating,
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+            ],
           ),
         ),
       ),

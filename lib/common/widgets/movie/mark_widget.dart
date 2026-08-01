@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:movie_bloc_app/common/styles/styles.dart';
+import 'package:movie_bloc_app/common/styles/zipx_ui.dart';
 import 'package:movie_bloc_app/features/movies/data/models/movie_model.dart';
 
 import '../../../core/utils/helpers/helper_functions.dart';
 import '../../../features/personalization/presentation/blocs/bookmarks/bookmarks_bloc.dart';
 
+/// Compact bookmark toggle: a small translucent circular button that shows an
+/// outline bookmark when unsaved and a filled red one when saved, instead of
+/// the old large red square. [width]/[height]/[hasShadow] are kept for call
+/// -site compatibility.
 class MarkWidget extends StatelessWidget {
   const MarkWidget({
     super.key,
@@ -25,43 +28,38 @@ class MarkWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    bool isBookmarked = false;
-
     return BlocBuilder(
       bloc: context.read<BookmarksBloc>(),
       builder: (context, state) {
         if (state is BookmarksChanged) {
-          isBookmarked = state.bookmarkIds.contains(movie.id);
+          final isBookmarked = state.bookmarkIds.contains(movie.id);
 
           return Align(
             alignment: align ? Alignment.topRight : Alignment.center,
-            child: Container(
-              width: width,
-              height: height,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: hasShadow ? Styles(context: context).containerShadows : null,
-              ),
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: IconButton(
-                  onPressed: () {
-                    if (isBookmarked) {
-                      context.read<BookmarksBloc>().add(RemoveBookmark(movie));
-                      isBookmarked = context.read<BookmarksBloc>().bookmarks.contains(movie);
-                      HelperFunctions.showSnackBar(context, 'Removed from bookmarks');
-                    } else {
-                      context.read<BookmarksBloc>().add(AddBookmark(movie));
-                      isBookmarked = context.read<BookmarksBloc>().bookmarks.contains(movie);
-                      HelperFunctions.showSnackBar(context, 'Added to bookmarks');
-                    }
-                  },
-                  icon: FaIcon(
-                    FontAwesomeIcons.solidBookmark,
-                    color: isBookmarked ? Colors.yellow : Colors.white,
-                    size: 30,
-                    shadows: Styles(context: context).iconShadows,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: GestureDetector(
+                onTap: () {
+                  if (isBookmarked) {
+                    context.read<BookmarksBloc>().add(RemoveBookmark(movie));
+                    HelperFunctions.showSnackBar(context, 'Removed from bookmarks');
+                  } else {
+                    context.read<BookmarksBloc>().add(AddBookmark(movie));
+                    HelperFunctions.showSnackBar(context, 'Added to bookmarks');
+                  }
+                },
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.55),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white24, width: 0.5),
+                  ),
+                  child: Icon(
+                    isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                    color: isBookmarked ? ZipxUi.red : Colors.white,
+                    size: 17,
                   ),
                 ),
               ),
