@@ -13,6 +13,7 @@ import 'package:movie_bloc_app/core/playback/services/playback_history_service.d
 import 'package:movie_bloc_app/core/playback/services/playback_provider_service.dart';
 import 'package:movie_bloc_app/core/playback/services/provider_preferences_service.dart';
 import 'package:movie_bloc_app/core/settings/user_settings.dart';
+import 'package:movie_bloc_app/services/tv_remote_service.dart';
 import 'package:movie_bloc_app/features/movies/data/datasources/remote/tmdb_datasource.dart';
 import 'package:movie_bloc_app/features/movies/data/models/movie_model.dart';
 import 'package:movie_bloc_app/features/movies/data/repositories/movie_repo_impl.dart';
@@ -47,6 +48,11 @@ final sl = GetIt.instance;
 Future initDependencyInjection() async {
   //Device
   sl.registerLazySingleton<DeviceInfo>(() => DeviceInfo());
+
+  // Fire TV / Android TV remote input bridge (native key events -> Flutter).
+  // Constructed eagerly and initialized so the native `zipx.tv/remote`
+  // handler is installed before any player screen opens.
+  sl.registerSingleton<TvRemoteService>(TvRemoteService()..initialize());
 
   //Datasources
   sl.registerLazySingleton<Dio>(() => Dio());
