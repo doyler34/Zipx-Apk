@@ -22,7 +22,12 @@ class ZipxHomeHeader extends StatelessWidget {
       elevation: 0,
       titleSpacing: 20,
       toolbarHeight: 72,
-      title: const _ZipxWordmark(),
+      title: Image.asset(
+        'assets/logos/zipx_logo.png',
+        height: 40,
+        fit: BoxFit.contain,
+        alignment: Alignment.centerLeft,
+      ),
       actions: [
         IconButton(
           splashRadius: 22,
@@ -37,48 +42,6 @@ class ZipxHomeHeader extends StatelessWidget {
               radius: 18,
               backgroundColor: ZipxUi.surfaceHigh,
               child: Icon(Icons.person, color: Colors.white70, size: 22),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ZipxWordmark extends StatelessWidget {
-  const _ZipxWordmark();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        RichText(
-          text: const TextSpan(
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1,
-              color: Colors.white,
-              height: 1,
-            ),
-            children: [
-              TextSpan(text: 'ZIP'),
-              TextSpan(text: 'X', style: TextStyle(color: ZipxUi.red)),
-            ],
-          ),
-        ),
-        const Padding(
-          padding: EdgeInsets.only(left: 2, top: 2),
-          child: Text(
-            'MOVIES',
-            style: TextStyle(
-              color: ZipxUi.red,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 6,
-              height: 1,
             ),
           ),
         ),
