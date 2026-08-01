@@ -40,11 +40,6 @@ class VidSrcProvider extends BaseStreamingProvider {
   @override
   String get displayName => 'VidSrc';
 
-  /// VidSrc is resolved to a direct `.m3u8` by [VidSrcExtractor] and played
-  /// natively (ExoPlayer), which is what makes the Fire TV remote work.
-  @override
-  bool get supportsNativeExtraction => true;
-
   @override
   int get priority => 0;
 

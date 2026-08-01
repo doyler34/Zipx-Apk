@@ -19,12 +19,6 @@ dependencies:
   flutter_bloc: ^8.1.6
   equatable: ^2.0.5
 
-  #State Management (TV feature)
-  flutter_riverpod: ^2.5.1
-
-  #TV artwork caching
-  cached_network_image: ^3.3.1
-
   #Internet Connection
   internet_connection_checker: ^1.0.0+1
 
@@ -69,14 +63,9 @@ dependencies:
   extended_image: ^8.2.1
   dio: ^5.4.3+1
 
-  #Embedded playback (in-app WebView fallback for providers we can't extract)
+  #Embedded playback (in-app WebView for streaming providers)
   webview_flutter: ^4.8.0
   webview_flutter_android: ^3.16.6
-
-  #Native playback (ExoPlayer via video_player) for extracted direct streams.
-  #This is what gives the Fire TV remote real play/pause/seek control instead
-  #of the un-controllable embed WebView.
-  video_player: ^2.9.1
 
 dev_dependencies:
   flutter_test:

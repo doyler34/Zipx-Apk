@@ -2,7 +2,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:movie_bloc_app/common/blocs/bloc/nav_bar_bloc.dart';
-import 'package:movie_bloc_app/core/device/device_info.dart';
 import 'package:movie_bloc_app/core/playback/domain/providers/mock/mock_reliable_provider.dart';
 import 'package:movie_bloc_app/core/playback/domain/providers/mock/mock_unreliable_provider.dart';
 import 'package:movie_bloc_app/core/playback/domain/providers/streaming_provider.dart';
@@ -12,9 +11,7 @@ import 'package:movie_bloc_app/core/playback/services/favourite_service.dart';
 import 'package:movie_bloc_app/core/playback/services/playback_history_service.dart';
 import 'package:movie_bloc_app/core/playback/services/playback_provider_service.dart';
 import 'package:movie_bloc_app/core/playback/services/provider_preferences_service.dart';
-import 'package:movie_bloc_app/core/playback/services/vidsrc_extractor.dart';
 import 'package:movie_bloc_app/core/settings/user_settings.dart';
-import 'package:movie_bloc_app/services/tv_remote_service.dart';
 import 'package:movie_bloc_app/features/movies/data/datasources/remote/tmdb_datasource.dart';
 import 'package:movie_bloc_app/features/movies/data/models/movie_model.dart';
 import 'package:movie_bloc_app/features/movies/data/repositories/movie_repo_impl.dart';
@@ -47,14 +44,6 @@ import '../../features/movies/presentation/blocs/details/details/details_bloc.da
 final sl = GetIt.instance;
 
 Future initDependencyInjection() async {
-  //Device
-  sl.registerLazySingleton<DeviceInfo>(() => DeviceInfo());
-
-  // Fire TV / Android TV remote input bridge (native key events -> Flutter).
-  // Constructed eagerly and initialized so the native `zipx.tv/remote`
-  // handler is installed before any player screen opens.
-  sl.registerSingleton<TvRemoteService>(TvRemoteService()..initialize());
-
   //Datasources
   sl.registerLazySingleton<Dio>(() => Dio());
   sl.registerLazySingleton<TmdbDatasource>(() => TmdbDatasource(sl()));
@@ -79,7 +68,6 @@ Future initDependencyInjection() async {
   sl.registerLazySingleton<ProviderPreferencesService>(() => ProviderPreferencesService(sl()));
   sl.registerLazySingleton<PlaybackProviderService>(() => PlaybackProviderService(sl(), sl(), sl()));
   sl.registerLazySingleton<PlaybackHistoryService>(() => PlaybackHistoryService());
-  sl.registerLazySingleton<VidSrcExtractor>(() => VidSrcExtractor());
   sl.registerLazySingleton<FavouriteService>(() => FavouriteService());
 
   //Others

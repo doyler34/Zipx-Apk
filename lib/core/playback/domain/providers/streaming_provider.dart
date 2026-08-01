@@ -13,12 +13,6 @@ abstract class StreamingProvider {
   /// Human readable name shown in the provider selector and settings.
   String get displayName;
 
-  /// Whether this provider can be resolved to a direct, natively-playable
-  /// stream (via an extractor) rather than only an embed URL. When true, the
-  /// player plays it in a native ExoPlayer (full remote control); when false,
-  /// it falls back to loading [getMovieEmbedUrl] in a WebView.
-  bool get supportsNativeExtraction;
-
   /// Default try-order used when the user hasn't customized
   /// [ProviderPreferences.providerPriorityOrder]. Lower value = tried first.
   int get priority;
@@ -67,10 +61,6 @@ abstract class BaseStreamingProvider implements StreamingProvider {
   BaseStreamingProvider({bool enabledByDefault = true}) : _enabled = enabledByDefault;
 
   bool _enabled;
-
-  /// Providers are embed-only unless they explicitly opt in.
-  @override
-  bool get supportsNativeExtraction => false;
 
   @override
   bool get isEnabled => _enabled;

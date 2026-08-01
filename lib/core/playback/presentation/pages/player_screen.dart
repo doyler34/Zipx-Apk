@@ -1,21 +1,14 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
-import '../../../../services/tv_remote_service.dart';
-import '../../../device/device_info.dart';
-import '../../../dependency_injection/di.dart';
-import '../../domain/entities/extracted_stream.dart';
 import '../../domain/entities/playback_request.dart';
 import '../../domain/providers/streaming_provider.dart';
 import '../../services/playback_history_service.dart';
 import '../../services/playback_provider_service.dart';
-import '../../services/vidsrc_extractor.dart';
-import '../widgets/native_player_view.dart';
 import '../widgets/player_error_view.dart';
 import '../widgets/player_loading_view.dart';
 import '../widgets/player_status_bar.dart';
@@ -51,12 +44,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   static const Duration _loadTimeout = Duration(seconds: 25);
 
   WebViewController? _controller;
-
-  /// Non-null while the current attempt is playing a natively-extracted
-  /// stream (VidSrc). Mutually exclusive with [_controller]: whichever is set
-  /// decides whether the body shows [NativePlayerView] or a [WebViewWidget].
-  ExtractedStream? _nativeStream;
-
   List<StreamingProvider> _attemptQueue = const [];
   int _currentIndex = -1;
   final Set<String> _failedProviderIds = {};
@@ -64,10 +51,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String _errorMessage = '';
   bool _historyRecordedForCurrentAttempt = false;
   bool _failureHandledForCurrentAttempt = false;
-
-  /// Guards [NativePlayerView]'s error-driven re-extraction so one bad stream
-  /// triggers at most a single forced refresh per attempt, never a loop.
-  bool _nativeRefreshAttempted = false;
   Timer? _loadTimeoutTimer;
 
   /// Bumped every time a new [WebViewController] is created. Each
@@ -90,37 +73,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// conventionally behave on rotation.
   bool _isFullScreen = false;
 
-  /// Fire TV / Android TV remote bridge. Native `dispatchKeyEvent` relays key
-  /// presses up the `zipx.tv/remote` channel; we subscribe here and forward
-  /// them into the WebView as synthetic keyboard events. See the class-level
-  /// note in [TvRemoteService] and the comment on [_forwardToWebView] for the
-  /// hard cross-origin limitation this runs into.
-  final TvRemoteService _remote = sl<TvRemoteService>();
-  StreamSubscription<TvRemoteEvent>? _remoteSub;
-
-  /// Focus node for the Flutter-side key fallback (see [_handleFallbackKey]).
-  final FocusNode _playerFocusNode = FocusNode(debugLabel: 'PlayerRemoteFocus');
-
   StreamingProvider? get _currentProvider => (_currentIndex >= 0 && _currentIndex < _attemptQueue.length) ? _attemptQueue[_currentIndex] : null;
 
   @override
   void initState() {
     super.initState();
-    // On TV stay landscape-only (TVs are fixed landscape - allowing portrait
-    // here is what made the player flip to a phone-style portrait view). On
-    // a phone, allow both so the player can rotate and go fullscreen.
-    SystemChrome.setPreferredOrientations(
-      sl<DeviceInfo>().isTv
-          ? const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
-          : const [
-              DeviceOrientation.portraitUp,
-              DeviceOrientation.landscapeLeft,
-              DeviceOrientation.landscapeRight,
-            ],
-    );
-    // Listen for native TV-remote key events. Harmless on phones (no such
-    // events are ever sent); the real work happens on Fire TV / Android TV.
-    _remoteSub = _remote.events.listen(_onRemoteEvent);
+    // Allow both orientations while a video is open so the player can rotate
+    // to landscape and go fullscreen.
+    SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoStartOrSelect());
   }
 
@@ -139,16 +103,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
-    // Cancel our own subscription only - the TvRemoteService singleton stays
-    // alive for the next player screen, so there are never duplicate handlers.
-    _remoteSub?.cancel();
-    _playerFocusNode.dispose();
     _loadTimeoutTimer?.cancel();
-    // Restore the app's default orientation for this device type: landscape
-    // on TV, portrait on phone.
-    SystemChrome.setPreferredOrientations(
-      sl<DeviceInfo>().isTv ? const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight] : const [DeviceOrientation.portraitUp],
-    );
+    // Restore the app's default portrait lock on leaving the player.
+    SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
@@ -164,12 +121,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // On a TV the screen is permanently landscape, so treating landscape as
-    // "hide all chrome" would leave a remote user with no on-screen close /
-    // switch-provider buttons. Keep the app bar (and its focusable buttons)
-    // visible there; the immersive-fullscreen-on-rotate behaviour is for
-    // phones only.
-    if (sl<DeviceInfo>().isTv) return;
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     if (isLandscape == _isFullScreen) return;
 
@@ -215,22 +166,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return;
     }
 
+    final result = widget.playbackProviderService.buildResult(widget.request, provider);
     _historyRecordedForCurrentAttempt = false;
     _failureHandledForCurrentAttempt = false;
     final token = ++_attemptToken;
-
-    // Preferred path: resolve a direct stream and play it natively (real
-    // remote control). Only providers that opt in - currently VidSrc - take
-    // this branch; everything else keeps the embed-WebView fallback below.
-    if (provider.supportsNativeExtraction) {
-      _loadNativeProvider(provider, token);
-      return;
-    }
-
-    // Leaving the native path - drop any prior native stream so the WebView
-    // (not a stale player) renders.
-    _nativeStream = null;
-    final result = widget.playbackProviderService.buildResult(widget.request, provider);
     _pendingUrl = result.embedUrl;
 
     setState(() => _status = _PlayerStatus.loading);
@@ -257,54 +196,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _handleFailure(provider, 'Timed out waiting for this provider to respond.');
       }
     });
-  }
-
-  /// Resolves [provider] to a direct stream and plays it natively. [token]
-  /// guards against a stale attempt finishing after we've moved on (fallback,
-  /// switch-provider, screen closed).
-  Future<void> _loadNativeProvider(StreamingProvider provider, int token, {bool forceRefresh = false}) async {
-    if (!forceRefresh) _nativeRefreshAttempted = false;
-    // Leaving the WebView path: make sure a stale WebView isn't what renders.
-    _controller = null;
-    _pendingUrl = null;
-    setState(() {
-      _status = _PlayerStatus.loading;
-      if (forceRefresh) _nativeStream = null;
-    });
-
-    try {
-      final stream = await sl<VidSrcExtractor>().extract(widget.request, forceRefresh: forceRefresh);
-      if (token != _attemptToken || !mounted) return; // stale attempt, discard
-      setState(() {
-        _nativeStream = stream;
-        _status = _PlayerStatus.playing;
-      });
-      if (!_historyRecordedForCurrentAttempt) {
-        _historyRecordedForCurrentAttempt = true;
-        widget.historyService.recordPlaybackStarted(request: widget.request, providerId: provider.id);
-      }
-    } on VidSrcExtractionException catch (e) {
-      if (token != _attemptToken || !mounted) return;
-      _handleFailure(provider, 'Could not find a playable stream for this title. (${e.message})');
-    } catch (e) {
-      if (token != _attemptToken || !mounted) return;
-      _handleFailure(provider, 'Playback could not start: $e');
-    }
-  }
-
-  /// Called by [NativePlayerView] when playback errors out - usually a cached
-  /// stream URL that has expired. Re-extract once with a forced refresh; if
-  /// that also fails, fall through to the normal failure/fallback handling.
-  void _onNativeStreamError() {
-    final provider = _currentProvider;
-    if (provider == null || !mounted) return;
-    if (_nativeRefreshAttempted) {
-      _handleFailure(provider, 'The stream stopped and could not be reloaded (it may have expired or been blocked).');
-      return;
-    }
-    _nativeRefreshAttempted = true;
-    final token = ++_attemptToken;
-    _loadNativeProvider(provider, token, forceRefresh: true);
   }
 
   void _configureController(WebViewController controller, StreamingProvider provider, int token) {
@@ -460,191 +351,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  // ---------------------------------------------------------------------------
-  // TV remote handling
-  // ---------------------------------------------------------------------------
-
-  /// Primary path: an event relayed from native Android over `zipx.tv/remote`.
-  void _onRemoteEvent(TvRemoteEvent event) {
-    if (!mounted) return;
-    // In native-playback mode, NativePlayerView owns the remote (it maps keys
-    // straight onto the video controller). Only the WebView fallback path
-    // needs us to forward/tap here.
-    if (_nativeStream != null) return;
-    _dispatchAction(event.action, isInitialPress: event.isInitialPress);
-  }
-
-  /// Secondary fallback: Flutter's own key pipeline. Only acts when the native
-  /// channel has NOT delivered anything, otherwise every press would be
-  /// handled twice (once natively, once here). On Fire TV the native path
-  /// always fires first, so in practice this stands down immediately.
-  KeyEventResult _handleFallbackKey(FocusNode node, KeyEvent event) {
-    // Native playback owns its own key handling; don't double-process.
-    if (_nativeStream != null) return KeyEventResult.ignored;
-    // Native channel is already covering us - let normal focus traversal /
-    // PopScope proceed untouched.
-    if (_remote.hasReceivedNativeEvent) return KeyEventResult.ignored;
-    // Discrete actions must fire once per physical press, not on auto-repeat.
-    final isInitialPress = event is KeyDownEvent;
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-
-    final action = _actionForLogicalKey(event.logicalKey);
-    // Back is owned by PopScope - never handle it here or it double-pops.
-    if (action == null || action == TvRemoteAction.back) {
-      return KeyEventResult.ignored;
-    }
-    if (kDebugMode) {
-      debugPrint('TV_REMOTE_FLUTTER fallback ${event.logicalKey.keyLabel} -> $action');
-    }
-    _dispatchAction(action, isInitialPress: isInitialPress);
-    return KeyEventResult.handled;
-  }
-
-  static TvRemoteAction? _actionForLogicalKey(LogicalKeyboardKey key) {
-    if (key == LogicalKeyboardKey.arrowUp) return TvRemoteAction.up;
-    if (key == LogicalKeyboardKey.arrowDown) return TvRemoteAction.down;
-    if (key == LogicalKeyboardKey.arrowLeft) return TvRemoteAction.left;
-    if (key == LogicalKeyboardKey.arrowRight) return TvRemoteAction.right;
-    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter || key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.gameButtonA) {
-      return TvRemoteAction.select;
-    }
-    if (key == LogicalKeyboardKey.mediaPlay) return TvRemoteAction.play;
-    if (key == LogicalKeyboardKey.mediaPause) return TvRemoteAction.pause;
-    if (key == LogicalKeyboardKey.mediaPlayPause) return TvRemoteAction.playPause;
-    if (key == LogicalKeyboardKey.mediaRewind) return TvRemoteAction.rewind;
-    if (key == LogicalKeyboardKey.mediaFastForward) return TvRemoteAction.fastForward;
-    return null;
-  }
-
-  /// Turns a decoded [action] into WebView forwarding. Discrete actions
-  /// (select / play / pause / play-pause) only fire on the first press so a
-  /// held key doesn't trigger them repeatedly; directional and rewind /
-  /// fast-forward are allowed to auto-repeat (scrubbing).
-  void _dispatchAction(TvRemoteAction action, {required bool isInitialPress}) {
-    switch (action) {
-      case TvRemoteAction.back:
-        // Handled by PopScope / _handleBack; nothing to do on the stream.
-        return;
-      case TvRemoteAction.select:
-      case TvRemoteAction.playPause:
-        if (!isInitialPress) return;
-        // Primary: a native centre tap - the only thing that reaches VidSrc's
-        // play button inside its cross-origin iframe (a centre tap on a video
-        // surface is also the universal play/pause toggle). The JS forward is
-        // a same-origin fallback for players we *can* script into.
-        if (_controller != null) _remote.tapWebView();
-        _forwardToWebView(action);
-      case TvRemoteAction.play:
-      case TvRemoteAction.pause:
-        if (!isInitialPress) return;
-        _forwardToWebView(action);
-      case TvRemoteAction.up:
-      case TvRemoteAction.down:
-      case TvRemoteAction.left:
-      case TvRemoteAction.right:
-      case TvRemoteAction.rewind:
-      case TvRemoteAction.fastForward:
-        _forwardToWebView(action);
-    }
-  }
-
-  /// The browser keyboard identity used to synthesize a `KeyboardEvent` for a
-  /// given remote action. `keyCode`/`which` are legacy and read-only in the
-  /// DOM (browsers report 0), but are included because some older player UIs
-  /// still branch on them.
-  static ({String key, String code, int keyCode}) _browserKeyFor(TvRemoteAction action) {
-    switch (action) {
-      case TvRemoteAction.up:
-        return (key: 'ArrowUp', code: 'ArrowUp', keyCode: 38);
-      case TvRemoteAction.down:
-        return (key: 'ArrowDown', code: 'ArrowDown', keyCode: 40);
-      case TvRemoteAction.left:
-        return (key: 'ArrowLeft', code: 'ArrowLeft', keyCode: 37);
-      case TvRemoteAction.right:
-        return (key: 'ArrowRight', code: 'ArrowRight', keyCode: 39);
-      case TvRemoteAction.select:
-        return (key: 'Enter', code: 'Enter', keyCode: 13);
-      case TvRemoteAction.play:
-        return (key: 'MediaPlay', code: 'MediaPlayPause', keyCode: 179);
-      case TvRemoteAction.pause:
-        return (key: 'MediaPause', code: 'MediaPlayPause', keyCode: 179);
-      case TvRemoteAction.playPause:
-        return (key: 'MediaPlayPause', code: 'MediaPlayPause', keyCode: 179);
-      case TvRemoteAction.rewind:
-        return (key: 'MediaRewind', code: 'MediaRewind', keyCode: 227);
-      case TvRemoteAction.fastForward:
-        return (key: 'MediaFastForward', code: 'MediaFastForward', keyCode: 228);
-      case TvRemoteAction.back:
-        return (key: 'GoBack', code: 'BrowserBack', keyCode: 8);
-    }
-  }
-
-  /// Injects a synthetic keyboard event into the WebView page.
-  ///
-  /// IMPORTANT / honest limitation: this can only reach the OUTER wrapper
-  /// document (see [_embedWrapperHtml]) and any *same-origin* frames. The real
-  /// VidSrc player runs inside a CROSS-ORIGIN `<iframe>`, and the browser
-  /// security model makes it impossible for injected JS in the parent to
-  /// dispatch events into that inner frame. So on a cross-origin provider this
-  /// forwarding is genuinely best-effort and may not move the player at all -
-  /// it is not, and cannot be, guaranteed. The bridge is still implemented
-  /// correctly end-to-end so it works for same-origin players and so the
-  /// diagnostics reveal exactly what the remote is sending.
-  Future<void> _forwardToWebView(TvRemoteAction action) async {
-    final controller = _controller;
-    if (controller == null) return;
-
-    final k = _browserKeyFor(action);
-    final clickSnippet = action == TvRemoteAction.select
-        // For select/enter, also try to activate the focused element - but
-        // only a genuinely focused one, never a blind click at screen centre.
-        ? "try{var el=document.activeElement;"
-            "if(el&&el!==document.body&&typeof el.click==='function'){el.click();}}catch(e){}"
-        : '';
-
-    final js = '''
-(function(){
-  try{
-    var init={key:"${k.key}",code:"${k.code}",keyCode:${k.keyCode},which:${k.keyCode},bubbles:true,cancelable:true};
-    try{window.focus();}catch(e){}
-    try{if(document.body&&document.body.focus){document.body.focus();}}catch(e){}
-    function fire(type){
-      var targets=[document.activeElement,document,window];
-      for(var i=0;i<targets.length;i++){
-        var t=targets[i];
-        if(!t)continue;
-        try{t.dispatchEvent(new KeyboardEvent(type,init));}catch(e){}
-      }
-    }
-    fire("keydown");
-    fire("keyup");
-    $clickSnippet
-    return "ok";
-  }catch(e){return "error:"+e;}
-})();
-''';
-
-    try {
-      final result = await controller.runJavaScriptReturningResult(js);
-      if (kDebugMode) {
-        debugPrint('TV_REMOTE_WEBVIEW ${action.name} inject -> $result');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('TV_REMOTE_WEBVIEW ${action.name} inject FAILED: $e');
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final provider = _currentProvider;
     final failedNames = _failedProviderIds.map((id) => widget.playbackProviderService.providerById(id)?.displayName ?? id).toList();
     final exhausted = _attemptQueue.isNotEmpty && _failedProviderIds.length >= _attemptQueue.length;
-
-    final isTv = sl<DeviceInfo>().isTv;
 
     return PopScope(
       canPop: false,
@@ -652,61 +363,42 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (didPop) return;
         _handleBack();
       },
-      // Secondary, Flutter-side key capture. `onKeyEvent` (not the deprecated
-      // RawKeyboardListener) forwards presses to the WebView only when the
-      // native channel is idle - see [_handleFallbackKey]. Autofocus only on
-      // TV so phones are untouched; the handler returns `ignored` in the
-      // normal (native-active) case, leaving focus traversal and the app bar
-      // buttons fully reachable.
-      child: Focus(
-        focusNode: _playerFocusNode,
-        autofocus: isTv,
-        onKeyEvent: _handleFallbackKey,
-        child: Scaffold(
-          backgroundColor: Colors.black,
-          extendBodyBehindAppBar: true,
-          // Landscape = fullscreen: the app bar (and the system status/nav
-          // bars, toggled in didChangeMetrics) get out of the way so the
-          // video actually fills the screen instead of being squeezed under
-          // our own chrome.
-          appBar: _isFullScreen
-              ? null
-              : PlayerStatusBar(
-                  title: widget.request.title,
-                  activeProviderName: provider?.displayName,
-                  onSwitchProvider: _openSelector,
-                  onClose: () => Navigator.of(context).pop(),
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        extendBodyBehindAppBar: true,
+        // Landscape = fullscreen: the app bar (and the system status/nav
+        // bars, toggled in didChangeMetrics) get out of the way so the
+        // video actually fills the screen instead of being squeezed under
+        // our own chrome.
+        appBar: _isFullScreen
+            ? null
+            : PlayerStatusBar(
+                title: widget.request.title,
+                activeProviderName: provider?.displayName,
+                onSwitchProvider: _openSelector,
+                onClose: () => Navigator.of(context).pop(),
+              ),
+        body: SafeArea(
+          child: Stack(
+            // Without this, non-positioned Stack children get loose
+            // constraints and the WebView platform view sizes itself small
+            // instead of filling the available space, which is why playback
+            // wasn't filling the screen.
+            fit: StackFit.expand,
+            children: [
+              if (_controller != null) WebViewWidget(controller: _controller!),
+              if (_status == _PlayerStatus.loading) PlayerLoadingView(providerName: provider?.displayName ?? ''),
+              if (_status == _PlayerStatus.error)
+                PlayerErrorView(
+                  message: _errorMessage,
+                  failedProviderNames: failedNames,
+                  exhausted: exhausted,
+                  onRetry: _retry,
+                  onTryAnotherProvider: _tryAnotherProvider,
                 ),
-          body: SafeArea(
-            child: Stack(
-              // Without this, non-positioned Stack children get loose
-              // constraints and the WebView platform view sizes itself small
-              // instead of filling the available space, which is why playback
-              // wasn't filling the screen.
-              fit: StackFit.expand,
-              children: [
-                if (_nativeStream != null)
-                  NativePlayerView(
-                    // A new stream URL (e.g. after a forced refresh) rebuilds
-                    // the controller cleanly instead of reusing a dead one.
-                    key: ValueKey(_nativeStream!.url),
-                    stream: _nativeStream!,
-                    onStreamError: _onNativeStreamError,
-                  )
-                else if (_controller != null)
-                  WebViewWidget(controller: _controller!),
-                if (_status == _PlayerStatus.loading) PlayerLoadingView(providerName: provider?.displayName ?? ''),
-                if (_status == _PlayerStatus.error)
-                  PlayerErrorView(
-                    message: _errorMessage,
-                    failedProviderNames: failedNames,
-                    exhausted: exhausted,
-                    onRetry: _retry,
-                    onTryAnotherProvider: _tryAnotherProvider,
-                  ),
-                if (_status == _PlayerStatus.selectingProvider && _controller == null) const ColoredBox(color: Colors.black, child: SizedBox.expand()),
-              ],
-            ),
+              if (_status == _PlayerStatus.selectingProvider && _controller == null)
+                const ColoredBox(color: Colors.black, child: SizedBox.expand()),
+            ],
           ),
         ),
       ),

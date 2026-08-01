@@ -7,15 +7,12 @@ import 'package:movie_bloc_app/features/movies/data/models/movie_model.dart';
 import 'package:movie_bloc_app/features/movies/presentation/pages/details/all_reviews_screen.dart';
 import 'package:movie_bloc_app/features/movies/presentation/pages/home/all_movies_screen.dart';
 import 'package:movie_bloc_app/features/movies/presentation/pages/details/details_screen.dart';
-import 'package:movie_bloc_app/features/movies/presentation/pages/details/details_tv_screen.dart';
 import 'package:movie_bloc_app/features/movies/presentation/pages/home/genre_movies_screen.dart';
 import 'package:movie_bloc_app/features/tv/data/models/tv_model.dart';
 import 'package:movie_bloc_app/features/tv/presentation/pages/tv_details_screen.dart';
-import 'package:movie_bloc_app/features/tv_home/presentation/screens/tv_home_screen.dart';
 import 'package:movie_bloc_app/navigation_menu.dart';
 
 import '../../core/dependency_injection/di.dart';
-import '../../core/device/device_info.dart';
 import '../../core/playback/domain/entities/playback_request.dart';
 import '../../core/playback/presentation/pages/player_screen.dart';
 import '../../core/playback/services/playback_history_service.dart';
@@ -58,18 +55,13 @@ class CustomGoRouterConfig {
       GoRoute(
         path: '/',
         builder: (BuildContext context, GoRouterState state) {
-          // TV gets the dedicated 10-foot shell (nav rail + hero + rows);
-          // phone/tablet keeps the bottom-nav NavigationMenu.
-          return sl<DeviceInfo>().isTv ? const TvShellScreen() : const NavigationMenu();
+          return const NavigationMenu();
         },
       ),
       GoRoute(
         path: '/details/:id',
         builder: (BuildContext context, GoRouterState state) {
           final movie = state.extra as MovieModel;
-          if (sl<DeviceInfo>().isTv) {
-            return DetailsTvScreen(movie: movie);
-          }
           return DetailsScreen(movie: movie, id: state.pathParameters['id']!);
         },
       ),

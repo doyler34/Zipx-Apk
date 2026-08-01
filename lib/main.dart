@@ -4,7 +4,6 @@ import 'package:adaptive_theme/adaptive_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:movie_bloc_app/core/dependency_injection/di.dart';
 import 'package:movie_bloc_app/core/router/router_config.dart';
@@ -17,7 +16,6 @@ import 'package:movie_bloc_app/features/personalization/presentation/blocs/setti
 import 'common/blocs/bloc/nav_bar_bloc.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
-import 'core/device/device_info.dart';
 import 'core/playback/services/provider_preferences_service.dart';
 import 'core/settings/user_settings.dart';
 import 'features/personalization/data/models/bookmarked_movie_hive.dart';
@@ -38,25 +36,12 @@ Future<void> main() async {
   await Hive.openBox('playback_history');
   await Hive.openBox('favourites');
 
-  // Caches extracted direct-stream URLs (see VidSrcExtractor) so we don't
-  // re-resolve the same title every time. Entries carry a timestamp and are
-  // expired by the extractor's TTL.
-  await Hive.openBox('stream_cache');
-
   await initDependencyInjection();
   await sl<ProviderPreferencesService>().initialize();
 
-  // Detect Fire TV / Android TV before deciding orientation: TVs are fixed
-  // landscape, so we only portrait-lock on phones/tablets.
-  await sl<DeviceInfo>().initialize();
-  if (sl<DeviceInfo>().isTv) {
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-  } else {
-    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  }
+  // Phone/tablet app: portrait-locked at launch (the player itself allows
+  // landscape while a video is open).
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   // Used only for testing on different devices
   // FlutterNativeSplash.remove();
@@ -68,9 +53,7 @@ Future<void> main() async {
   // );
 
   FlutterNativeSplash.remove();
-  // ProviderScope powers the TV feature's Riverpod providers. The rest of
-  // the app keeps using Bloc + GetIt unchanged.
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
