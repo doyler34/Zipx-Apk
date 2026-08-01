@@ -9,10 +9,13 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import '../../../../services/tv_remote_service.dart';
 import '../../../device/device_info.dart';
 import '../../../dependency_injection/di.dart';
+import '../../domain/entities/extracted_stream.dart';
 import '../../domain/entities/playback_request.dart';
 import '../../domain/providers/streaming_provider.dart';
 import '../../services/playback_history_service.dart';
 import '../../services/playback_provider_service.dart';
+import '../../services/vidsrc_extractor.dart';
+import '../widgets/native_player_view.dart';
 import '../widgets/player_error_view.dart';
 import '../widgets/player_loading_view.dart';
 import '../widgets/player_status_bar.dart';
@@ -48,6 +51,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   static const Duration _loadTimeout = Duration(seconds: 25);
 
   WebViewController? _controller;
+
+  /// Non-null while the current attempt is playing a natively-extracted
+  /// stream (VidSrc). Mutually exclusive with [_controller]: whichever is set
+  /// decides whether the body shows [NativePlayerView] or a [WebViewWidget].
+  ExtractedStream? _nativeStream;
+
   List<StreamingProvider> _attemptQueue = const [];
   int _currentIndex = -1;
   final Set<String> _failedProviderIds = {};
@@ -55,6 +64,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String _errorMessage = '';
   bool _historyRecordedForCurrentAttempt = false;
   bool _failureHandledForCurrentAttempt = false;
+
+  /// Guards [NativePlayerView]'s error-driven re-extraction so one bad stream
+  /// triggers at most a single forced refresh per attempt, never a loop.
+  bool _nativeRefreshAttempted = false;
   Timer? _loadTimeoutTimer;
 
   /// Bumped every time a new [WebViewController] is created. Each
@@ -202,10 +215,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return;
     }
 
-    final result = widget.playbackProviderService.buildResult(widget.request, provider);
     _historyRecordedForCurrentAttempt = false;
     _failureHandledForCurrentAttempt = false;
     final token = ++_attemptToken;
+
+    // Preferred path: resolve a direct stream and play it natively (real
+    // remote control). Only providers that opt in - currently VidSrc - take
+    // this branch; everything else keeps the embed-WebView fallback below.
+    if (provider.supportsNativeExtraction) {
+      _loadNativeProvider(provider, token);
+      return;
+    }
+
+    // Leaving the native path - drop any prior native stream so the WebView
+    // (not a stale player) renders.
+    _nativeStream = null;
+    final result = widget.playbackProviderService.buildResult(widget.request, provider);
     _pendingUrl = result.embedUrl;
 
     setState(() => _status = _PlayerStatus.loading);
@@ -232,6 +257,54 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _handleFailure(provider, 'Timed out waiting for this provider to respond.');
       }
     });
+  }
+
+  /// Resolves [provider] to a direct stream and plays it natively. [token]
+  /// guards against a stale attempt finishing after we've moved on (fallback,
+  /// switch-provider, screen closed).
+  Future<void> _loadNativeProvider(StreamingProvider provider, int token, {bool forceRefresh = false}) async {
+    if (!forceRefresh) _nativeRefreshAttempted = false;
+    // Leaving the WebView path: make sure a stale WebView isn't what renders.
+    _controller = null;
+    _pendingUrl = null;
+    setState(() {
+      _status = _PlayerStatus.loading;
+      if (forceRefresh) _nativeStream = null;
+    });
+
+    try {
+      final stream = await sl<VidSrcExtractor>().extract(widget.request, forceRefresh: forceRefresh);
+      if (token != _attemptToken || !mounted) return; // stale attempt, discard
+      setState(() {
+        _nativeStream = stream;
+        _status = _PlayerStatus.playing;
+      });
+      if (!_historyRecordedForCurrentAttempt) {
+        _historyRecordedForCurrentAttempt = true;
+        widget.historyService.recordPlaybackStarted(request: widget.request, providerId: provider.id);
+      }
+    } on VidSrcExtractionException catch (e) {
+      if (token != _attemptToken || !mounted) return;
+      _handleFailure(provider, 'Could not find a playable stream for this title. (${e.message})');
+    } catch (e) {
+      if (token != _attemptToken || !mounted) return;
+      _handleFailure(provider, 'Playback could not start: $e');
+    }
+  }
+
+  /// Called by [NativePlayerView] when playback errors out - usually a cached
+  /// stream URL that has expired. Re-extract once with a forced refresh; if
+  /// that also fails, fall through to the normal failure/fallback handling.
+  void _onNativeStreamError() {
+    final provider = _currentProvider;
+    if (provider == null || !mounted) return;
+    if (_nativeRefreshAttempted) {
+      _handleFailure(provider, 'The stream stopped and could not be reloaded (it may have expired or been blocked).');
+      return;
+    }
+    _nativeRefreshAttempted = true;
+    final token = ++_attemptToken;
+    _loadNativeProvider(provider, token, forceRefresh: true);
   }
 
   void _configureController(WebViewController controller, StreamingProvider provider, int token) {
@@ -394,6 +467,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Primary path: an event relayed from native Android over `zipx.tv/remote`.
   void _onRemoteEvent(TvRemoteEvent event) {
     if (!mounted) return;
+    // In native-playback mode, NativePlayerView owns the remote (it maps keys
+    // straight onto the video controller). Only the WebView fallback path
+    // needs us to forward/tap here.
+    if (_nativeStream != null) return;
     _dispatchAction(event.action, isInitialPress: event.isInitialPress);
   }
 
@@ -402,8 +479,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// handled twice (once natively, once here). On Fire TV the native path
   /// always fires first, so in practice this stands down immediately.
   KeyEventResult _handleFallbackKey(FocusNode node, KeyEvent event) {
-    // Native is already covering us - let normal focus traversal / PopScope
-    // proceed untouched.
+    // Native playback owns its own key handling; don't double-process.
+    if (_nativeStream != null) return KeyEventResult.ignored;
+    // Native channel is already covering us - let normal focus traversal /
+    // PopScope proceed untouched.
     if (_remote.hasReceivedNativeEvent) return KeyEventResult.ignored;
     // Discrete actions must fire once per physical press, not on auto-repeat.
     final isInitialPress = event is KeyDownEvent;
@@ -606,7 +685,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
               // wasn't filling the screen.
               fit: StackFit.expand,
               children: [
-                if (_controller != null) WebViewWidget(controller: _controller!),
+                if (_nativeStream != null)
+                  NativePlayerView(
+                    // A new stream URL (e.g. after a forced refresh) rebuilds
+                    // the controller cleanly instead of reusing a dead one.
+                    key: ValueKey(_nativeStream!.url),
+                    stream: _nativeStream!,
+                    onStreamError: _onNativeStreamError,
+                  )
+                else if (_controller != null)
+                  WebViewWidget(controller: _controller!),
                 if (_status == _PlayerStatus.loading) PlayerLoadingView(providerName: provider?.displayName ?? ''),
                 if (_status == _PlayerStatus.error)
                   PlayerErrorView(

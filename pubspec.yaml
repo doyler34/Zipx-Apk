@@ -69,9 +69,14 @@ dependencies:
   extended_image: ^8.2.1
   dio: ^5.4.3+1
 
-  #Embedded playback (in-app WebView for streaming providers)
+  #Embedded playback (in-app WebView fallback for providers we can't extract)
   webview_flutter: ^4.8.0
   webview_flutter_android: ^3.16.6
+
+  #Native playback (ExoPlayer via video_player) for extracted direct streams.
+  #This is what gives the Fire TV remote real play/pause/seek control instead
+  #of the un-controllable embed WebView.
+  video_player: ^2.9.1
 
 dev_dependencies:
   flutter_test:

@@ -38,6 +38,11 @@ Future<void> main() async {
   await Hive.openBox('playback_history');
   await Hive.openBox('favourites');
 
+  // Caches extracted direct-stream URLs (see VidSrcExtractor) so we don't
+  // re-resolve the same title every time. Entries carry a timestamp and are
+  // expired by the extractor's TTL.
+  await Hive.openBox('stream_cache');
+
   await initDependencyInjection();
   await sl<ProviderPreferencesService>().initialize();
 

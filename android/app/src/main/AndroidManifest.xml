@@ -13,7 +13,8 @@
         android:banner="@mipmap/launcher_icon"
         android:label="Zipx Movies"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon">
+        android:icon="@mipmap/launcher_icon"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
