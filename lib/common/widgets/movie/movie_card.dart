@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
-import 'package:movie_bloc_app/common/styles/styles.dart';
+import 'package:movie_bloc_app/common/styles/zipx_ui.dart';
 import 'package:movie_bloc_app/common/widgets/tv/tv_focusable.dart';
 import 'package:movie_bloc_app/common/widgets/movie/adult_widget.dart';
 import 'package:movie_bloc_app/common/widgets/movie/mark_widget.dart';
@@ -34,48 +34,41 @@ class MovieCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
     return BlocBuilder<SettingsBloc, SettingsState>(
       builder: (context, state) {
         if (state is SettingsChanged) {
           final card = Padding(
-              padding: const EdgeInsets.only(top: 16, left: 12, right: 12, bottom: 16),
-              child: SizedBox(
-                child: AspectRatio(
-                  aspectRatio: aspectRatio,
-                  child: Container(
-                    height: size.height * 0.4,
-                    decoration: Styles(context: context).cardBoxDecoration.copyWith(
-                          image: movie.posterPath.trim() != ''
-                              ? DecorationImage(
-                                  image: ExtendedNetworkImageProvider(UrlStrings.imageUrl + movie.posterPath, cache: true, printError: false),
-                                  fit: BoxFit.cover,
-                                  onError: (_, __) {},
-                                )
-                              : null,
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: verticalPadding),
+            child: AspectRatio(
+              aspectRatio: aspectRatio,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: ZipxUi.surface,
+                    image: movie.posterPath.trim() != ''
+                        ? DecorationImage(
+                            image: ExtendedNetworkImageProvider(UrlStrings.imageUrl + movie.posterPath, cache: true, printError: false),
+                            fit: BoxFit.cover,
+                            onError: (_, __) {},
+                          )
+                        : null,
+                  ),
+                  child: Stack(
+                    children: [
+                      if (movie.posterPath.trim() == '')
+                        const Center(
+                          child: FaIcon(FontAwesomeIcons.film, color: Colors.white24, size: 40),
                         ),
-                    child: Stack(
-                      children: [
-                        if (movie.posterPath.trim() == '')
-                          SizedBox(
-                            height: size.height * 0.35,
-                            child: const FittedBox(
-                              fit: BoxFit.cover,
-                              child: Padding(
-                                padding: EdgeInsets.all(16),
-                                child: FaIcon(FontAwesomeIcons.film, color: Colors.white),
-                              ),
-                            ),
-                          ),
-                        if (showInfo) MarkWidget(movie: movie),
-                        if (showInfo) VoteAvgWidget(voteAvg: movie.voteAverage, alignment: Alignment.bottomRight),
-                        if (movie.adult && showInfo) const AdultWidget(),
-                      ],
-                    ),
+                      if (showInfo) MarkWidget(movie: movie),
+                      if (showInfo) VoteAvgWidget(voteAvg: movie.voteAverage, alignment: Alignment.bottomRight),
+                      if (movie.adult && showInfo) const AdultWidget(),
+                    ],
                   ),
                 ),
               ),
-            );
+            ),
+          );
 
           // Only make it a focusable/tappable target when it actually
           // navigates. A non-touchable card (e.g. the poster on the details

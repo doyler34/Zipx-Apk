@@ -2,7 +2,6 @@ import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
-import 'package:movie_bloc_app/common/styles/styles.dart';
 import 'package:movie_bloc_app/common/widgets/movie/movie_card.dart';
 import 'package:movie_bloc_app/common/widgets/texts/header.dart';
 import 'package:movie_bloc_app/features/movies/presentation/blocs/details/details/details_bloc.dart';
@@ -26,13 +25,11 @@ class MoviesSection extends StatelessWidget {
       children: [
         if (isSimilar) SizedBox(height: size.height * 0.035),
         if (isSimilar) const Header(title: 'Similar Movies'),
-        Container(
-          height: size.height * 0.35,
+        SizedBox(
+          height: 240,
           width: double.infinity,
-          decoration: Styles(context: context).cardBoxDecoration.copyWith(
-                color: Theme.of(context).scaffoldBackgroundColor,
-              ),
           child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             itemCount: isMaxPage ? movies.length : movies.length + 1,
             scrollDirection: Axis.horizontal,
             controller: controller
@@ -50,8 +47,8 @@ class MoviesSection extends StatelessWidget {
               return FadeIn(
                 child: MovieCard(
                   movie: movie,
-                  verticalPadding: 2,
-                  horizontalPadding: 2,
+                  verticalPadding: 0,
+                  horizontalPadding: 6,
                   isHomePage: isHomePage,
                 ),
               );
