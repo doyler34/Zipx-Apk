@@ -131,9 +131,9 @@ class _TvHomeBody extends ConsumerWidget {
       error: (_, __) => const Center(child: Text('Error while fetching data', style: TextStyle(color: Colors.white))),
       data: (data) {
         final size = MediaQuery.of(context).size;
-        final heroHeight = (size.height * 0.6).clamp(300.0, 620.0);
-        final posterWidth = (size.width / 8).clamp(120.0, 175.0);
-        final rowHeight = posterWidth * 3 / 2 + 44;
+        final heroHeight = (size.height * 0.5).clamp(260.0, 500.0);
+        final posterWidth = (size.width / 12).clamp(96.0, 132.0);
+        final rowHeight = posterWidth * 3 / 2 + 40;
         final landscapeWidth = posterWidth * 1.7;
 
         final featured = ref.watch(featuredItemProvider) ?? data.initialFeatured;
@@ -213,7 +213,7 @@ class _TvGridPage extends ConsumerWidget {
       data: (data) {
         final items = kind == _GridKind.movies ? [...data.popularMovies, ...data.trending, ...data.recentlyAdded] : data.popularShows;
         final width = MediaQuery.of(context).size.width;
-        final crossAxisCount = ((width - 72) / 190).floor().clamp(3, 8);
+        final crossAxisCount = ((width - 72) / 150).floor().clamp(4, 9);
         return Padding(
           padding: const EdgeInsets.fromLTRB(48, 32, 48, 24),
           child: GridView.builder(

@@ -92,7 +92,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
               DeviceOrientation.landscapeRight,
             ],
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) => _openSelector());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _autoStartOrSelect());
+  }
+
+  /// If only one provider is enabled there's nothing to choose - start it
+  /// straight away instead of making the user confirm a one-item picker
+  /// (which on a TV was an extra remote click before playback). The switch-
+  /// provider button in the app bar is still available.
+  void _autoStartOrSelect() {
+    final providers = widget.playbackProviderService.enabledProviders;
+    if (providers.length == 1) {
+      _startPlayback(providers.first);
+    } else {
+      _openSelector();
+    }
   }
 
   @override
