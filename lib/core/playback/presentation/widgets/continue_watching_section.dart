@@ -36,7 +36,7 @@ class ContinueWatchingSection extends StatelessWidget {
           ),
         ),
         SizedBox(
-          height: 176,
+          height: 190,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -49,14 +49,19 @@ class ContinueWatchingSection extends StatelessWidget {
               return TvFocusable(
                 onPressed: () => context.push('/player', extra: entry.toPlaybackRequest()),
                 child: Container(
-                  width: 208,
-                  margin: const EdgeInsets.only(right: 12),
+                  width: 210,
+                  margin: const EdgeInsets.only(right: 14),
+                  decoration: BoxDecoration(
+                    color: ZipxUi.surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.white12),
+                  ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Expanded(
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
@@ -66,34 +71,49 @@ class ContinueWatchingSection extends StatelessWidget {
                                   fit: BoxFit.cover,
                                 )
                               else
-                                Container(color: ZipxUi.surface),
+                                Container(color: ZipxUi.surfaceHigh),
                               const DecoratedBox(
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     begin: Alignment.topCenter,
                                     end: Alignment.bottomCenter,
-                                    colors: [Colors.transparent, Color(0x99000000)],
+                                    colors: [Colors.transparent, Color(0x66000000)],
                                   ),
                                 ),
                               ),
-                              const Center(
-                                child: Icon(Icons.play_circle_fill, color: Colors.white, size: 40),
+                              Center(
+                                child: Container(
+                                  width: 46,
+                                  height: 46,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.35),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 30),
+                                ),
                               ),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        entry.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        isTv ? 'S${entry.seasonNumber} E${entry.episodeNumber}' : 'Movie',
-                        style: const TextStyle(color: ZipxUi.textMuted, fontSize: 12),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              entry.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              isTv ? 'S${entry.seasonNumber} E${entry.episodeNumber}' : 'Movie',
+                              style: const TextStyle(color: ZipxUi.textMuted, fontSize: 12),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
