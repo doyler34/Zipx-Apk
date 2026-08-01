@@ -4,6 +4,7 @@ import 'package:adaptive_theme/adaptive_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:movie_bloc_app/core/dependency_injection/di.dart';
 import 'package:movie_bloc_app/core/router/router_config.dart';
@@ -62,7 +63,9 @@ Future<void> main() async {
   // );
 
   FlutterNativeSplash.remove();
-  runApp(const MyApp());
+  // ProviderScope powers the TV feature's Riverpod providers. The rest of
+  // the app keeps using Bloc + GetIt unchanged.
+  runApp(const ProviderScope(child: MyApp()));
 }
 
 class MyApp extends StatelessWidget {
