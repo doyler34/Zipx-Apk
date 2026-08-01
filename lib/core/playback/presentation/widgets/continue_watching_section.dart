@@ -2,18 +2,19 @@ import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../common/styles/styles.dart';
+import '../../../../common/styles/zipx_ui.dart';
 import '../../../../common/widgets/tv/tv_focusable.dart';
-import '../../../../common/widgets/texts/header.dart';
 import '../../../../core/utils/strings/url_strings.dart';
 import '../../domain/entities/playback_media_type.dart';
 import '../../services/playback_history_service.dart';
 
-/// "Continue Watching" row for the home screen, backed entirely by
-/// [PlaybackHistoryService]. Reads whatever was last watched (regardless of
-/// which provider played it) and resumes straight into the player with the
-/// same request - closing the player never marked anything "completed", so
-/// this always reflects genuinely-in-progress titles.
+/// "Continue Watching" row, backed by [PlaybackHistoryService]. Restyled to
+/// the ZIPX mockup: wide landscape cards with a play overlay, title and (for
+/// TV) the last SxEx. Tapping resumes straight into the player.
+///
+/// Note: real resume progress isn't tracked yet (history only records that a
+/// title was started), so the mockup's progress bar / "Xm left" is
+/// intentionally omitted rather than faked.
 class ContinueWatchingSection extends StatelessWidget {
   const ContinueWatchingSection({super.key, required this.historyService});
 
@@ -27,63 +28,72 @@ class ContinueWatchingSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Header(title: 'Continue Watching'),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 24, 20, 12),
+          child: Text(
+            'Continue Watching',
+            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+        ),
         SizedBox(
-          height: 160,
+          height: 176,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: history.length,
             itemBuilder: (context, index) {
               final entry = history[index];
+              final isTv = entry.mediaType == PlaybackMediaType.tv && entry.seasonNumber != null;
+              final poster = (entry.posterPath ?? '').trim();
+
               return TvFocusable(
                 onPressed: () => context.push('/player', extra: entry.toPlaybackRequest()),
                 child: Container(
-                  width: 110,
+                  width: 208,
                   margin: const EdgeInsets.only(right: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: Container(
-                          width: double.infinity,
-                          decoration: Styles(context: context).cardBoxDecoration.copyWith(
-                                image: (entry.posterPath ?? '').trim().isNotEmpty
-                                    ? DecorationImage(
-                                        image: ExtendedNetworkImageProvider(UrlStrings.imageUrl + entry.posterPath!, cache: true, printError: false),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null,
-                              ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
                           child: Stack(
+                            fit: StackFit.expand,
                             children: [
-                              const Align(
-                                alignment: Alignment.center,
-                                child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 32),
-                              ),
-                              if (entry.mediaType == PlaybackMediaType.tv && entry.seasonNumber != null)
-                                Positioned(
-                                  left: 4,
-                                  bottom: 4,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(4)),
-                                    child: Text(
-                                      'S${entry.seasonNumber}E${entry.episodeNumber}',
-                                      style: const TextStyle(color: Colors.white, fontSize: 10),
-                                    ),
+                              if (poster.isNotEmpty)
+                                Image(
+                                  image: ExtendedNetworkImageProvider(UrlStrings.imageUrl + poster, cache: true, printError: false),
+                                  fit: BoxFit.cover,
+                                )
+                              else
+                                Container(color: ZipxUi.surface),
+                              const DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Colors.transparent, Color(0x99000000)],
                                   ),
                                 ),
+                              ),
+                              const Center(
+                                child: Icon(Icons.play_circle_fill, color: Colors.white, size: 40),
+                              ),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 8),
                       Text(
                         entry.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white),
+                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isTv ? 'S${entry.seasonNumber} E${entry.episodeNumber}' : 'Movie',
+                        style: const TextStyle(color: ZipxUi.textMuted, fontSize: 12),
                       ),
                     ],
                   ),

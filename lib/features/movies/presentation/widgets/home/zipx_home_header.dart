@@ -1,0 +1,88 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../../../../common/blocs/bloc/nav_bar_bloc.dart';
+import '../../../../../common/styles/zipx_ui.dart';
+
+/// Top bar for the home shell: the ZIPX wordmark on the left, search + profile
+/// on the right. Rendered as a floating [SliverAppBar] so it scrolls away with
+/// content. Search jumps to the Search tab, profile to the Profile/Settings
+/// tab, both via [NavBarBloc].
+class ZipxHomeHeader extends StatelessWidget {
+  const ZipxHomeHeader({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverAppBar(
+      floating: true,
+      snap: true,
+      pinned: false,
+      backgroundColor: ZipxUi.bg,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      titleSpacing: 20,
+      toolbarHeight: 72,
+      title: const _ZipxWordmark(),
+      actions: [
+        IconButton(
+          splashRadius: 22,
+          icon: const Icon(Icons.search, color: Colors.white, size: 26),
+          onPressed: () => context.read<NavBarBloc>().add(const NavBarTapEvent(1)),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(right: 16, left: 4),
+          child: GestureDetector(
+            onTap: () => context.read<NavBarBloc>().add(const NavBarTapEvent(4)),
+            child: const CircleAvatar(
+              radius: 18,
+              backgroundColor: ZipxUi.surfaceHigh,
+              child: Icon(Icons.person, color: Colors.white70, size: 22),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ZipxWordmark extends StatelessWidget {
+  const _ZipxWordmark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RichText(
+          text: const TextSpan(
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
+              color: Colors.white,
+              height: 1,
+            ),
+            children: [
+              TextSpan(text: 'ZIP'),
+              TextSpan(text: 'X', style: TextStyle(color: ZipxUi.red)),
+            ],
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.only(left: 2, top: 2),
+          child: Text(
+            'MOVIES',
+            style: TextStyle(
+              color: ZipxUi.red,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 6,
+              height: 1,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

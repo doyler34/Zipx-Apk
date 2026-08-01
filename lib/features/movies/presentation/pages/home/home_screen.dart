@@ -10,7 +10,7 @@ import 'package:movie_bloc_app/features/movies/presentation/blocs/home/home/home
 import 'package:movie_bloc_app/features/personalization/presentation/blocs/bookmarks/bookmarks_bloc.dart';
 import 'package:movie_bloc_app/features/personalization/presentation/blocs/settings/settings_bloc.dart';
 
-import '../../widgets/home/movie_carousel.dart';
+import '../../widgets/home/hero_carousel.dart';
 import '../../widgets/home/movie_genres.dart';
 import '../../../../../common/widgets/movie/movies_section.dart';
 import '../../../../../core/dependency_injection/di.dart';
@@ -94,7 +94,7 @@ class HomeScreen extends StatelessWidget {
                       child: SingleChildScrollView(
                         child: Column(
                           children: [
-                            MovieCarousel(movies: state2.showAdultContent ? state.trendingMovies.movies! : state.trendingMovies.movies!.where((movie) => !movie.adult).toList()),
+                            HeroCarousel(movies: state2.showAdultContent ? state.trendingMovies.movies! : state.trendingMovies.movies!.where((movie) => !movie.adult).toList()),
                             ContinueWatchingSection(historyService: sl<PlaybackHistoryService>()),
                             Header(
                               title: 'Upcoming Movies',
@@ -106,10 +106,8 @@ class HomeScreen extends StatelessWidget {
                               movies: state2.showAdultContent ? state.upcomingMovies.movies! : state.upcomingMovies.movies!.where((movie) => !movie.adult).toList(),
                               isHomePage: true,
                             ),
-                            SizedBox(height: size.height * 0.05),
                             const Header(title: 'Movie Genres'),
                             MovieGenres(genres: state.genres),
-                            SizedBox(height: size.height * 0.05),
                             Header(
                               title: 'Now Playing Movies',
                               onTap: () {
@@ -120,7 +118,6 @@ class HomeScreen extends StatelessWidget {
                               movies: state2.showAdultContent ? state.nowPlayingMovies.movies! : state.nowPlayingMovies.movies!.where((movie) => !movie.adult).toList(),
                               isHomePage: true,
                             ),
-                            SizedBox(height: size.height * 0.05),
                             Header(
                               title: 'Top Rated Movies',
                               onTap: () {
@@ -131,7 +128,6 @@ class HomeScreen extends StatelessWidget {
                               movies: state2.showAdultContent ? state.topRatedMovies.movies! : state.topRatedMovies.movies!.where((movie) => !movie.adult).toList(),
                               isHomePage: true,
                             ),
-                            SizedBox(height: size.height * 0.05),
                             Header(
                               title: 'Popular Movies',
                               onTap: () {
@@ -142,7 +138,7 @@ class HomeScreen extends StatelessWidget {
                               movies: state2.showAdultContent ? state.popularMovies.movies! : state.popularMovies.movies!.where((movie) => !movie.adult).toList(),
                               isHomePage: true,
                             ),
-                            SizedBox(height: size.height * 0.05),
+                            const SizedBox(height: 24),
                           ],
                         ),
                       ),

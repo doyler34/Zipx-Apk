@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:movie_bloc_app/common/blocs/bloc/nav_bar_bloc.dart';
-import 'package:movie_bloc_app/common/widgets/appbars_navbars/custom_appbar.dart';
+import 'package:movie_bloc_app/common/styles/zipx_ui.dart';
 import 'package:movie_bloc_app/core/dependency_injection/di.dart';
+import 'package:movie_bloc_app/features/movies/presentation/widgets/home/zipx_home_header.dart';
 import 'package:movie_bloc_app/features/movies/presentation/blocs/home/home/home_bloc.dart';
 import 'package:movie_bloc_app/features/movies/presentation/pages/search/search_screen.dart';
 import 'package:movie_bloc_app/features/personalization/presentation/pages/settings/settings_screen.dart';
@@ -20,22 +21,13 @@ class NavigationMenu extends StatelessWidget {
     return BlocProvider(
       create: (_) => sl<HomeBloc>(),
       child: Scaffold(
+        backgroundColor: ZipxUi.bg,
         resizeToAvoidBottomInset: false,
         bottomNavigationBar: const CustomBottomNavbar(),
         body: NestedScrollView(
           headerSliverBuilder: (context, innerBoxIsScrolled) {
-            return [
-              CustomAppBar(
-                hasBackButton: false,
-                title: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Text(
-                    'Zipx Movies',
-                    style: Theme.of(context).textTheme.displaySmall,
-                  ),
-                ),
-                actions: const [],
-              ),
+            return const [
+              ZipxHomeHeader(),
             ];
           },
           body: BlocBuilder<NavBarBloc, NavBarState>(
