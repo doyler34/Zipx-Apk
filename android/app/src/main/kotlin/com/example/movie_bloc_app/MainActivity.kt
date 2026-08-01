@@ -4,8 +4,15 @@ import android.app.UiModeManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -49,10 +56,22 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
-        // Native -> Flutter only. We never receive method calls on this
-        // channel; it exists purely so dispatchKeyEvent can invoke
-        // "onKeyEvent" up into the Dart TvRemoteService.
-        remoteChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, remoteChannelName)
+        // Two-way channel:
+        //  * native -> Flutter: dispatchKeyEvent relays "onKeyEvent" (below).
+        //  * Flutter -> native: the player asks us to "tapWebView" so a real
+        //    touch is dispatched at the WebView's centre. This is what lets a
+        //    remote SELECT click VidSrc's play button even though it lives in
+        //    a cross-origin iframe: a synthetic MotionEvent is hit-tested by
+        //    the browser against whatever pixel is there and delivered to the
+        //    inner frame, which injected JavaScript can never reach.
+        remoteChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, remoteChannelName).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "tapWebView" -> result.success(tapWebViewCentre())
+                    else -> result.notImplemented()
+                }
+            }
+        }
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
@@ -88,6 +107,60 @@ class MainActivity : FlutterActivity() {
         }
         // Never consume: normal focus/back/WebView handling continues.
         return super.dispatchKeyEvent(event)
+    }
+
+    /// Dispatches a real down/up touch at the centre of the embedded WebView.
+    /// Returns true if a WebView was found and tapped.
+    ///
+    /// Why a native MotionEvent (and not JS): the same-origin policy stops
+    /// scripts in the outer page from dispatching events into a cross-origin
+    /// iframe, but it does NOT stop a genuine touch - the WebView's renderer
+    /// hit-tests the coordinate and delivers the tap to whatever is drawn
+    /// there, inner frame included. VidSrc's play button sits dead-centre, so
+    /// a centre tap starts playback.
+    private fun tapWebViewCentre(): Boolean {
+        val webView = findWebView(window.decorView)
+        if (webView == null) {
+            Log.d(TAG_NATIVE, "tapWebView: no WebView in view tree")
+            return false
+        }
+        if (webView.width == 0 || webView.height == 0) {
+            Log.d(TAG_NATIVE, "tapWebView: WebView not laid out yet")
+            return false
+        }
+
+        val x = webView.width / 2f
+        val y = webView.height / 2f
+        val downTime = SystemClock.uptimeMillis()
+
+        fun dispatch(action: Int, eventTime: Long) {
+            val event = MotionEvent.obtain(downTime, eventTime, action, x, y, 0)
+            webView.dispatchTouchEvent(event)
+            event.recycle()
+        }
+
+        dispatch(MotionEvent.ACTION_DOWN, downTime)
+        // A short, human-plausible press: release ~90ms later so it registers
+        // as a tap/click rather than a long-press or an ignored flick.
+        Handler(Looper.getMainLooper()).postDelayed({
+            dispatch(MotionEvent.ACTION_UP, SystemClock.uptimeMillis())
+        }, 90)
+
+        Log.d(TAG_NATIVE, "tapWebView at ($x,$y) size=${webView.width}x${webView.height}")
+        return true
+    }
+
+    /// Depth-first search for the first `android.webkit.WebView` in the view
+    /// tree. webview_flutter attaches a real WebView to the Flutter view
+    /// hierarchy, so it is reachable from the Activity's decor view.
+    private fun findWebView(view: View): WebView? {
+        if (view is WebView) return view
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                findWebView(view.getChildAt(i))?.let { return it }
+            }
+        }
+        return null
     }
 
     // A device is treated as a TV if the system UI mode reports television,

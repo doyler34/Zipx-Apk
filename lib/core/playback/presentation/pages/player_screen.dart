@@ -449,9 +449,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // Handled by PopScope / _handleBack; nothing to do on the stream.
         return;
       case TvRemoteAction.select:
+      case TvRemoteAction.playPause:
+        if (!isInitialPress) return;
+        // Primary: a native centre tap - the only thing that reaches VidSrc's
+        // play button inside its cross-origin iframe (a centre tap on a video
+        // surface is also the universal play/pause toggle). The JS forward is
+        // a same-origin fallback for players we *can* script into.
+        if (_controller != null) _remote.tapWebView();
+        _forwardToWebView(action);
       case TvRemoteAction.play:
       case TvRemoteAction.pause:
-      case TvRemoteAction.playPause:
         if (!isInitialPress) return;
         _forwardToWebView(action);
       case TvRemoteAction.up:

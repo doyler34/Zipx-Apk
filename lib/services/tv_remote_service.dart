@@ -75,6 +75,25 @@ class TvRemoteService {
   /// key events, which would double-handle every press.
   bool get hasReceivedNativeEvent => _hasReceivedNativeEvent;
 
+  /// Asks native to dispatch a real touch at the centre of the embedded
+  /// WebView (see `MainActivity.tapWebViewCentre`). This is how a remote
+  /// SELECT clicks a play button living inside a cross-origin iframe, which
+  /// injected JavaScript cannot reach. Returns true if a WebView was tapped.
+  Future<bool> tapWebView() async {
+    try {
+      final ok = await _channel.invokeMethod<bool>('tapWebView');
+      if (kDebugMode) {
+        debugPrint('$_logTag tapWebView -> $ok');
+      }
+      return ok ?? false;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('$_logTag tapWebView failed: $e');
+      }
+      return false;
+    }
+  }
+
   /// Idempotent. Installs the native -> Dart method-call handler exactly once.
   void initialize() {
     if (_initialized) return;
