@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:movie_bloc_app/core/dependency_injection/di.dart';
 import 'package:movie_bloc_app/core/settings/user_settings.dart';
 
-import '../../../../../common/styles/styles.dart';
+import '../../../../../common/styles/zipx_ui.dart';
 import '../../../../../core/utils/enums/enums.dart';
 import '../../blocs/settings/settings_bloc.dart';
 
@@ -33,10 +33,14 @@ class SettingTile extends StatelessWidget {
       builder: (context, state) {
         if (state is SettingsChanged) {
           return Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             child: Container(
-              height: size.height * 0.1,
-              decoration: Styles(context: context).cardBoxDecoration,
+              height: size.height * 0.09,
+              decoration: BoxDecoration(
+                color: ZipxUi.surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white12),
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

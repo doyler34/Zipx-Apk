@@ -1,9 +1,11 @@
 import 'package:animate_do/animate_do.dart';
+import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
-import 'package:movie_bloc_app/common/styles/styles.dart';
+import 'package:movie_bloc_app/common/styles/zipx_ui.dart';
 import 'package:movie_bloc_app/common/widgets/movie/vote_avg_widget.dart';
+import 'package:movie_bloc_app/core/utils/strings/url_strings.dart';
 import 'package:movie_bloc_app/features/movies/data/models/movie_model.dart';
 
 import '../../../../../common/widgets/movie/adult_widget.dart';
@@ -23,20 +25,20 @@ class BookmarkCard extends StatelessWidget {
             onTap: () {
               context.push('/details/${movie.id}', extra: movie);
             },
-            child: Container(
-              decoration: Styles(context: context, imagePath: movie.posterPath).cardBoxDecoration,
-              child: movie.posterPath == ''
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(4),
-                        child: FaIcon(
-                          FontAwesomeIcons.film,
-                          color: Colors.white,
-                          size: 50,
-                        ),
-                      ),
-                    )
-                  : null,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: ZipxUi.surface,
+                  image: movie.posterPath.trim() != ''
+                      ? DecorationImage(
+                          image: ExtendedNetworkImageProvider(UrlStrings.imageUrl + movie.posterPath, cache: true, printError: false),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
+                ),
+                child: movie.posterPath.trim() == '' ? const Center(child: FaIcon(FontAwesomeIcons.film, color: Colors.white24, size: 40)) : null,
+              ),
             ),
           ),
           MarkWidget(movie: movie),
