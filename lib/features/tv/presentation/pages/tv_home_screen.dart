@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../common/styles/zipx_ui.dart';
 import '../../../../core/dependency_injection/di.dart';
 import '../blocs/tv_home_cubit.dart';
 import '../widgets/tv_card.dart';
@@ -43,11 +44,18 @@ class _TvHomeViewState extends State<_TvHomeView> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: TextField(
               controller: _controller,
+              style: const TextStyle(color: Colors.white),
+              cursorColor: ZipxUi.red,
               onChanged: (value) => context.read<TvHomeCubit>().search(value),
               decoration: InputDecoration(
                 hintText: 'Search TV shows...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                hintStyle: const TextStyle(color: ZipxUi.textMuted),
+                filled: true,
+                fillColor: ZipxUi.surface,
+                prefixIcon: const Icon(Icons.search, color: ZipxUi.textMuted),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: ZipxUi.red, width: 1.2)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
               ),
             ),
           ),

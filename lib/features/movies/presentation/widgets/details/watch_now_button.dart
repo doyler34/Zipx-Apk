@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../../common/styles/zipx_ui.dart';
 import '../../../../../core/playback/domain/entities/playback_media_type.dart';
 import '../../../../../core/playback/domain/entities/playback_request.dart';
 import '../../../data/models/movie_model.dart';
@@ -19,10 +20,13 @@ class WatchNowButton extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: SizedBox(
         width: double.infinity,
-        height: 48,
+        height: 52,
         child: ElevatedButton.icon(
           style: ElevatedButton.styleFrom(
-            backgroundColor: Theme.of(context).colorScheme.tertiary,
+            backgroundColor: ZipxUi.red,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
           onPressed: () {
             context.push(
