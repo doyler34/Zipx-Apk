@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:movie_bloc_app/core/utils/helpers/helper_functions.dart';
 
 import '../../core/utils/strings/url_strings.dart';
+import 'zipx_ui.dart';
 
 class Styles {
   final BuildContext context;
@@ -16,21 +17,11 @@ class Styles {
   Styles({required this.context, this.imagePath = '', this.isStarIcon = false}) {
     final isDark = HelperFunctions.isDarkMode(context);
 
+    // Clean dark surface tile used across the app - no red fill or red glow.
     cardBoxDecoration = BoxDecoration(
-      color: Theme.of(context).colorScheme.primary,
-      borderRadius: BorderRadius.circular(8),
-      boxShadow: [
-        BoxShadow(
-          color: Theme.of(context).colorScheme.secondary.withOpacity(0.5),
-          spreadRadius: 3,
-          blurRadius: 5,
-          offset: const Offset(0, 0),
-        ),
-      ],
-      border: Border.all(
-        color: Theme.of(context).colorScheme.primary,
-        width: 1,
-      ),
+      color: ZipxUi.surface,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: Colors.white10, width: 1),
       image: imagePath.trim() != ''
           ? DecorationImage(
               image: ExtendedNetworkImageProvider(UrlStrings.imageUrl + imagePath, cache: true, printError: false),

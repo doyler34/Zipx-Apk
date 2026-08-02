@@ -23,9 +23,7 @@ class MovieYearSection extends StatelessWidget {
   Widget _detailBox(BuildContext context, String text) {
     return Container(
       height: _boxHeight,
-      decoration: Styles(context: context).cardBoxDecoration.copyWith(
-            color: Theme.of(context).colorScheme.secondary.withOpacity(1),
-          ),
+      decoration: Styles(context: context).cardBoxDecoration,
       child: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

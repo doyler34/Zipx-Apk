@@ -17,9 +17,7 @@ class MovieOverviewSection extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Container(
-            decoration: Styles(context: context).cardBoxDecoration.copyWith(
-                  color: Theme.of(context).scaffoldBackgroundColor,
-                ),
+            decoration: Styles(context: context).cardBoxDecoration,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: ReadMoreText(

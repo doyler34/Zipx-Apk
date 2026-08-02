@@ -4,6 +4,7 @@ import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:movie_bloc_app/common/styles/styles.dart';
+import 'package:movie_bloc_app/common/styles/zipx_ui.dart';
 import 'package:movie_bloc_app/core/utils/strings/url_strings.dart';
 import 'package:movie_bloc_app/features/movies/data/models/actor_model.dart';
 
@@ -44,7 +45,7 @@ class MovieActorsSection extends StatelessWidget {
                                   ),
                               child: CircleAvatar(
                                   radius: size.height * 0.05,
-                                  backgroundColor: Theme.of(context).colorScheme.primary,
+                                  backgroundColor: ZipxUi.surfaceHigh,
                                   backgroundImage: actor.profilePath.trim() != ''
                                       ? ExtendedNetworkImageProvider(
                                           UrlStrings.imageUrl + actor.profilePath,
