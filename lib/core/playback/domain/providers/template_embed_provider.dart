@@ -1,0 +1,162 @@
+import 'streaming_provider.dart';
+
+/// A [StreamingProvider] whose only per-provider logic is the shape of its
+/// embed URL, supplied as builder functions. This lets a whole catalogue of
+/// TMDB-id-keyed embed providers be registered as *data* (see
+/// [buildEmbedProviders]) instead of a class per provider.
+class TemplateEmbedProvider extends BaseStreamingProvider {
+  TemplateEmbedProvider({
+    required this.id,
+    required this.displayName,
+    required this.priority,
+    required String Function(int tmdbId) movieUrl,
+    required String Function(int tmdbId, int season, int episode) episodeUrl,
+    bool loadDirect = false,
+    super.enabledByDefault,
+  })  : _movieUrl = movieUrl,
+        _episodeUrl = episodeUrl,
+        _loadDirect = loadDirect;
+
+  @override
+  final String id;
+
+  @override
+  final String displayName;
+
+  @override
+  final int priority;
+
+  final String Function(int tmdbId) _movieUrl;
+  final String Function(int tmdbId, int season, int episode) _episodeUrl;
+  final bool _loadDirect;
+
+  @override
+  bool get loadDirect => _loadDirect;
+
+  /// The provider's own host, derived once from a sample built URL. Used to
+  /// recognize its own (and same-registrable-domain) navigations.
+  late final String _host = Uri.parse(_movieUrl(1)).host.toLowerCase();
+
+  /// Registrable domain (last two labels, e.g. `vidsrc.pm`) so a provider's
+  /// CDN/mirror subdomains still count as "its own".
+  late final String _baseDomain = () {
+    final parts = _host.split('.');
+    return parts.length >= 2 ? parts.sublist(parts.length - 2).join('.') : _host;
+  }();
+
+  @override
+  Uri getMovieEmbedUrl(int tmdbId, {String? subtitleLanguage}) => Uri.parse(_movieUrl(tmdbId));
+
+  @override
+  Uri getEpisodeEmbedUrl(int tmdbId, int season, int episode, {String? subtitleLanguage}) => Uri.parse(_episodeUrl(tmdbId, season, episode));
+
+  @override
+  bool canHandleNavigation(Uri url) {
+    final host = url.host.toLowerCase();
+    return host == _host || host.endsWith('.$_baseDomain') || host == _baseDomain;
+  }
+
+  @override
+  bool isPlaybackUrl(Uri url) => canHandleNavigation(url);
+}
+
+/// The embed-provider catalogue, adapted from the MIT-licensed
+/// `tmdb-embed-providers` package (Astralchemist/tmdb-embed-providers). Each
+/// entry is just a TMDB-id-keyed iframe URL shape; adding/removing one is a
+/// single line here.
+///
+/// "Core" global providers are enabled by default (fresh installs) to give a
+/// healthy fallback chain; the Asian-content "extras" rotate domains more
+/// often, so they're registered but off by default - users can enable them in
+/// Settings > Streaming Providers.
+List<StreamingProvider> buildEmbedProviders() {
+  return [
+    // --- core (global) ------------------------------------------------------
+    TemplateEmbedProvider(
+      id: 'vidfast',
+      displayName: 'VidFast',
+      priority: 1,
+      // VidFast refuses to play inside a nested iframe - load direct.
+      loadDirect: true,
+      movieUrl: (id) => 'https://vidfast.pro/movie/$id?autoPlay=true',
+      episodeUrl: (id, s, e) => 'https://vidfast.pro/tv/$id/$s/$e?autoPlay=true',
+    ),
+    TemplateEmbedProvider(
+      id: 'vidlink',
+      displayName: 'VidLink',
+      priority: 2,
+      loadDirect: true,
+      movieUrl: (id) => 'https://vidlink.pro/movie/$id',
+      episodeUrl: (id, s, e) => 'https://vidlink.pro/tv/$id/$s/$e',
+    ),
+    TemplateEmbedProvider(
+      id: 'vidsrc-pm',
+      displayName: 'VidSrc.pm',
+      priority: 3,
+      movieUrl: (id) => 'https://vidsrc.pm/embed/movie/$id',
+      episodeUrl: (id, s, e) => 'https://vidsrc.pm/embed/tv/$id/$s/$e',
+    ),
+    TemplateEmbedProvider(
+      id: '2embed-cc',
+      displayName: '2Embed',
+      priority: 4,
+      movieUrl: (id) => 'https://www.2embed.cc/embed/$id',
+      episodeUrl: (id, s, e) => 'https://www.2embed.cc/embedtv/$id&s=$s&e=$e',
+    ),
+    TemplateEmbedProvider(
+      id: 'vidsrc-to',
+      displayName: 'VidSrc.to',
+      priority: 5,
+      movieUrl: (id) => 'https://vidsrc.to/embed/movie/$id',
+      episodeUrl: (id, s, e) => 'https://vidsrc.to/embed/tv/$id/$s/$e',
+    ),
+    TemplateEmbedProvider(
+      id: 'vidsrc-cc',
+      displayName: 'VidSrc.cc',
+      priority: 6,
+      movieUrl: (id) => 'https://vidsrc.cc/v2/embed/movie/$id',
+      episodeUrl: (id, s, e) => 'https://vidsrc.cc/v2/embed/tv/$id/$s/$e',
+    ),
+    // --- extras (Asian-content-friendly, off by default) --------------------
+    TemplateEmbedProvider(
+      id: 'nontongo',
+      displayName: 'Nontongo',
+      priority: 20,
+      enabledByDefault: false,
+      movieUrl: (id) => 'https://www.nontongo.win/embed/movie/$id',
+      episodeUrl: (id, s, e) => 'https://www.nontongo.win/embed/tv/$id/$s/$e',
+    ),
+    TemplateEmbedProvider(
+      id: 'autoembed',
+      displayName: 'AutoEmbed',
+      priority: 21,
+      enabledByDefault: false,
+      movieUrl: (id) => 'https://autoembed.co/movie/tmdb/$id',
+      episodeUrl: (id, s, e) => 'https://autoembed.co/tv/tmdb/$id-$s-$e',
+    ),
+    TemplateEmbedProvider(
+      id: 'moviesapi',
+      displayName: 'MoviesAPI',
+      priority: 22,
+      enabledByDefault: false,
+      movieUrl: (id) => 'https://moviesapi.to/movie/$id',
+      episodeUrl: (id, s, e) => 'https://moviesapi.to/tv/$id-$s-$e',
+    ),
+    TemplateEmbedProvider(
+      id: 'smashystream',
+      displayName: 'SmashyStream',
+      priority: 23,
+      enabledByDefault: false,
+      movieUrl: (id) => 'https://player.smashystream.com/playere.php?tmdb=$id',
+      episodeUrl: (id, s, e) => 'https://player.smashystream.com/playere.php?tmdb=$id&season=$s&episode=$e',
+    ),
+    TemplateEmbedProvider(
+      id: 'frembed',
+      displayName: 'Frembed',
+      priority: 24,
+      enabledByDefault: false,
+      movieUrl: (id) => 'https://frembed.icu/api/film.php?id=$id',
+      episodeUrl: (id, s, e) => 'https://frembed.icu/api/serie.php?id=$id&sa=$s&epi=$e',
+    ),
+  ];
+}

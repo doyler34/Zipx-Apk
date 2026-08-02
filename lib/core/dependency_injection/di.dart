@@ -2,10 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:movie_bloc_app/common/blocs/bloc/nav_bar_bloc.dart';
-import 'package:movie_bloc_app/core/playback/domain/providers/mock/mock_reliable_provider.dart';
-import 'package:movie_bloc_app/core/playback/domain/providers/mock/mock_unreliable_provider.dart';
 import 'package:movie_bloc_app/core/playback/domain/providers/streaming_provider.dart';
 import 'package:movie_bloc_app/core/playback/domain/providers/streaming_provider_registry.dart';
+import 'package:movie_bloc_app/core/playback/domain/providers/template_embed_provider.dart';
 import 'package:movie_bloc_app/core/playback/domain/providers/vidsrc_provider.dart';
 import 'package:movie_bloc_app/core/playback/services/favourite_service.dart';
 import 'package:movie_bloc_app/core/playback/services/playback_history_service.dart';
@@ -59,10 +58,9 @@ Future initDependencyInjection() async {
   sl.registerLazySingleton<StreamingProviderRegistry>(
     () => StreamingProviderRegistry(<StreamingProvider>[
       VidSrcProvider(),
-      // <-- Register additional real providers here, e.g.:
-      // SomeOtherProvider(),
-      MockReliableProvider(),
-      MockUnreliableProvider(),
+      // The tmdb-embed catalogue (VidFast, VidLink, 2Embed, vidsrc mirrors,
+      // and Asian-content extras). See template_embed_provider.dart.
+      ...buildEmbedProviders(),
     ]),
   );
   sl.registerLazySingleton<ProviderPreferencesService>(() => ProviderPreferencesService(sl()));

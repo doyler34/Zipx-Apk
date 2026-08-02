@@ -17,6 +17,14 @@ abstract class StreamingProvider {
   /// [ProviderPreferences.providerPriorityOrder]. Lower value = tried first.
   int get priority;
 
+  /// Whether the player should load this provider's embed URL directly as the
+  /// WebView's top document, rather than wrapping it in a local `<iframe>`
+  /// page. Most providers only serve content when they detect they're inside
+  /// an iframe (so this is `false`); a few (e.g. VidFast/VidLink) do the
+  /// opposite and refuse to play inside a nested/sandboxed iframe, so they
+  /// must be loaded direct.
+  bool get loadDirect;
+
   /// Whether this provider is currently offered to the user. Starts at each
   /// provider's own sensible default and is then kept in sync with
   /// [ProviderPreferences.enabledProviderIds] by [StreamingProviderRegistry].
@@ -61,6 +69,10 @@ abstract class BaseStreamingProvider implements StreamingProvider {
   BaseStreamingProvider({bool enabledByDefault = true}) : _enabled = enabledByDefault;
 
   bool _enabled;
+
+  /// Providers wrap in an iframe by default; direct-load providers override.
+  @override
+  bool get loadDirect => false;
 
   @override
   bool get isEnabled => _enabled;

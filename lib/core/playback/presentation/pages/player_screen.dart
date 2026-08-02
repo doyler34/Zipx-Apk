@@ -176,18 +176,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     final controller = WebViewController();
     _configureController(controller, provider, token);
-    // Providers publish these as *embed* URLs meant to sit inside an
-    // <iframe> on a hosting page - loading one directly as the WebView's
-    // top-level document makes `window.top === window.self` true, which
-    // several providers use to detect "not actually embedded" and respond
-    // with a blank page instead of an error. Wrapping it in a minimal local
-    // HTML page with the real URL in an iframe reproduces how it's actually
-    // meant to be consumed. baseUrl is set to the provider's own origin so
-    // the iframe isn't loaded from a bare `about:blank` parent.
-    controller.loadHtmlString(
-      _embedWrapperHtml(result.embedUrl),
-      baseUrl: '${result.embedUrl.scheme}://${result.embedUrl.host}',
-    );
+    if (provider.loadDirect) {
+      // A few providers (VidFast/VidLink) refuse to play inside a nested
+      // iframe, so load their embed URL as the top-level document instead.
+      controller.loadRequest(result.embedUrl);
+    } else {
+      // Most providers publish these as *embed* URLs meant to sit inside an
+      // <iframe> on a hosting page - loading one directly as the WebView's
+      // top-level document makes `window.top === window.self` true, which
+      // several providers use to detect "not actually embedded" and respond
+      // with a blank page instead of an error. Wrapping it in a minimal local
+      // HTML page with the real URL in an iframe reproduces how it's actually
+      // meant to be consumed. baseUrl is set to the provider's own origin so
+      // the iframe isn't loaded from a bare `about:blank` parent.
+      controller.loadHtmlString(
+        _embedWrapperHtml(result.embedUrl),
+        baseUrl: '${result.embedUrl.scheme}://${result.embedUrl.host}',
+      );
+    }
     _controller = controller;
 
     _loadTimeoutTimer?.cancel();
@@ -246,15 +252,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
             final uri = Uri.tryParse(navRequest.url);
             if (uri == null) return NavigationDecision.prevent;
 
-            // The top-level document is always our own static wrapper (see
-            // `_embedWrapperHtml`) - nothing should ever legitimately
-            // navigate it away, so any attempt is blocked outright. This
-            // also covers "frame-busting": some providers' JS tries to
-            // redirect `window.top` to their own domain when it detects it
-            // isn't the top frame, which would otherwise silently undo the
-            // iframe embedding and reintroduce the direct-navigation bug.
-            // It doubles as the pop-up/ad-redirect block this always was.
-            if (navRequest.isMainFrame) return NavigationDecision.prevent;
+            if (navRequest.isMainFrame) {
+              // Direct-load providers ARE the top document, so let their own
+              // main frame load / redirect within their own domain family
+              // (that's how they reach their player), but still block any
+              // top-level navigation off to an unrelated ad/redirect domain.
+              if (provider.loadDirect && provider.canHandleNavigation(uri)) {
+                return NavigationDecision.navigate;
+              }
+              // Wrapper providers: the top-level document is our own static
+              // wrapper (see `_embedWrapperHtml`) - nothing should ever
+              // legitimately navigate it away, so any attempt is blocked.
+              // This also covers "frame-busting" (JS redirecting window.top)
+              // and doubles as the pop-up/ad-redirect block this always was.
+              return NavigationDecision.prevent;
+            }
 
             // Sub-frames (the provider's own iframe, and whatever it nests
             // inside itself) are left free to navigate so playback keeps
@@ -396,8 +408,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   onRetry: _retry,
                   onTryAnotherProvider: _tryAnotherProvider,
                 ),
-              if (_status == _PlayerStatus.selectingProvider && _controller == null)
-                const ColoredBox(color: Colors.black, child: SizedBox.expand()),
+              if (_status == _PlayerStatus.selectingProvider && _controller == null) const ColoredBox(color: Colors.black, child: SizedBox.expand()),
             ],
           ),
         ),
