@@ -48,6 +48,10 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> {
   String _error = '';
   bool _historyRecorded = false;
 
+  /// Per-source failure reasons, shown on the error screen so we can see
+  /// exactly why each stream wouldn't open (403, format, timeout, …).
+  final List<String> _attemptLog = [];
+
   VideoPlayerController? _video;
   ChewieController? _chewie;
 
@@ -139,12 +143,25 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> {
 
     final source = _sources[index];
     try {
+      // Many of these URLs don't end in .m3u8/.mp4 (they're proxied via
+      // ?url= or worker links), so ExoPlayer can't infer the container -
+      // tell it explicitly. And send a browser User-Agent when the backend
+      // gave none, since some hosts 403 the default player agent.
+      final headers = <String, String>{
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+        ...source.headers,
+      };
       final controller = VideoPlayerController.networkUrl(
         Uri.parse(source.url),
-        httpHeaders: source.headers,
+        httpHeaders: headers,
+        formatHint: source.isHls ? VideoFormat.hls : VideoFormat.other,
       );
       _video = controller;
-      await controller.initialize();
+      // A dead/slow host can hang initialize() forever - cap it so we move on.
+      await controller.initialize().timeout(const Duration(seconds: 15));
+      if (controller.value.hasError) {
+        throw controller.value.errorDescription ?? 'playback error';
+      }
       if (!mounted) {
         await controller.dispose();
         return;
@@ -168,8 +185,11 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> {
       );
       _recordHistoryOnce(source);
       setState(() => _stage = _Stage.playing);
-    } catch (_) {
-      // This source didn't open - move straight to the next candidate.
+    } catch (e) {
+      // This source didn't open - record why, then move to the next candidate.
+      var reason = e.toString();
+      if (reason.length > 160) reason = '${reason.substring(0, 160)}…';
+      _attemptLog.add('${_label(source)} [${source.isHls ? 'hls' : 'mp4'}] → $reason');
       await _tryNext();
     }
   }
@@ -330,14 +350,35 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> {
     }
     if (_stage == _Stage.error) {
       return Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(20),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.movie_filter_outlined, color: Colors.white54, size: 44),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            const Icon(Icons.movie_filter_outlined, color: Colors.white54, size: 40),
+            const SizedBox(height: 12),
             Text(_error, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+            if (_attemptLog.isNotEmpty) ...[
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Why each source failed:', style: TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(height: 6),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
+                  child: SingleChildScrollView(
+                    child: Text(
+                      _attemptLog.join('\n\n'),
+                      style: const TextStyle(color: Colors.white70, fontSize: 11, fontFamily: 'monospace', height: 1.4),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             ElevatedButton.icon(
               onPressed: _forceWebPlayer,
               icon: const Icon(Icons.public),
