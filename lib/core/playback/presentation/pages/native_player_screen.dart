@@ -34,7 +34,7 @@ class NativePlayerScreen extends StatefulWidget {
 /// a clear error instead, so you can tell whether native streaming actually
 /// works (vs. always seeing the web player because of the hidden fallback).
 /// Set back to false to restore the normal seamless fallback.
-const bool kDisableWebFallback = true;
+const bool kDisableWebFallback = false;
 
 enum _Stage { loading, playing, fallback, error }
 
