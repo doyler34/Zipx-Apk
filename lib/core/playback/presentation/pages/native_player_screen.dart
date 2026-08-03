@@ -38,7 +38,7 @@ const bool kDisableWebFallback = false;
 
 enum _Stage { loading, playing, fallback, error }
 
-class _NativePlayerScreenState extends State<NativePlayerScreen> {
+class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBindingObserver {
   final StreamSourcesService _service = sl<StreamSourcesService>();
 
   List<StreamSource> _sources = const [];
@@ -61,6 +61,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Allow landscape so the native player can rotate to fullscreen.
     SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.portraitUp,
@@ -72,10 +73,20 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _disposeControllers();
     SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Stop audio playing in the background: pause whenever the app leaves the
+    // foreground. The user resumes manually when they come back.
+    if (state != AppLifecycleState.resumed) {
+      _video?.pause();
+    }
   }
 
   Future<void> _disposeControllers() async {
