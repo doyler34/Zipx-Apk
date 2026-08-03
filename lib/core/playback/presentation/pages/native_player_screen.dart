@@ -113,9 +113,11 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
 
   Future<void> _load() async {
     try {
-      // Grab the real runtime first so we can reject sample/junk files.
-      _expectedRuntimeMin = await _service.expectedRuntimeMinutes(widget.request);
+      // Fetch the runtime in PARALLEL with the sources (it's only needed later,
+      // at play time, to reject samples) - don't make it a serial step.
+      final runtimeFuture = _service.expectedRuntimeMinutes(widget.request);
       final sources = await _service.fetch(widget.request);
+      _expectedRuntimeMin = await runtimeFuture;
       if (!mounted) return;
       if (sources.isEmpty) {
         _goFallback();

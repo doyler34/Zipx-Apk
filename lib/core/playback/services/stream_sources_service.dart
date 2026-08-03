@@ -33,26 +33,28 @@ class StreamSourcesService {
   static const String _tmdbKey = 'd168cb7e62f9692894c20fdb039ae126';
 
   Future<List<StreamSource>> fetch(PlaybackRequest request) async {
-    final sources = <StreamSource>[];
-
     // 1) Comet / Real-Debrid first (best: direct, ad-free, new releases).
+    var comet = <StreamSource>[];
     try {
       final imdb = await _imdbId(request);
       if (imdb != null && imdb.isNotEmpty) {
-        sources.addAll(await _fetchComet(request, imdb));
+        comet = await _fetchComet(request, imdb);
       }
     } catch (_) {
       // ignore - fall through to the free scrapers
     }
 
-    // 2) TMDB-Embed-API (free scrapers).
-    try {
-      sources.addAll(await _fetchEmbed(request));
-    } catch (_) {
-      // ignore - caller falls back to WebView if the whole list is empty
-    }
+    // If Real-Debrid already has it, return immediately and DON'T wait on the
+    // slower free-scraper backend - this is the big speedup for the common
+    // (popular title) case.
+    if (comet.isNotEmpty) return comet;
 
-    return sources;
+    // 2) Only if Real-Debrid came up empty, fall back to the free scrapers.
+    try {
+      return await _fetchEmbed(request);
+    } catch (_) {
+      return const [];
+    }
   }
 
   // ---------------------------------------------------------------------------
