@@ -44,7 +44,10 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   final StreamSourcesService _service = sl<StreamSourcesService>();
 
   final Player _player = Player();
-  late final VideoController _videoController = VideoController(_player);
+  // Created eagerly in initState (NOT lazily): the video output must be
+  // attached to the player before the first open(), otherwise you get audio
+  // with a blank video surface.
+  late final VideoController _videoController;
 
   List<StreamSource> _sources = const [];
   int _index = 0;
@@ -63,6 +66,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   @override
   void initState() {
     super.initState();
+    _videoController = VideoController(_player);
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.portraitUp,
