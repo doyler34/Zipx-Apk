@@ -95,6 +95,7 @@ class StreamSourcesService {
       if (url.isEmpty) continue;
       final name = (raw['name'] ?? '').toString();
       final description = (raw['description'] ?? '').toString();
+      if (_looksLikeTrailer('$url $name $description')) continue;
       parsed.add(StreamSource(
         title: _cometLabel(name, description),
         url: url,
@@ -188,11 +189,25 @@ class StreamSourcesService {
   }
 
   /// Streaming-only: keep just directly-playable video URLs. Drops
-  /// DahmerMovies (giant MKV, rate-limited) and NoTorrent API (non-video) URLs.
+  /// DahmerMovies (giant MKV, rate-limited) and NoTorrent API (non-video) URLs,
+  /// and anything that looks like a trailer.
   bool _isPlayableEmbed(StreamSource s) {
     if (s.provider.toLowerCase() == 'dahmermovies') return false;
+    if (_looksLikeTrailer('${s.url} ${s.title}')) return false;
     final u = s.url.toLowerCase();
     return u.contains('.m3u8') || u.contains('.mp4');
+  }
+
+  /// Trailers usually come from YouTube (or are literally labelled "trailer").
+  /// The real safety net is the short-duration skip in the player; this just
+  /// drops the obvious ones up front.
+  static bool _looksLikeTrailer(String text) {
+    final t = text.toLowerCase();
+    return t.contains('youtube.com') ||
+        t.contains('youtu.be') ||
+        t.contains('googlevideo.com') ||
+        t.contains('/trailer') ||
+        t.contains('trailer.');
   }
 
   int _embedRank(StreamSource s) {

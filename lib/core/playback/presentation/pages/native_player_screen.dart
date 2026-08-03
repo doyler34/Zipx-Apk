@@ -166,6 +166,18 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> {
         await controller.dispose();
         return;
       }
+      // Trailer/clip guard: unreleased titles often resolve to a ~2-3 min
+      // trailer instead of the feature. If the duration is known and far too
+      // short to be a real movie/episode, skip it as a trailer.
+      final duration = controller.value.duration;
+      final minReal = widget.request.isTvEpisode ? const Duration(minutes: 5) : const Duration(minutes: 20);
+      if (duration > Duration.zero && duration < minReal) {
+        _attemptLog.add('${_label(source)} → ${duration.inMinutes}m, looks like a trailer/clip - skipped');
+        await controller.dispose();
+        _video = null;
+        await _tryNext();
+        return;
+      }
       final aspect = controller.value.aspectRatio;
       _chewie = ChewieController(
         videoPlayerController: controller,
