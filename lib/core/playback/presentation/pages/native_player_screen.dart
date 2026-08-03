@@ -29,7 +29,14 @@ class NativePlayerScreen extends StatefulWidget {
   State<NativePlayerScreen> createState() => _NativePlayerScreenState();
 }
 
-enum _Stage { loading, playing, fallback }
+/// TEMPORARY test switch. When true, the native player does NOT silently hand
+/// off to the WebView provider player if it finds no playable stream - it shows
+/// a clear error instead, so you can tell whether native streaming actually
+/// works (vs. always seeing the web player because of the hidden fallback).
+/// Set back to false to restore the normal seamless fallback.
+const bool kDisableWebFallback = true;
+
+enum _Stage { loading, playing, fallback, error }
 
 class _NativePlayerScreenState extends State<NativePlayerScreen> {
   final StreamSourcesService _service = sl<StreamSourcesService>();
@@ -38,6 +45,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> {
   int _index = 0;
   _Stage _stage = _Stage.loading;
   String _status = 'Finding streams…';
+  String _error = '';
   bool _historyRecorded = false;
 
   VideoPlayerController? _video;
@@ -95,6 +103,24 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> {
   }
 
   void _goFallback() {
+    if (!mounted) return;
+    if (kDisableWebFallback) {
+      // Testing mode: surface the native result instead of hiding it behind
+      // the web player.
+      setState(() {
+        _stage = _Stage.error;
+        _error = _sources.isEmpty
+            ? 'Native streaming found NO playable source for this title.\n\n(This is expected for unreleased / very new titles. Web fallback is OFF for testing.)'
+            : 'The backend returned ${_sources.length} native source(s), but none would open in the player.\n\n(Web fallback is OFF for testing.)';
+      });
+      return;
+    }
+    setState(() => _stage = _Stage.fallback);
+  }
+
+  /// Force the WebView provider player even when the fallback is disabled -
+  /// so the error screen still gives a way to actually watch.
+  void _forceWebPlayer() {
     if (!mounted) return;
     setState(() => _stage = _Stage.fallback);
   }
@@ -270,7 +296,21 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: Text(widget.request.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(widget.request.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+            // Unmistakable proof of which player you're looking at.
+            if (_stage == _Stage.playing)
+              Text(
+                'NATIVE · ${_label(_sources[_index])}',
+                style: const TextStyle(fontSize: 11, color: Color(0xFF4ADE80), fontWeight: FontWeight.w600),
+              )
+            else if (_stage == _Stage.loading)
+              const Text('NATIVE · searching…', style: TextStyle(fontSize: 11, color: Color(0xFF4ADE80))),
+          ],
+        ),
         actions: [
           if (_stage == _Stage.playing && _sources.length > 1)
             IconButton(
@@ -280,18 +320,41 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> {
             ),
         ],
       ),
-      body: Center(
-        child: (_stage == _Stage.playing && _chewie != null)
-            ? Chewie(controller: _chewie!)
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(color: Color(0xFFE11D2A)),
-                  const SizedBox(height: 16),
-                  Text(_status, style: const TextStyle(color: Colors.white70)),
-                ],
-              ),
-      ),
+      body: Center(child: _body()),
+    );
+  }
+
+  Widget _body() {
+    if (_stage == _Stage.playing && _chewie != null) {
+      return Chewie(controller: _chewie!);
+    }
+    if (_stage == _Stage.error) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.movie_filter_outlined, color: Colors.white54, size: 44),
+            const SizedBox(height: 16),
+            Text(_error, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _forceWebPlayer,
+              icon: const Icon(Icons.public),
+              label: const Text('Use web player'),
+            ),
+          ],
+        ),
+      );
+    }
+    // loading
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const CircularProgressIndicator(color: Color(0xFFE11D2A)),
+        const SizedBox(height: 16),
+        Text(_status, style: const TextStyle(color: Colors.white70)),
+      ],
     );
   }
 }
