@@ -48,6 +48,9 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> {
   String _error = '';
   bool _historyRecorded = false;
 
+  /// Real runtime (minutes) from TMDB, used to reject sample/trailer/junk files.
+  int? _expectedRuntimeMin;
+
   /// Per-source failure reasons, shown on the error screen so we can see
   /// exactly why each stream wouldn't open (403, format, timeout, …).
   final List<String> _attemptLog = [];
@@ -92,6 +95,8 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> {
 
   Future<void> _load() async {
     try {
+      // Grab the real runtime first so we can reject sample/junk files.
+      _expectedRuntimeMin = await _service.expectedRuntimeMinutes(widget.request);
       final sources = await _service.fetch(widget.request);
       if (!mounted) return;
       if (sources.isEmpty) {
@@ -166,13 +171,13 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> {
         await controller.dispose();
         return;
       }
-      // Trailer/clip guard: unreleased titles often resolve to a ~2-3 min
-      // trailer instead of the feature. If the duration is known and far too
-      // short to be a real movie/episode, skip it as a trailer.
+      // Reject sample / trailer / wrong-content files: compare the loaded
+      // duration against the title's real runtime from TMDB. A 24-min file for
+      // a 142-min movie is obviously a sample, so skip to the next source.
       final duration = controller.value.duration;
-      final minReal = widget.request.isTvEpisode ? const Duration(minutes: 5) : const Duration(minutes: 20);
+      final minReal = _minAcceptableDuration();
       if (duration > Duration.zero && duration < minReal) {
-        _attemptLog.add('${_label(source)} → ${duration.inMinutes}m, looks like a trailer/clip - skipped');
+        _attemptLog.add('${_label(source)} → ${duration.inMinutes}m (need ≥${minReal.inMinutes}m) - sample/trailer, skipped');
         await controller.dispose();
         _video = null;
         await _tryNext();
@@ -212,6 +217,17 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> {
     } else {
       _goFallback();
     }
+  }
+
+  /// The shortest a real playable file can be. Based on the title's true
+  /// runtime (TMDB) when known - ~60% of it, to allow for edits/trims while
+  /// still rejecting samples/trailers - else a safe fixed floor.
+  Duration _minAcceptableDuration() {
+    final runtime = _expectedRuntimeMin;
+    if (runtime != null && runtime > 0) {
+      return Duration(minutes: (runtime * 0.6).round());
+    }
+    return widget.request.isTvEpisode ? const Duration(minutes: 8) : const Duration(minutes: 45);
   }
 
   void _recordHistoryOnce(StreamSource source) {
