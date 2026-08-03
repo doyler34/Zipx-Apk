@@ -71,20 +71,13 @@ class TemplateEmbedProvider extends BaseStreamingProvider {
 /// Settings > Streaming Providers.
 List<StreamingProvider> buildEmbedProviders() {
   return [
-    // --- core (global) ------------------------------------------------------
-    TemplateEmbedProvider(
-      id: 'vidfast',
-      displayName: 'VidFast',
-      priority: 1,
-      // VidFast refuses to play inside a nested iframe - load direct.
-      loadDirect: true,
-      movieUrl: (id) => 'https://vidfast.pro/movie/$id?autoPlay=true',
-      episodeUrl: (id, s, e) => 'https://vidfast.pro/tv/$id/$s/$e?autoPlay=true',
-    ),
+    // The providers confirmed working + ad-free on-device (alongside VidSrc,
+    // registered separately as the priority-0 default). Others tested but
+    // dropped: VidFast, 2Embed, VidSrc.to, VidSrc.cc, AutoEmbed, MoviesAPI.
     TemplateEmbedProvider(
       id: 'vidlink',
       displayName: 'VidLink',
-      priority: 2,
+      priority: 1,
       loadDirect: true,
       movieUrl: (id) => 'https://vidlink.pro/movie/$id',
       episodeUrl: (id, s, e) => 'https://vidlink.pro/tv/$id/$s/$e',
@@ -92,79 +85,18 @@ List<StreamingProvider> buildEmbedProviders() {
     TemplateEmbedProvider(
       id: 'vidsrc-pm',
       displayName: 'VidSrc.pm',
-      priority: 3,
+      priority: 2,
       movieUrl: (id) => 'https://vidsrc.pm/embed/movie/$id',
       episodeUrl: (id, s, e) => 'https://vidsrc.pm/embed/tv/$id/$s/$e',
     ),
     TemplateEmbedProvider(
-      id: '2embed-cc',
-      displayName: '2Embed',
-      priority: 4,
-      movieUrl: (id) => 'https://www.2embed.cc/embed/$id',
-      episodeUrl: (id, s, e) => 'https://www.2embed.cc/embedtv/$id&s=$s&e=$e',
-    ),
-    TemplateEmbedProvider(
-      id: 'vidsrc-to',
-      displayName: 'VidSrc.to',
-      priority: 5,
-      movieUrl: (id) => 'https://vidsrc.to/embed/movie/$id',
-      episodeUrl: (id, s, e) => 'https://vidsrc.to/embed/tv/$id/$s/$e',
-    ),
-    TemplateEmbedProvider(
-      id: 'vidsrc-cc',
-      displayName: 'VidSrc.cc',
-      priority: 6,
-      loadDirect: true,
-      movieUrl: (id) => 'https://vidsrc.cc/v2/embed/movie/$id',
-      episodeUrl: (id, s, e) => 'https://vidsrc.cc/v2/embed/tv/$id/$s/$e',
-    ),
-    TemplateEmbedProvider(
       id: 'superembed',
       displayName: 'SuperEmbed',
-      priority: 7,
+      priority: 3,
       // SuperEmbed's embed lives on multiembed.mov; tmdb=1 is required since
-      // we only ever pass TMDB ids.
+      // we only ever pass TMDB ids. Its player has its own multi-server picker.
       movieUrl: (id) => 'https://multiembed.mov/?video_id=$id&tmdb=1',
       episodeUrl: (id, s, e) => 'https://multiembed.mov/?video_id=$id&tmdb=1&s=$s&e=$e',
-    ),
-    TemplateEmbedProvider(
-      id: 'autoembed',
-      displayName: 'AutoEmbed',
-      priority: 8,
-      movieUrl: (id) => 'https://player.autoembed.cc/embed/movie/$id',
-      episodeUrl: (id, s, e) => 'https://player.autoembed.cc/embed/tv/$id/$s/$e',
-    ),
-    TemplateEmbedProvider(
-      id: 'moviesapi',
-      displayName: 'MoviesAPI',
-      priority: 9,
-      movieUrl: (id) => 'https://moviesapi.club/movie/$id',
-      episodeUrl: (id, s, e) => 'https://moviesapi.club/tv/$id-$s-$e',
-    ),
-    // --- extras (Asian-content-friendly, off by default) --------------------
-    TemplateEmbedProvider(
-      id: 'nontongo',
-      displayName: 'Nontongo',
-      priority: 20,
-      enabledByDefault: false,
-      movieUrl: (id) => 'https://www.nontongo.win/embed/movie/$id',
-      episodeUrl: (id, s, e) => 'https://www.nontongo.win/embed/tv/$id/$s/$e',
-    ),
-    TemplateEmbedProvider(
-      id: 'smashystream',
-      displayName: 'SmashyStream',
-      priority: 23,
-      enabledByDefault: false,
-      movieUrl: (id) => 'https://player.smashystream.com/playere.php?tmdb=$id',
-      episodeUrl: (id, s, e) => 'https://player.smashystream.com/playere.php?tmdb=$id&season=$s&episode=$e',
-    ),
-    TemplateEmbedProvider(
-      id: 'frembed',
-      displayName: 'Frembed',
-      priority: 24,
-      enabledByDefault: false,
-      movieUrl: (id) => 'https://frembed.icu/api/film.php?id=$id',
-      episodeUrl: (id, s, e) => 'https://frembed.icu/api/serie.php?id=$id&sa=$s&epi=$e',
     ),
   ];
 }
