@@ -95,7 +95,7 @@ class StreamSourcesService {
       if (url.isEmpty) continue;
       final name = (raw['name'] ?? '').toString();
       final description = (raw['description'] ?? '').toString();
-      if (_looksLikeTrailer('$url $name $description')) continue;
+      if (_isBad('$url $name $description')) continue;
       parsed.add(StreamSource(
         title: _cometLabel(name, description),
         url: url,
@@ -193,7 +193,7 @@ class StreamSourcesService {
   /// and anything that looks like a trailer.
   bool _isPlayableEmbed(StreamSource s) {
     if (s.provider.toLowerCase() == 'dahmermovies') return false;
-    if (_looksLikeTrailer('${s.url} ${s.title}')) return false;
+    if (_isBad('${s.url} ${s.title}')) return false;
     final u = s.url.toLowerCase();
     return u.contains('.m3u8') || u.contains('.mp4');
   }
@@ -209,6 +209,17 @@ class StreamSourcesService {
         t.contains('/trailer') ||
         t.contains('trailer.');
   }
+
+  /// Cam / telesync / telecine theatrical rips - low quality, never wanted.
+  /// Word-boundary matched so real tags like "DTS" (audio) aren't caught.
+  static final RegExp _camPattern = RegExp(
+    r'\b(cam|camrip|hdcam|ts|hdts|telesync|tc|hdtc|telecine)\b',
+    caseSensitive: false,
+  );
+
+  static bool _looksLikeCam(String text) => _camPattern.hasMatch(text);
+
+  static bool _isBad(String text) => _looksLikeTrailer(text) || _looksLikeCam(text);
 
   int _embedRank(StreamSource s) {
     var r = 0;
