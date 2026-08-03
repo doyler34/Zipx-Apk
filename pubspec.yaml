@@ -67,6 +67,10 @@ dependencies:
   webview_flutter: ^4.8.0
   webview_flutter_android: ^3.16.6
 
+  #Native playback of direct streams (m3u8/mp4) from the sources backend
+  video_player: ^2.8.1
+  chewie: ^1.8.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

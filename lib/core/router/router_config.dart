@@ -12,11 +12,8 @@ import 'package:movie_bloc_app/features/tv/data/models/tv_model.dart';
 import 'package:movie_bloc_app/features/tv/presentation/pages/tv_details_screen.dart';
 import 'package:movie_bloc_app/navigation_menu.dart';
 
-import '../../core/dependency_injection/di.dart';
 import '../../core/playback/domain/entities/playback_request.dart';
-import '../../core/playback/presentation/pages/player_screen.dart';
-import '../../core/playback/services/playback_history_service.dart';
-import '../../core/playback/services/playback_provider_service.dart';
+import '../../core/playback/presentation/pages/native_player_screen.dart';
 
 class CustomGoRouterConfig {
   final GoRouter config = GoRouter(
@@ -92,11 +89,9 @@ class CustomGoRouterConfig {
       GoRoute(
         path: '/player',
         builder: (BuildContext context, GoRouterState state) {
-          return PlayerScreen(
-            request: state.extra as PlaybackRequest,
-            playbackProviderService: sl<PlaybackProviderService>(),
-            historyService: sl<PlaybackHistoryService>(),
-          );
+          // Native streaming first; it falls back to the WebView providers
+          // internally if the backend has no sources / is unreachable.
+          return NativePlayerScreen(request: state.extra as PlaybackRequest);
         },
       ),
     ],

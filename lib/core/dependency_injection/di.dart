@@ -10,6 +10,7 @@ import 'package:movie_bloc_app/core/playback/services/favourite_service.dart';
 import 'package:movie_bloc_app/core/playback/services/playback_history_service.dart';
 import 'package:movie_bloc_app/core/playback/services/playback_provider_service.dart';
 import 'package:movie_bloc_app/core/playback/services/provider_preferences_service.dart';
+import 'package:movie_bloc_app/core/playback/services/stream_sources_service.dart';
 import 'package:movie_bloc_app/core/settings/user_settings.dart';
 import 'package:movie_bloc_app/features/movies/data/datasources/remote/tmdb_datasource.dart';
 import 'package:movie_bloc_app/features/movies/data/models/movie_model.dart';
@@ -68,6 +69,7 @@ Future initDependencyInjection() async {
   sl.registerLazySingleton<ProviderPreferencesService>(() => ProviderPreferencesService(sl()));
   sl.registerLazySingleton<PlaybackProviderService>(() => PlaybackProviderService(sl(), sl(), sl()));
   sl.registerLazySingleton<PlaybackHistoryService>(() => PlaybackHistoryService());
+  sl.registerLazySingleton<StreamSourcesService>(() => StreamSourcesService(sl<Dio>()));
   sl.registerLazySingleton<FavouriteService>(() => FavouriteService());
 
   //Others
