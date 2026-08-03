@@ -88,14 +88,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoStartOrSelect());
   }
 
-  /// If only one provider is enabled there's nothing to choose - start it
-  /// straight away instead of making the user confirm a one-item picker
-  /// (which on a TV was an extra remote click before playback). The switch-
-  /// provider button in the app bar is still available.
+  /// Start playing immediately with the preferred provider instead of nagging
+  /// the user to choose - this screen is only reached as the fallback when the
+  /// native player found no streams, so it should just play, not ask. The
+  /// switch-provider button in the app bar is still there to change source.
   void _autoStartOrSelect() {
-    final providers = widget.playbackProviderService.enabledProviders;
-    if (providers.length == 1) {
-      _startPlayback(providers.first);
+    final preferred = widget.playbackProviderService.preferredProvider;
+    if (preferred != null) {
+      _startPlayback(preferred);
     } else {
       _openSelector();
     }
