@@ -23,8 +23,10 @@ services:
       DATABASE_PATH: data/comet.db
 
       # Built-in scrapers (find torrent hashes) - no Jackett/Prowlarr needed.
+      # Zilean (a DMM hash-DB search) is the slowest; dropped for speed.
+      # Torrentio + StremThru give fast, cache-aware coverage.
       SCRAPE_TORRENTIO: "True"
-      SCRAPE_ZILEAN: "True"
+      SCRAPE_ZILEAN: "False"
       SCRAPE_STREMTHRU: "True"
 
       # Proxy the debrid stream through Comet so the Real-Debrid token stays
