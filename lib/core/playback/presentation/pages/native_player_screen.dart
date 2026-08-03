@@ -1,7 +1,9 @@
-import 'package:chewie/chewie.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:video_player/video_player.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../dependency_injection/di.dart';
 import '../../domain/entities/playback_request.dart';
@@ -12,14 +14,14 @@ import '../../services/stream_sources_service.dart';
 import 'player_screen.dart';
 
 /// The primary "Watch Now" screen: fetches direct streams from the sources
-/// backend and plays them in a native, ad-free player.
+/// backend and plays them in a native, ad-free player (media_kit / mpv), with a
+/// real settings menu - embedded subtitle + audio track selection and speed.
 ///
 /// Resilience is built in:
-///  - each source is tried in turn; one that fails to open auto-advances to
-///    the next,
-///  - if the backend returns nothing (or is unreachable), it falls back to the
-///    existing WebView provider player ([PlayerScreen]) so playback still
-///    works.
+///  - each source is tried in turn; one that fails to open auto-advances,
+///  - files far too short to be the real title (samples/trailers) are skipped,
+///  - if the backend returns nothing (or is unreachable) it falls back to the
+///    WebView provider player ([PlayerScreen]) so playback still works.
 class NativePlayerScreen extends StatefulWidget {
   const NativePlayerScreen({super.key, required this.request});
 
@@ -29,20 +31,24 @@ class NativePlayerScreen extends StatefulWidget {
   State<NativePlayerScreen> createState() => _NativePlayerScreenState();
 }
 
-/// TEMPORARY test switch. When true, the native player does NOT silently hand
-/// off to the WebView provider player if it finds no playable stream - it shows
-/// a clear error instead, so you can tell whether native streaming actually
-/// works (vs. always seeing the web player because of the hidden fallback).
-/// Set back to false to restore the normal seamless fallback.
+/// When true the native player shows a clear error instead of silently handing
+/// off to the WebView player - useful for testing. Normally false.
 const bool kDisableWebFallback = false;
+
+const String _userAgent =
+    'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 
 enum _Stage { loading, playing, fallback, error }
 
 class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBindingObserver {
   final StreamSourcesService _service = sl<StreamSourcesService>();
 
+  final Player _player = Player();
+  late final VideoController _videoController = VideoController(_player);
+
   List<StreamSource> _sources = const [];
   int _index = 0;
+  int _attemptToken = 0;
   _Stage _stage = _Stage.loading;
   String _status = 'Finding streams…';
   String _error = '';
@@ -51,18 +57,13 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   /// Real runtime (minutes) from TMDB, used to reject sample/trailer/junk files.
   int? _expectedRuntimeMin;
 
-  /// Per-source failure reasons, shown on the error screen so we can see
-  /// exactly why each stream wouldn't open (403, format, timeout, …).
+  /// Per-source failure reasons, shown on the error screen.
   final List<String> _attemptLog = [];
-
-  VideoPlayerController? _video;
-  ChewieController? _chewie;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Allow landscape so the native player can rotate to fullscreen.
     SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.portraitUp,
       DeviceOrientation.landscapeLeft,
@@ -74,8 +75,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _video?.pause(); // dispatch an immediate stop before teardown
-    _disposeControllers();
+    _player.dispose(); // stops playback + releases mpv
     SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
@@ -83,38 +83,15 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Stop audio playing in the background: pause whenever the app leaves the
-    // foreground. The user resumes manually when they come back.
+    // No background playback: pause whenever the app leaves the foreground.
     if (state != AppLifecycleState.resumed) {
-      _video?.pause();
-    }
-  }
-
-  Future<void> _disposeControllers() async {
-    final chewie = _chewie;
-    final video = _video;
-    _chewie = null;
-    _video = null;
-    // Pause BEFORE disposing: disposing a still-playing controller can leave
-    // ExoPlayer running audio in the background on Android (the "still plays
-    // after leaving the player" bug).
-    try {
-      await video?.pause();
-    } catch (_) {}
-    // ChewieController.dispose() also disposes its VideoPlayerController, so
-    // only dispose the video ourselves when no Chewie was created (e.g. the
-    // source failed to initialise before we wrapped it).
-    if (chewie != null) {
-      chewie.dispose();
-    } else {
-      await video?.dispose();
+      _player.pause();
     }
   }
 
   Future<void> _load() async {
     try {
-      // Fetch the runtime in PARALLEL with the sources (it's only needed later,
-      // at play time, to reject samples) - don't make it a serial step.
+      // Runtime in parallel with the sources (only needed later, at play time).
       final runtimeFuture = _service.expectedRuntimeMinutes(widget.request);
       final sources = await _service.fetch(widget.request);
       _expectedRuntimeMin = await runtimeFuture;
@@ -126,7 +103,6 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       _sources = sources;
       await _playIndex(0);
     } catch (_) {
-      // Backend unreachable / errored - use the WebView providers instead.
       if (mounted) _goFallback();
     }
   }
@@ -134,21 +110,17 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   void _goFallback() {
     if (!mounted) return;
     if (kDisableWebFallback) {
-      // Testing mode: surface the native result instead of hiding it behind
-      // the web player.
       setState(() {
         _stage = _Stage.error;
         _error = _sources.isEmpty
-            ? 'Native streaming found NO playable source for this title.\n\n(This is expected for unreleased / very new titles. Web fallback is OFF for testing.)'
-            : 'The backend returned ${_sources.length} native source(s), but none would open in the player.\n\n(Web fallback is OFF for testing.)';
+            ? 'Native streaming found NO playable source for this title.\n\n(Expected for unreleased / very new titles. Web fallback is OFF for testing.)'
+            : 'The backend returned ${_sources.length} native source(s), but none would open.\n\n(Web fallback is OFF for testing.)';
       });
       return;
     }
     setState(() => _stage = _Stage.fallback);
   }
 
-  /// Force the WebView provider player even when the fallback is disabled -
-  /// so the error screen still gives a way to actually watch.
   void _forceWebPlayer() {
     if (!mounted) return;
     setState(() => _stage = _Stage.fallback);
@@ -159,74 +131,49 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       _goFallback();
       return;
     }
+    final token = ++_attemptToken;
     setState(() {
       _stage = _Stage.loading;
       _index = index;
       _status = 'Loading ${_label(_sources[index])}…';
     });
-    await _disposeControllers();
 
     final source = _sources[index];
     try {
-      // Many of these URLs don't end in .m3u8/.mp4 (they're proxied via
-      // ?url= or worker links), so ExoPlayer can't infer the container -
-      // tell it explicitly. And send a browser User-Agent when the backend
-      // gave none, since some hosts 403 the default player agent.
-      final headers = <String, String>{
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
-        ...source.headers,
-      };
-      final controller = VideoPlayerController.networkUrl(
-        Uri.parse(source.url),
-        httpHeaders: headers,
-        formatHint: source.isHls ? VideoFormat.hls : VideoFormat.other,
-      );
-      _video = controller;
-      // A dead/slow host can hang initialize() forever - cap it so we move on.
-      await controller.initialize().timeout(const Duration(seconds: 15));
-      if (controller.value.hasError) {
-        throw controller.value.errorDescription ?? 'playback error';
-      }
-      if (!mounted) {
-        await controller.dispose();
-        return;
-      }
-      // Reject sample / trailer / wrong-content files: compare the loaded
-      // duration against the title's real runtime from TMDB. A 24-min file for
-      // a 142-min movie is obviously a sample, so skip to the next source.
-      final duration = controller.value.duration;
-      final minReal = _minAcceptableDuration();
-      if (duration > Duration.zero && duration < minReal) {
-        _attemptLog.add('${_label(source)} → ${duration.inMinutes}m (need ≥${minReal.inMinutes}m) - sample/trailer, skipped');
-        await controller.dispose();
-        _video = null;
+      final headers = <String, String>{'User-Agent': _userAgent, ...source.headers};
+      await _player.open(Media(source.url, httpHeaders: headers), play: true);
+
+      // Consider the source good once a real duration is known; bail on an
+      // error event or a timeout (dead/slow host).
+      final ok = await Future.any(<Future<bool>>[
+        _player.stream.duration.firstWhere((d) => d > Duration.zero).then((_) => true),
+        _player.stream.error.first.then((_) => false),
+      ]).timeout(const Duration(seconds: 20), onTimeout: () => false);
+      if (token != _attemptToken || !mounted) return;
+
+      if (!ok) {
+        _attemptLog.add('${_label(source)} → failed to open (error / timeout)');
         await _tryNext();
         return;
       }
-      final aspect = controller.value.aspectRatio;
-      _chewie = ChewieController(
-        videoPlayerController: controller,
-        autoPlay: true,
-        looping: false,
-        allowFullScreen: true,
-        allowMuting: true,
-        aspectRatio: (aspect.isFinite && aspect > 0) ? aspect : 16 / 9,
-        materialProgressColors: ChewieProgressColors(
-          playedColor: const Color(0xFFE11D2A),
-          handleColor: const Color(0xFFE11D2A),
-          bufferedColor: Colors.white24,
-          backgroundColor: Colors.white10,
-        ),
-        // A source that "opens" but then errors mid-load: offer the next one.
-        errorBuilder: (context, message) => _playbackError(message),
-      );
+
+      // Reject samples/trailers: compare the loaded duration to the title's
+      // real runtime. A 24-min file for a 142-min movie is a sample.
+      final duration = _player.state.duration;
+      final minReal = _minAcceptableDuration();
+      if (duration > Duration.zero && duration < minReal) {
+        _attemptLog.add('${_label(source)} → ${duration.inMinutes}m (need ≥${minReal.inMinutes}m) - sample/trailer, skipped');
+        await _tryNext();
+        return;
+      }
+
       _recordHistoryOnce(source);
       setState(() => _stage = _Stage.playing);
     } catch (e) {
-      // This source didn't open - record why, then move to the next candidate.
+      if (token != _attemptToken) return;
       var reason = e.toString();
       if (reason.length > 160) reason = '${reason.substring(0, 160)}…';
-      _attemptLog.add('${_label(source)} [${source.isHls ? 'hls' : 'mp4'}] → $reason');
+      _attemptLog.add('${_label(source)} → $reason');
       await _tryNext();
     }
   }
@@ -239,9 +186,6 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     }
   }
 
-  /// The shortest a real playable file can be. Based on the title's true
-  /// runtime (TMDB) when known - ~60% of it, to allow for edits/trims while
-  /// still rejecting samples/trailers - else a safe fixed floor.
   Duration _minAcceptableDuration() {
     final runtime = _expectedRuntimeMin;
     if (runtime != null && runtime > 0) {
@@ -266,91 +210,96 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     return provider.isEmpty ? s.title : provider;
   }
 
-  Future<void> _openSourcePicker() async {
-    final chosen = await showModalBottomSheet<int>(
+  // --- settings menus (subtitles / audio / speed / sources) -----------------
+
+  Future<void> _pickFromSheet(String title, List<_Choice> choices) async {
+    final chosen = await showModalBottomSheet<VoidCallback>(
       context: context,
       backgroundColor: const Color(0xFF16161B),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('Sources', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
             ),
             Flexible(
               child: ListView.builder(
                 shrinkWrap: true,
-                itemCount: _sources.length,
+                itemCount: choices.length,
                 itemBuilder: (context, i) {
-                  final s = _sources[i];
-                  final selected = i == _index;
+                  final c = choices[i];
                   return ListTile(
                     dense: true,
-                    leading: Icon(
-                      s.isHls ? Icons.hd_outlined : Icons.play_circle_outline,
-                      color: selected ? const Color(0xFFE11D2A) : Colors.white54,
-                    ),
-                    title: Text(_label(s), style: const TextStyle(color: Colors.white)),
-                    subtitle: Text(s.isHls ? 'HLS' : 'MP4', style: const TextStyle(color: Colors.white38, fontSize: 11)),
-                    trailing: selected ? const Icon(Icons.check, color: Color(0xFFE11D2A)) : null,
-                    onTap: () => Navigator.of(context).pop(i),
+                    title: Text(c.label, style: const TextStyle(color: Colors.white)),
+                    trailing: c.selected ? const Icon(Icons.check, color: Color(0xFFE11D2A)) : null,
+                    onTap: () => Navigator.of(context).pop(c.onSelect),
                   );
                 },
               ),
             ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
     );
-    if (chosen != null && chosen != _index) {
-      await _playIndex(chosen);
-    }
+    chosen?.call();
   }
 
-  Widget _playbackError(String message) {
-    return Container(
-      color: Colors.black,
-      alignment: Alignment.center,
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline, color: Colors.white54, size: 40),
-          const SizedBox(height: 12),
-          Text(
-            _index + 1 < _sources.length ? 'This source failed to play.' : 'No more sources to try.',
-            style: const TextStyle(color: Colors.white70),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            children: [
-              if (_index + 1 < _sources.length)
-                ElevatedButton.icon(
-                  onPressed: _tryNext,
-                  icon: const Icon(Icons.skip_next),
-                  label: const Text('Next source'),
-                ),
-              OutlinedButton.icon(
-                onPressed: _goFallback,
-                icon: const Icon(Icons.public),
-                label: const Text('Web player'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
+  void _openSubtitles() {
+    final subs = _player.state.tracks.subtitle;
+    final cur = _player.state.track.subtitle;
+    _pickFromSheet('Subtitles', [
+      for (final t in subs) _Choice(_subLabel(t), t.id == cur.id, () => _player.setSubtitleTrack(t)),
+    ]);
+  }
+
+  void _openAudio() {
+    final audios = _player.state.tracks.audio;
+    final cur = _player.state.track.audio;
+    _pickFromSheet('Audio', [
+      for (final t in audios) _Choice(_audioLabel(t), t.id == cur.id, () => _player.setAudioTrack(t)),
+    ]);
+  }
+
+  void _openSpeed() {
+    const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+    final cur = _player.state.rate;
+    _pickFromSheet('Playback speed', [
+      for (final s in speeds) _Choice('${s}x', (s - cur).abs() < 0.01, () => _player.setRate(s)),
+    ]);
+  }
+
+  String _subLabel(SubtitleTrack t) {
+    if (t.id == 'no') return 'Off';
+    if (t.id == 'auto') return 'Auto';
+    return _trackName(t.title, t.language) ?? 'Subtitle ${t.id}';
+  }
+
+  String _audioLabel(AudioTrack t) {
+    if (t.id == 'no') return 'Off';
+    if (t.id == 'auto') return 'Auto';
+    return _trackName(t.title, t.language) ?? 'Audio ${t.id}';
+  }
+
+  String? _trackName(String? title, String? language) {
+    final parts = [title, language].where((x) => x != null && x.trim().isNotEmpty).cast<String>().toList();
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
+  Future<void> _openSourcePicker() async {
+    _pickFromSheet('Sources', [
+      for (var i = 0; i < _sources.length; i++)
+        _Choice(_label(_sources[i]), i == _index, () {
+          if (i != _index) _playIndex(i);
+        }),
+    ]);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Seamless fallback: render the existing WebView provider player.
     if (_stage == _Stage.fallback) {
       return PlayerScreen(
         request: widget.request,
@@ -359,6 +308,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       );
     }
 
+    final playing = _stage == _Stage.playing;
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -369,32 +319,32 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(widget.request.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-            // Unmistakable proof of which player you're looking at.
-            if (_stage == _Stage.playing)
-              Text(
-                'NATIVE · ${_label(_sources[_index])}',
-                style: const TextStyle(fontSize: 11, color: Color(0xFF4ADE80), fontWeight: FontWeight.w600),
-              )
+            if (playing)
+              Text('NATIVE · ${_label(_sources[_index])}',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF4ADE80), fontWeight: FontWeight.w600))
             else if (_stage == _Stage.loading)
               const Text('NATIVE · searching…', style: TextStyle(fontSize: 11, color: Color(0xFF4ADE80))),
           ],
         ),
-        actions: [
-          if (_stage == _Stage.playing && _sources.length > 1)
-            IconButton(
-              tooltip: 'Sources',
-              icon: const Icon(Icons.playlist_play),
-              onPressed: _openSourcePicker,
-            ),
-        ],
+        actions: playing
+            ? [
+                IconButton(tooltip: 'Subtitles', icon: const Icon(Icons.subtitles), onPressed: _openSubtitles),
+                IconButton(tooltip: 'Audio', icon: const Icon(Icons.multitrack_audio), onPressed: _openAudio),
+                IconButton(tooltip: 'Speed', icon: const Icon(Icons.speed), onPressed: _openSpeed),
+                if (_sources.length > 1)
+                  IconButton(tooltip: 'Sources', icon: const Icon(Icons.playlist_play), onPressed: _openSourcePicker),
+              ]
+            : null,
       ),
       body: Center(child: _body()),
     );
   }
 
   Widget _body() {
-    if (_stage == _Stage.playing && _chewie != null) {
-      return Chewie(controller: _chewie!);
+    if (_stage == _Stage.playing) {
+      // media_kit's Video widget draws the video + its own playback controls
+      // (play/pause, seek, fullscreen).
+      return Video(controller: _videoController, controls: AdaptiveVideoControls);
     }
     if (_stage == _Stage.error) {
       return Padding(
@@ -418,10 +368,8 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
                   child: SingleChildScrollView(
-                    child: Text(
-                      _attemptLog.join('\n\n'),
-                      style: const TextStyle(color: Colors.white70, fontSize: 11, fontFamily: 'monospace', height: 1.4),
-                    ),
+                    child: Text(_attemptLog.join('\n\n'),
+                        style: const TextStyle(color: Colors.white70, fontSize: 11, fontFamily: 'monospace', height: 1.4)),
                   ),
                 ),
               ),
@@ -446,4 +394,11 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       ],
     );
   }
+}
+
+class _Choice {
+  const _Choice(this.label, this.selected, this.onSelect);
+  final String label;
+  final bool selected;
+  final VoidCallback onSelect;
 }

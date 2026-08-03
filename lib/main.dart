@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:movie_bloc_app/core/dependency_injection/di.dart';
 import 'package:movie_bloc_app/core/router/router_config.dart';
 import 'package:movie_bloc_app/core/utils/themes/custom_theme.dart';
@@ -23,6 +24,9 @@ import 'features/personalization/data/models/bookmarked_movie_hive.dart';
 Future<void> main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
+  // Initialise the media_kit (mpv) native player used for streaming.
+  MediaKit.ensureInitialized();
 
   await Hive.initFlutter();
   Hive.registerAdapter(BookmarkedMovieAdapter());
