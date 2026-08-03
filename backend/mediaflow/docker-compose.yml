@@ -1,0 +1,21 @@
+# MediaFlow-Proxy-Light - resolves video file-hosts (doodstream, streamwish,
+# mixdrop, voe, vidmoly, filelions, ...) into direct playable streams, and can
+# proxy the HLS with the Referer/headers those hosts require.
+#
+# Runs on the Hostinger VPS. The Zipx app calls it to turn a host embed URL
+# into a direct stream URL it can play natively (and download).
+#
+# Deploy:  see backend/mediaflow/README.md
+services:
+  mediaflow:
+    image: ghcr.io/mhdzumair/mediaflow-proxy-light:latest
+    container_name: mediaflow
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    environment:
+      APP__SERVER__HOST: 0.0.0.0
+      APP__SERVER__PORT: 8888
+      # Read from the .env file next to this compose file. NEVER commit the
+      # real password - .env is git-ignored.
+      APP__AUTH__API_PASSWORD: ${MEDIAFLOW_PASSWORD}
