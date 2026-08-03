@@ -4,7 +4,6 @@ import 'package:get_it/get_it.dart';
 import 'package:movie_bloc_app/common/blocs/bloc/nav_bar_bloc.dart';
 import 'package:movie_bloc_app/core/playback/domain/providers/streaming_provider.dart';
 import 'package:movie_bloc_app/core/playback/domain/providers/streaming_provider_registry.dart';
-import 'package:movie_bloc_app/core/playback/domain/providers/template_embed_provider.dart';
 import 'package:movie_bloc_app/core/playback/domain/providers/vidsrc_provider.dart';
 import 'package:movie_bloc_app/core/playback/services/favourite_service.dart';
 import 'package:movie_bloc_app/core/playback/services/playback_history_service.dart';
@@ -57,10 +56,10 @@ Future initDependencyInjection() async {
   // settings screen) needs to change.
   sl.registerLazySingleton<StreamingProviderRegistry>(
     () => StreamingProviderRegistry(<StreamingProvider>[
+      // VidSrc only - the one provider confirmed working on-device. The embed
+      // catalogue (VidFast/VidLink/2Embed/mirrors) is intentionally left out;
+      // add it back here if those are ever re-validated.
       VidSrcProvider(),
-      // The tmdb-embed catalogue (VidFast, VidLink, 2Embed, vidsrc mirrors,
-      // and Asian-content extras). See template_embed_provider.dart.
-      ...buildEmbedProviders(),
     ]),
   );
   sl.registerLazySingleton<ProviderPreferencesService>(() => ProviderPreferencesService(sl()));
