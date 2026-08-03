@@ -1,0 +1,40 @@
+# Comet - debrid-powered source scraper for NEW releases.
+#
+# Finds torrents for a title, checks Real-Debrid's cache, and serves back a
+# DIRECT stream link (proxied through Comet, so the RD token stays on the VPS
+# and never touches the app). This is what gets fresh 4K/1080p releases into
+# the native player, ad-free.
+#
+# Uses SQLite + built-in scrapers (Torrentio/Zilean/StremThru) so no Postgres
+# or Jackett is needed. Deploy: see backend/comet/README.md
+services:
+  comet:
+    image: g0ldyy/comet:latest
+    container_name: comet
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      FASTAPI_HOST: 0.0.0.0
+      FASTAPI_PORT: "8000"
+
+      # Self-contained storage - no separate database container.
+      DATABASE_TYPE: sqlite
+      DATABASE_PATH: data/comet.db
+
+      # Built-in scrapers (find torrent hashes) - no Jackett/Prowlarr needed.
+      SCRAPE_TORRENTIO: "True"
+      SCRAPE_ZILEAN: "True"
+      SCRAPE_STREMTHRU: "True"
+
+      # Proxy the debrid stream through Comet so the Real-Debrid token stays
+      # server-side (never in the app / never in a URL we share).
+      PROXY_DEBRID_STREAM: "True"
+      PROXY_DEBRID_STREAM_PASSWORD: ${COMET_PROXY_PASSWORD}
+      PROXY_DEBRID_STREAM_DEBRID_DEFAULT_SERVICE: realdebrid
+      PROXY_DEBRID_STREAM_DEBRID_DEFAULT_APIKEY: ${RD_API_KEY}
+
+      # Dashboard / config page protection.
+      ADMIN_DASHBOARD_PASSWORD: ${COMET_ADMIN_PASSWORD}
+    volumes:
+      - ./data:/app/data
