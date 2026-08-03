@@ -74,6 +74,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _video?.pause(); // dispatch an immediate stop before teardown
     _disposeControllers();
     SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -94,6 +95,12 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     final video = _video;
     _chewie = null;
     _video = null;
+    // Pause BEFORE disposing: disposing a still-playing controller can leave
+    // ExoPlayer running audio in the background on Android (the "still plays
+    // after leaving the player" bug).
+    try {
+      await video?.pause();
+    } catch (_) {}
     // ChewieController.dispose() also disposes its VideoPlayerController, so
     // only dispose the video ourselves when no Chewie was created (e.g. the
     // source failed to initialise before we wrapped it).
