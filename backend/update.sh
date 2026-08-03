@@ -8,7 +8,7 @@ set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 
-for service in tmdb-embed-api mediaflow; do
+for service in tmdb-embed-api comet; do
   dir="$here/$service"
   [ -f "$dir/docker-compose.yml" ] || continue
   echo "== $(date '+%Y-%m-%d %H:%M:%S') updating $service =="

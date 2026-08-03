@@ -1,12 +1,16 @@
 # Zipx backend (VPS)
 
-Two small Docker services power native, ad-free playback. The phone app only
-talks to these over HTTP; all scraping/resolving lives here, so updating them
-never requires updating the app.
+Small Docker services power native, ad-free playback. The phone app only talks
+to these over HTTP; all scraping/resolving lives here, so updating them never
+requires updating the app.
 
-- **`tmdb-embed-api/`** (port 8787) - the main "sources" service: TMDB id ->
-  direct playable streams (m3u8/mp4). This is what the app calls.
-- **`mediaflow/`** (port 8888) - optional extra resolver for tricky hosts.
+- **`comet/`** (port 8000) - Real-Debrid source: new releases as direct,
+  high-quality streams. The app's top source.
+- **`tmdb-embed-api/`** (port 8787) - free-scraper source (VixSrc/Vidlink/
+  NoTorrent/...), used when Real-Debrid has nothing.
+
+The app queries Comet first, then TMDB-Embed-API, then falls back to the
+in-app WebView providers (VidSrc etc.).
 
 See each folder's README to deploy.
 
