@@ -96,10 +96,15 @@ class StreamSourcesService {
       final name = (raw['name'] ?? '').toString();
       final description = (raw['description'] ?? '').toString();
       if (_isBad('$url $name $description')) continue;
+      // A real WEB-DL/BluRay release always carries a resolution tag. Cams and
+      // junk that the ranker couldn't classify come through as "unknown" (the
+      // "0p" we saw on the Spider-Man cam), so require a proper resolution.
+      final res = _resolution('$name $description');
+      if (res < 720) continue;
       parsed.add(StreamSource(
         title: _cometLabel(name, description),
         url: url,
-        quality: '${_resolution('$name $description')}p',
+        quality: '${res}p',
         provider: 'Real-Debrid',
         headers: const {},
       ));
@@ -213,7 +218,7 @@ class StreamSourcesService {
   /// Cam / telesync / telecine theatrical rips - low quality, never wanted.
   /// Word-boundary matched so real tags like "DTS" (audio) aren't caught.
   static final RegExp _camPattern = RegExp(
-    r'\b(cam|camrip|hdcam|ts|hdts|telesync|tc|hdtc|telecine)\b',
+    r'\b(cam|camrip|hdcam|hqcam|ts|hdts|tsrip|telesync|tc|hdtc|telecine|scr|dvdscr|screener|predvd|workprint)\b',
     caseSensitive: false,
   );
 
