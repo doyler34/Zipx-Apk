@@ -4,6 +4,7 @@ import 'package:get_it/get_it.dart';
 import 'package:movie_bloc_app/common/blocs/bloc/nav_bar_bloc.dart';
 import 'package:movie_bloc_app/core/playback/domain/providers/streaming_provider.dart';
 import 'package:movie_bloc_app/core/playback/domain/providers/streaming_provider_registry.dart';
+import 'package:movie_bloc_app/core/playback/domain/providers/template_embed_provider.dart';
 import 'package:movie_bloc_app/core/playback/domain/providers/vidsrc_provider.dart';
 import 'package:movie_bloc_app/core/playback/services/favourite_service.dart';
 import 'package:movie_bloc_app/core/playback/services/playback_history_service.dart';
@@ -56,10 +57,12 @@ Future initDependencyInjection() async {
   // settings screen) needs to change.
   sl.registerLazySingleton<StreamingProviderRegistry>(
     () => StreamingProviderRegistry(<StreamingProvider>[
-      // VidSrc only - the one provider confirmed working on-device. The embed
-      // catalogue (VidFast/VidLink/2Embed/mirrors) is intentionally left out;
-      // add it back here if those are ever re-validated.
+      // VidSrc stays first (priority 0) so it remains the default that
+      // auto-plays. The rest are a TEST BATCH - switch to them from the
+      // player's provider button to find which also come out ad-free under
+      // our navigation blocking; we'll trim to the winners afterwards.
       VidSrcProvider(),
+      ...buildEmbedProviders(),
     ]),
   );
   sl.registerLazySingleton<ProviderPreferencesService>(() => ProviderPreferencesService(sl()));

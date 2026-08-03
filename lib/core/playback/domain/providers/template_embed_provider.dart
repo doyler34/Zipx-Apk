@@ -114,8 +114,32 @@ List<StreamingProvider> buildEmbedProviders() {
       id: 'vidsrc-cc',
       displayName: 'VidSrc.cc',
       priority: 6,
+      loadDirect: true,
       movieUrl: (id) => 'https://vidsrc.cc/v2/embed/movie/$id',
       episodeUrl: (id, s, e) => 'https://vidsrc.cc/v2/embed/tv/$id/$s/$e',
+    ),
+    TemplateEmbedProvider(
+      id: 'superembed',
+      displayName: 'SuperEmbed',
+      priority: 7,
+      // SuperEmbed's embed lives on multiembed.mov; tmdb=1 is required since
+      // we only ever pass TMDB ids.
+      movieUrl: (id) => 'https://multiembed.mov/?video_id=$id&tmdb=1',
+      episodeUrl: (id, s, e) => 'https://multiembed.mov/?video_id=$id&tmdb=1&s=$s&e=$e',
+    ),
+    TemplateEmbedProvider(
+      id: 'autoembed',
+      displayName: 'AutoEmbed',
+      priority: 8,
+      movieUrl: (id) => 'https://player.autoembed.cc/embed/movie/$id',
+      episodeUrl: (id, s, e) => 'https://player.autoembed.cc/embed/tv/$id/$s/$e',
+    ),
+    TemplateEmbedProvider(
+      id: 'moviesapi',
+      displayName: 'MoviesAPI',
+      priority: 9,
+      movieUrl: (id) => 'https://moviesapi.club/movie/$id',
+      episodeUrl: (id, s, e) => 'https://moviesapi.club/tv/$id-$s-$e',
     ),
     // --- extras (Asian-content-friendly, off by default) --------------------
     TemplateEmbedProvider(
@@ -125,22 +149,6 @@ List<StreamingProvider> buildEmbedProviders() {
       enabledByDefault: false,
       movieUrl: (id) => 'https://www.nontongo.win/embed/movie/$id',
       episodeUrl: (id, s, e) => 'https://www.nontongo.win/embed/tv/$id/$s/$e',
-    ),
-    TemplateEmbedProvider(
-      id: 'autoembed',
-      displayName: 'AutoEmbed',
-      priority: 21,
-      enabledByDefault: false,
-      movieUrl: (id) => 'https://autoembed.co/movie/tmdb/$id',
-      episodeUrl: (id, s, e) => 'https://autoembed.co/tv/tmdb/$id-$s-$e',
-    ),
-    TemplateEmbedProvider(
-      id: 'moviesapi',
-      displayName: 'MoviesAPI',
-      priority: 22,
-      enabledByDefault: false,
-      movieUrl: (id) => 'https://moviesapi.to/movie/$id',
-      episodeUrl: (id, s, e) => 'https://moviesapi.to/tv/$id-$s-$e',
     ),
     TemplateEmbedProvider(
       id: 'smashystream',

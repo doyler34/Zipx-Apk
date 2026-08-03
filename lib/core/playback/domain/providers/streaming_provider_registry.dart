@@ -95,8 +95,19 @@ class StreamingProviderRegistry {
   /// Called once at startup by [ProviderPreferencesService] and again
   /// whenever the user changes something in Settings > Streaming Providers.
   void applyPreferences(ProviderPreferences preferences) {
+    // `providerPriorityOrder` lists every provider that existed when these
+    // preferences were saved. A provider whose id ISN'T in it is new - added
+    // to the registry since - so we must NOT force it off just because it's
+    // absent from the saved enabled list; we leave it at its own default
+    // enabled state. Without this, providers added later are silently hidden
+    // by preferences saved on an earlier launch (e.g. a saved "VidSrc-only"
+    // state would hide a freshly-added test batch).
+    final known = preferences.providerPriorityOrder.toSet();
     for (final provider in _providers) {
-      provider.setEnabled(preferences.enabledProviderIds.contains(provider.id));
+      if (known.contains(provider.id)) {
+        provider.setEnabled(preferences.enabledProviderIds.contains(provider.id));
+      }
+      // else: brand-new provider - keep its built-in default (enabledByDefault).
     }
     _customPriorityOrder = preferences.providerPriorityOrder;
     _defaultProviderId = preferences.defaultProviderId;
