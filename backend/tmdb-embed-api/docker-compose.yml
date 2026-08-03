@@ -1,0 +1,18 @@
+# TMDB-Embed-API - the "sources" backend.
+#
+# Give it a TMDB id, it returns direct playable streams (mp4/m3u8) with the
+# headers each one needs, already resolved from providers like VixSrc, Vidlink,
+# Videasy, Showbox, 4KHDHub. The Zipx app calls this and plays the result in a
+# native player (and can download it).
+#
+# Runs on the Hostinger VPS alongside MediaFlow. Deploy: see README.md
+services:
+  tmdb-embed-api:
+    image: inside4ndroid/tmdb-embed-api:latest
+    container_name: tmdb-embed-api
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      # Read from the .env file next to this compose file (git-ignored).
+      TMDB_API_KEY: ${TMDB_API_KEY}
