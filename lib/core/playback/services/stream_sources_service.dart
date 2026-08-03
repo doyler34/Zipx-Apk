@@ -117,7 +117,9 @@ class StreamSourcesService {
     final decoded = response.data is String ? jsonDecode(response.data as String) : response.data;
     if (decoded is! Map || decoded['streams'] is! List) return const [];
 
-    final parsed = <StreamSource>[];
+    // (cached, resolution, sizeGB, source) so we can rank before dropping the
+    // extra fields.
+    final entries = <(bool, int, double, StreamSource)>[];
     for (final raw in decoded['streams'] as List) {
       if (raw is! Map) continue;
       final url = (raw['url'] ?? '').toString();
@@ -130,26 +132,31 @@ class StreamSourcesService {
       // "0p" we saw on the Spider-Man cam), so require a proper resolution.
       final res = _resolution('$name $description');
       if (res < 720) continue;
-      parsed.add(StreamSource(
+      // Comet marks Real-Debrid-cached (instant-play) results with a ⚡. An
+      // UNcached one makes RD download the torrent first, which just hangs -
+      // so cached results must sort first.
+      final cached = name.contains('⚡') || name.toLowerCase().contains('cached');
+      entries.add((cached, res, _sizeGb(description), StreamSource(
         title: _cometLabel(name, description),
         url: url,
         quality: '${res}p',
         provider: 'Real-Debrid',
         headers: const {},
-      ));
+      )));
     }
 
-    // Prefer 1080p for auto-play (streams smoothly, decodes on any phone);
-    // 4K remuxes are huge and often won't decode on mobile - keep them, just
-    // lower. Smaller files first within a resolution.
-    parsed.sort((a, b) {
-      final ra = _autoPref(_resolution(a.quality));
-      final rb = _autoPref(_resolution(b.quality));
+    // Rank: cached first (instant play), then prefer 1080p (streams smoothly,
+    // decodes on any phone; 4K remuxes are huge and often won't decode on
+    // mobile), then smaller files first.
+    entries.sort((a, b) {
+      if (a.$1 != b.$1) return a.$1 ? -1 : 1;
+      final ra = _autoPref(a.$2);
+      final rb = _autoPref(b.$2);
       if (ra != rb) return ra.compareTo(rb);
-      return _sizeGb(a.title).compareTo(_sizeGb(b.title));
+      return a.$3.compareTo(b.$3);
     });
     // Cap to keep the picker manageable.
-    return parsed.take(20).toList();
+    return entries.take(20).map((e) => e.$4).toList();
   }
 
   String _cometLabel(String name, String description) {
