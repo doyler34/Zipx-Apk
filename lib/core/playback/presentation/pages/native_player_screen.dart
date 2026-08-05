@@ -312,7 +312,13 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       );
     }
 
-    final playing = _stage == _Stage.playing;
+    if (_stage == _Stage.playing) {
+      // Full-bleed video; all controls (back, settings, seek) live inside the
+      // player overlay so they work in fullscreen too.
+      return Scaffold(backgroundColor: Colors.black, body: _videoWithControls());
+    }
+
+    // loading / error
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -323,33 +329,62 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(widget.request.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-            if (playing)
-              Text('NATIVE · ${_label(_sources[_index])}',
-                  style: const TextStyle(fontSize: 11, color: Color(0xFF4ADE80), fontWeight: FontWeight.w600))
-            else if (_stage == _Stage.loading)
+            if (_stage == _Stage.loading)
               const Text('NATIVE · searching…', style: TextStyle(fontSize: 11, color: Color(0xFF4ADE80))),
           ],
         ),
-        actions: playing
-            ? [
-                IconButton(tooltip: 'Subtitles', icon: const Icon(Icons.subtitles), onPressed: _openSubtitles),
-                IconButton(tooltip: 'Audio', icon: const Icon(Icons.multitrack_audio), onPressed: _openAudio),
-                IconButton(tooltip: 'Speed', icon: const Icon(Icons.speed), onPressed: _openSpeed),
-                if (_sources.length > 1)
-                  IconButton(tooltip: 'Sources', icon: const Icon(Icons.playlist_play), onPressed: _openSourcePicker),
-              ]
-            : null,
       ),
       body: Center(child: _body()),
     );
   }
 
+  Widget _videoWithControls() {
+    final theme = MaterialVideoControlsThemeData(
+      // Double-tap the left/right of the video to seek back/forward (~10s).
+      seekOnDoubleTap: true,
+      seekOnDoubleTapEnabledWhileControlsVisible: true,
+      topButtonBar: [
+        const BackButton(color: Colors.white),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(widget.request.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              Text('NATIVE · ${_label(_sources[_index])}',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF4ADE80), fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+        IconButton(tooltip: 'Subtitles', icon: const Icon(Icons.subtitles, color: Colors.white), onPressed: _openSubtitles),
+        IconButton(tooltip: 'Audio', icon: const Icon(Icons.multitrack_audio, color: Colors.white), onPressed: _openAudio),
+        IconButton(tooltip: 'Speed', icon: const Icon(Icons.speed, color: Colors.white), onPressed: _openSpeed),
+        if (_sources.length > 1)
+          IconButton(tooltip: 'Sources', icon: const Icon(Icons.playlist_play, color: Colors.white), onPressed: _openSourcePicker),
+      ],
+    );
+    return MaterialVideoControlsTheme(
+      normal: theme,
+      fullscreen: theme,
+      child: Video(
+        controller: _videoController,
+        subtitleViewConfiguration: const SubtitleViewConfiguration(
+          style: TextStyle(
+            fontSize: 22,
+            color: Colors.white,
+            fontWeight: FontWeight.w500,
+            backgroundColor: Color(0xCC000000),
+          ),
+          padding: EdgeInsets.all(24),
+        ),
+      ),
+    );
+  }
+
   Widget _body() {
-    if (_stage == _Stage.playing) {
-      // media_kit's Video widget draws the video + its own playback controls
-      // (play/pause, seek, fullscreen).
-      return Video(controller: _videoController, controls: AdaptiveVideoControls);
-    }
     if (_stage == _Stage.error) {
       return Padding(
         padding: const EdgeInsets.all(20),
