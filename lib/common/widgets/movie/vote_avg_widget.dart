@@ -24,6 +24,9 @@ class VoteAvgWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // An unrated title (vote average 0) shouldn't show a meaningless "0.0"
+    // badge - hide the chip entirely in that case.
+    if (voteAvg <= 0) return const SizedBox.shrink();
     final rating = voteAvg >= 10 ? '10' : voteAvg.toStringAsFixed(1);
     return Align(
       alignment: alignment,
