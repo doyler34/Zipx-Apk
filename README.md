@@ -128,46 +128,7 @@ If you have any questions or need help, please contact me. You can also report i
 
 ## Future Enhancements
 
-One of the key features that is not fully implemented is multi-language support. The groundwork for this feature has been laid, but it requires further contributions to complete. If you're interested in contributing to this feature, please feel free to submit a pull request.
-
-<a id="screenshots-light"></a>
-
-## Screenshots (light theme)
-
-<img src="https://github.com/user-attachments/assets/e00d20e5-70c8-4157-b5ff-2eb9e850cdfd" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/9a8c7d09-8979-4f9c-95a6-71de2caaec61" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/b6524ccd-3e95-491c-a9d9-5c8390b53825" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/a8e472db-5662-467d-bd20-5d998ee25c81" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/d0c9f63d-7874-4d6f-9cc0-cd477c939b6d" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/af4d0dbe-6e71-4152-9439-2d5b51ec78a5" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/baa4e311-c058-464a-a70c-230a0043f935" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/92169e36-7bb5-4a93-be0d-78e6198b122a" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/d5193164-b361-42c2-a9d8-fc3fc0823d17" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/58f3f9a8-6884-46f6-8e8e-fad47ef77792" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/cd2bd084-8160-4514-b1cf-d92f9d0d8bc3" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/c9929b31-f72a-45a2-aa7a-69e9609928f5" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/3f9d5dab-a36e-4231-afa6-820790dcc9b3" width="200" height="400" />
-
-<br>
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-<a id="screenshots-dark"></a>
-
-## Screenshots (dark theme)
-
-<img src="https://github.com/user-attachments/assets/e00d20e5-70c8-4157-b5ff-2eb9e850cdfd" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/9a8c7d09-8979-4f9c-95a6-71de2caaec61" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/b6524ccd-3e95-491c-a9d9-5c8390b53825" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/a8e472db-5662-467d-bd20-5d998ee25c81" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/d0c9f63d-7874-4d6f-9cc0-cd477c939b6d" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/af4d0dbe-6e71-4152-9439-2d5b51ec78a5" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/baa4e311-c058-464a-a70c-230a0043f935" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/92169e36-7bb5-4a93-be0d-78e6198b122a" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/d5193164-b361-42c2-a9d8-fc3fc0823d17" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/58f3f9a8-6884-46f6-8e8e-fad47ef77792" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/cd2bd084-8160-4514-b1cf-d92f9d0d8bc3" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/c9929b31-f72a-45a2-aa7a-69e9609928f5" width="200" height="400" />
-<img src="https://github.com/user-attachments/assets/3f9d5dab-a36e-4231-afa6-820790dcc9b3" width="200" height="400" />
+One of the key features that is not fully implemented is multi-language support. The groundwork for this feature has been laid, but it requires further contributions to complete. If you're interested in contributing to this feature, please feel free to submit a pull 
 
 <br>
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
