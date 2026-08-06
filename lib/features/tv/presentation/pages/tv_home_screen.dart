@@ -3,8 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../common/styles/zipx_ui.dart';
 import '../../../../core/dependency_injection/di.dart';
-import '../../../../core/playback/domain/entities/playback_media_type.dart';
-import '../../../../core/playback/services/favourite_service.dart';
 import '../../../movies/data/models/genre_model.dart';
 import '../../data/models/tv_model.dart';
 import '../blocs/tv_home_cubit.dart';
@@ -37,25 +35,6 @@ class _TvHomeViewState extends State<_TvHomeView> {
   void dispose() {
     _controller.dispose();
     super.dispose();
-  }
-
-  // Favourited TV shows are stored as lightweight entries (id/title/poster);
-  // rebuild them into TvModels so the shared TvCard can render them. Read at
-  // build time so the row reflects the latest saves when the tab is shown.
-  List<TvModel> _favouriteShows() {
-    return sl<FavouriteService>()
-        .getFavourites()
-        .where((e) => e.mediaType == PlaybackMediaType.tv)
-        .map((e) => TvModel(
-              id: e.tmdbId,
-              name: e.title,
-              overview: '',
-              posterPath: e.posterPath ?? '',
-              backdropPath: '',
-              voteAverage: 0,
-              firstAirDate: '',
-            ))
-        .toList();
   }
 
   @override
@@ -107,7 +86,7 @@ class _TvHomeViewState extends State<_TvHomeView> {
                           ? (state.isLoadingGenre
                               ? const Center(child: CircularProgressIndicator())
                               : _TvGrid(shows: state.genreResults, emptyLabel: 'No ${state.selectedGenreName ?? ''} shows found.'))
-                          : _TvSections(state: state, favourites: _favouriteShows()),
+                          : _TvSections(state: state),
                     ),
                   ],
                 );
@@ -174,21 +153,21 @@ class _GenreChips extends StatelessWidget {
 
 /// The stacked category rows shown when no search or genre filter is active.
 class _TvSections extends StatelessWidget {
-  const _TvSections({required this.state, required this.favourites});
+  const _TvSections({required this.state});
 
   final TvHomeState state;
-  final List<TvModel> favourites;
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       children: [
-        if (favourites.isNotEmpty) _row('My Favourites', favourites),
         _row('Trending', state.trending),
         _row('Popular', state.popular),
         _row('Top Rated', state.topRated),
         _row('On The Air', state.onTheAir),
         _row('Airing Today', state.airingToday),
+        // Extra genre rows so there's plenty more to browse.
+        for (final section in state.genreSections) _row(section.$1, section.$2),
         const SizedBox(height: 24),
       ],
     );

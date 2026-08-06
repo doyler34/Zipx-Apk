@@ -30,7 +30,7 @@ class TvDetailsScreen extends StatelessWidget {
               CustomAppBar(
                 hasBackButton: true,
                 title: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Text(show.name)),
-                actions: [_FavouriteToggle(show: show)],
+                actions: [_BookmarkToggle(show: show)],
               ),
             ];
           },
@@ -41,24 +41,25 @@ class TvDetailsScreen extends StatelessWidget {
   }
 }
 
-class _FavouriteToggle extends StatefulWidget {
-  const _FavouriteToggle({required this.show});
+class _BookmarkToggle extends StatefulWidget {
+  const _BookmarkToggle({required this.show});
 
   final TvModel show;
 
   @override
-  State<_FavouriteToggle> createState() => _FavouriteToggleState();
+  State<_BookmarkToggle> createState() => _BookmarkToggleState();
 }
 
-class _FavouriteToggleState extends State<_FavouriteToggle> {
-  late bool _isFavourite = sl<FavouriteService>().isFavourite(PlaybackMediaType.tv, widget.show.id);
+class _BookmarkToggleState extends State<_BookmarkToggle> {
+  late bool _isBookmarked = sl<FavouriteService>().isFavourite(PlaybackMediaType.tv, widget.show.id);
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(right: 12),
       child: IconButton(
-        icon: Icon(_isFavourite ? Icons.favorite : Icons.favorite_border, color: Colors.redAccent),
+        icon: Icon(_isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+            color: _isBookmarked ? const Color(0xFFE11D2A) : Colors.white),
         onPressed: () async {
           await sl<FavouriteService>().toggleFavourite(
             FavouriteEntry(
@@ -68,7 +69,7 @@ class _FavouriteToggleState extends State<_FavouriteToggle> {
               posterPath: widget.show.posterPath,
             ),
           );
-          setState(() => _isFavourite = !_isFavourite);
+          setState(() => _isBookmarked = !_isBookmarked);
         },
       ),
     );

@@ -46,7 +46,7 @@ class TvCard extends StatelessWidget {
               child: Stack(
                 children: [
                   if (show.posterPath.trim() == '') const Center(child: FaIcon(FontAwesomeIcons.tv, color: Colors.white24, size: 40)),
-                  _TvFavouriteBadge(show: show),
+                  _TvBookmarkBadge(show: show),
                   VoteAvgWidget(voteAvg: show.voteAverage, alignment: Alignment.bottomRight),
                 ],
               ),
@@ -58,21 +58,20 @@ class TvCard extends StatelessWidget {
   }
 }
 
-/// Compact save toggle in the poster's top-right corner, matching the movie
-/// card's bookmark badge. TV shows use the shared [FavouriteService] (which
-/// already backs the TV details heart) rather than the movie-only bookmarks
-/// feature, so saving from a card and from the details screen stay in sync.
-class _TvFavouriteBadge extends StatefulWidget {
-  const _TvFavouriteBadge({required this.show});
+/// Compact bookmark toggle in the poster's top-right corner, matching the
+/// movie card's bookmark badge. TV bookmarks are stored via [FavouriteService]
+/// (the shared TV store) and surfaced in the Bookmarks tab's TV Shows section.
+class _TvBookmarkBadge extends StatefulWidget {
+  const _TvBookmarkBadge({required this.show});
 
   final TvModel show;
 
   @override
-  State<_TvFavouriteBadge> createState() => _TvFavouriteBadgeState();
+  State<_TvBookmarkBadge> createState() => _TvBookmarkBadgeState();
 }
 
-class _TvFavouriteBadgeState extends State<_TvFavouriteBadge> {
-  late bool _isFavourite = sl<FavouriteService>().isFavourite(PlaybackMediaType.tv, widget.show.id);
+class _TvBookmarkBadgeState extends State<_TvBookmarkBadge> {
+  late bool _isBookmarked = sl<FavouriteService>().isFavourite(PlaybackMediaType.tv, widget.show.id);
 
   Future<void> _toggle() async {
     await sl<FavouriteService>().toggleFavourite(
@@ -84,8 +83,8 @@ class _TvFavouriteBadgeState extends State<_TvFavouriteBadge> {
       ),
     );
     if (!mounted) return;
-    setState(() => _isFavourite = !_isFavourite);
-    HelperFunctions.showSnackBar(context, _isFavourite ? 'Added to favourites' : 'Removed from favourites');
+    setState(() => _isBookmarked = !_isBookmarked);
+    HelperFunctions.showSnackBar(context, _isBookmarked ? 'Added to bookmarks' : 'Removed from bookmarks');
   }
 
   @override
@@ -105,9 +104,9 @@ class _TvFavouriteBadgeState extends State<_TvFavouriteBadge> {
               border: Border.all(color: Colors.white24, width: 0.5),
             ),
             child: Icon(
-              _isFavourite ? Icons.favorite : Icons.favorite_border,
-              color: _isFavourite ? ZipxUi.red : Colors.white,
-              size: 16,
+              _isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+              color: _isBookmarked ? ZipxUi.red : Colors.white,
+              size: 17,
             ),
           ),
         ),

@@ -5,6 +5,9 @@ import '../../../movies/data/models/genre_model.dart';
 import '../../data/datasources/remote/tmdb_tv_datasource.dart';
 import '../../data/models/tv_model.dart';
 
+/// A titled home row built from a genre (e.g. "Comedy" -> its shows).
+typedef TvSection = (String title, List<TvModel> shows);
+
 class TvHomeState extends Equatable {
   const TvHomeState({
     this.trending = const [],
@@ -12,6 +15,7 @@ class TvHomeState extends Equatable {
     this.topRated = const [],
     this.onTheAir = const [],
     this.airingToday = const [],
+    this.genreSections = const [],
     this.genres = const [],
     this.searchResults = const [],
     this.genreResults = const [],
@@ -28,6 +32,7 @@ class TvHomeState extends Equatable {
   final List<TvModel> topRated;
   final List<TvModel> onTheAir;
   final List<TvModel> airingToday;
+  final List<TvSection> genreSections;
   final List<GenreModel> genres;
   final List<TvModel> searchResults;
   final List<TvModel> genreResults;
@@ -47,6 +52,7 @@ class TvHomeState extends Equatable {
     List<TvModel>? topRated,
     List<TvModel>? onTheAir,
     List<TvModel>? airingToday,
+    List<TvSection>? genreSections,
     List<GenreModel>? genres,
     List<TvModel>? searchResults,
     List<TvModel>? genreResults,
@@ -61,6 +67,7 @@ class TvHomeState extends Equatable {
       topRated: topRated ?? this.topRated,
       onTheAir: onTheAir ?? this.onTheAir,
       airingToday: airingToday ?? this.airingToday,
+      genreSections: genreSections ?? this.genreSections,
       genres: genres ?? this.genres,
       searchResults: searchResults ?? this.searchResults,
       genreResults: genreResults ?? this.genreResults,
@@ -89,6 +96,7 @@ class TvHomeState extends Equatable {
       topRated: topRated,
       onTheAir: onTheAir,
       airingToday: airingToday,
+      genreSections: genreSections,
       genres: genres,
       searchResults: searchResults,
       genreResults: genreResults ?? this.genreResults,
@@ -108,6 +116,7 @@ class TvHomeState extends Equatable {
         topRated,
         onTheAir,
         airingToday,
+        genreSections,
         genres,
         searchResults,
         genreResults,
@@ -129,23 +138,45 @@ class TvHomeCubit extends Cubit<TvHomeState> {
 
   final TmdbTvDatasource _datasource;
 
-  /// Loads every home row (and the genre list) in parallel so the screen fills
-  /// in one pass instead of one endpoint at a time.
+  /// Extra genre rows shown on the home screen (TMDB TV genre id -> title), so
+  /// there's plenty to browse beyond the main category rows.
+  static const List<(int, String)> _homeGenres = [
+    (10759, 'Action & Adventure'),
+    (35, 'Comedy'),
+    (18, 'Drama'),
+    (80, 'Crime'),
+    (9648, 'Mystery'),
+    (10765, 'Sci-Fi & Fantasy'),
+    (16, 'Animation'),
+    (10768, 'War & Politics'),
+  ];
+
+  /// Loads every home row (categories + genre rows + the genre list) in
+  /// parallel so the screen fills in one pass.
   Future<void> loadHome() async {
     emit(state.copyWith(isLoading: true, errorMessage: null));
     try {
-      final results = await Future.wait([
+      final mainFuture = Future.wait([
         _datasource.getTrendingTv(),
         _datasource.getPopularTv(),
         _datasource.getTopRatedTv(),
         _datasource.getOnTheAirTv(),
         _datasource.getAiringTodayTv(),
       ]);
+      final genreRowsFuture = Future.wait(_homeGenres.map((g) async {
+        try {
+          final r = await _datasource.discoverTvByGenre(genreId: g.$1);
+          return (g.$2, r.shows);
+        } catch (_) {
+          return (g.$2, const <TvModel>[]);
+        }
+      }));
       // Genres are non-critical: a failure here shouldn't blank the rows.
-      List<GenreModel> genres = const [];
-      try {
-        genres = await _datasource.getTvGenres();
-      } catch (_) {}
+      final genresListFuture = _datasource.getTvGenres().catchError((_) => const <GenreModel>[]);
+
+      final results = await mainFuture;
+      final genreRows = (await genreRowsFuture).where((s) => s.$2.isNotEmpty).toList();
+      final genres = await genresListFuture;
 
       emit(state.copyWith(
         trending: results[0].shows,
@@ -153,6 +184,7 @@ class TvHomeCubit extends Cubit<TvHomeState> {
         topRated: results[2].shows,
         onTheAir: results[3].shows,
         airingToday: results[4].shows,
+        genreSections: genreRows,
         genres: genres,
         isLoading: false,
       ));
