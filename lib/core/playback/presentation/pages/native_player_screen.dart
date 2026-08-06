@@ -72,6 +72,15 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   List<ExternalSubtitle> _externalSubs = const [];
   int? _selectedExternalSub;
 
+  /// Subtitle text size (adjustable from the subtitle menu). Medium by default.
+  double _subtitleFontSize = 24;
+
+  /// How the video fills the screen: contain (letterboxed, true aspect) or
+  /// cover (zoomed to fill, crops the edges). Toggled from the control bar.
+  BoxFit _videoFit = BoxFit.contain;
+
+  static const Map<String, double> _subtitleSizes = {'S': 18, 'M': 24, 'L': 32, 'XL': 42};
+
   @override
   void initState() {
     super.initState();
@@ -82,6 +91,10 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
+    // True fullscreen: hide the status + navigation bars so the video fills the
+    // screen and the system nav bar stops clipping the control bar. "Sticky" so
+    // a swipe reveals them briefly then they auto-hide again.
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _load();
   }
 
@@ -274,28 +287,100 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   void _openSubtitles() {
     final subs = _player.state.tracks.subtitle;
     final cur = _player.state.track.subtitle;
-    final noOnline = _selectedExternalSub == null;
     // Off/Auto and the torrent-embedded tracks, split so Off can sit at the top
     // and the embedded tracks at the bottom.
     final off = subs.where((t) => t.id == 'no').toList();
     final embedded = subs.where((t) => t.id != 'no').toList();
-    _pickFromSheet('Subtitles', [
-      // Off first, for quick access.
-      for (final t in off)
-        _Choice('Off', noOnline && t.id == cur.id, () {
-          setState(() => _selectedExternalSub = null);
-          _player.setSubtitleTrack(t);
-        }),
-      // Our online English subs, prioritised above the baked-in ones.
-      for (var i = 0; i < _externalSubs.length; i++)
-        _Choice(_externalSubs[i].label, _selectedExternalSub == i, () => _applyExternalSub(i)),
-      // Subtitles baked into the torrent, at the bottom.
-      for (final t in embedded)
-        _Choice(_subLabel(t), noOnline && t.id == cur.id, () {
-          setState(() => _selectedExternalSub = null);
-          _player.setSubtitleTrack(t);
-        }),
-    ]);
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF16161B),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (sheetCtx, setSheet) {
+            final noOnline = _selectedExternalSub == null;
+
+            Widget tile(String label, bool selected, VoidCallback onTap) => ListTile(
+                  dense: true,
+                  title: Text(label, style: const TextStyle(color: Colors.white)),
+                  trailing: selected ? const Icon(Icons.check, color: Color(0xFFE11D2A)) : null,
+                  onTap: onTap,
+                );
+
+            return SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Text('Subtitles', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                  // Text-size selector - changes the on-screen subtitle size live.
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: Row(
+                      children: [
+                        const Text('Text size', style: TextStyle(color: Colors.white70)),
+                        const Spacer(),
+                        for (final opt in _subtitleSizes.entries)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() => _subtitleFontSize = opt.value);
+                                setSheet(() {});
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                                decoration: BoxDecoration(
+                                  color: (_subtitleFontSize - opt.value).abs() < 0.5 ? const Color(0xFFE11D2A) : Colors.white12,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(opt.key, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Divider(color: Colors.white12, height: 20),
+                  Flexible(
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        // Off first, for quick access.
+                        for (final t in off)
+                          tile('Off', noOnline && t.id == cur.id, () {
+                            setState(() => _selectedExternalSub = null);
+                            _player.setSubtitleTrack(t);
+                            Navigator.of(sheetCtx).pop();
+                          }),
+                        // Our online English subs, prioritised above the baked-in ones.
+                        for (var i = 0; i < _externalSubs.length; i++)
+                          tile(_externalSubs[i].label, _selectedExternalSub == i, () {
+                            Navigator.of(sheetCtx).pop();
+                            _applyExternalSub(i);
+                          }),
+                        // Subtitles baked into the torrent, at the bottom.
+                        for (final t in embedded)
+                          tile(_subLabel(t), noOnline && t.id == cur.id, () {
+                            setState(() => _selectedExternalSub = null);
+                            _player.setSubtitleTrack(t);
+                            Navigator.of(sheetCtx).pop();
+                          }),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   /// Applies an online subtitle. Direct URLs go straight into mpv; SubDL zips
@@ -424,6 +509,11 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
             ],
           ),
         ),
+        IconButton(
+          tooltip: _videoFit == BoxFit.contain ? 'Zoom to fill' : 'Fit',
+          icon: Icon(_videoFit == BoxFit.contain ? Icons.fit_screen : Icons.crop_free, color: Colors.white),
+          onPressed: () => setState(() => _videoFit = _videoFit == BoxFit.contain ? BoxFit.cover : BoxFit.contain),
+        ),
         IconButton(tooltip: 'Subtitles', icon: const Icon(Icons.subtitles, color: Colors.white), onPressed: _openSubtitles),
         IconButton(tooltip: 'Audio', icon: const Icon(Icons.multitrack_audio, color: Colors.white), onPressed: _openAudio),
         IconButton(tooltip: 'Speed', icon: const Icon(Icons.speed, color: Colors.white), onPressed: _openSpeed),
@@ -436,14 +526,16 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       fullscreen: theme,
       child: Video(
         controller: _videoController,
-        subtitleViewConfiguration: const SubtitleViewConfiguration(
+        fit: _videoFit,
+        subtitleViewConfiguration: SubtitleViewConfiguration(
           style: TextStyle(
-            fontSize: 22,
+            fontSize: _subtitleFontSize,
             color: Colors.white,
-            fontWeight: FontWeight.w500,
-            backgroundColor: Color(0xCC000000),
+            fontWeight: FontWeight.w600,
+            backgroundColor: const Color(0x99000000),
+            shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
           ),
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
         ),
       ),
     );
