@@ -73,6 +73,13 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   int? _selectedExternalSub;
   bool _subsRequested = false;
 
+  /// The title's original language (TMDB code). When a file has several audio
+  /// tracks (e.g. original + dub), we auto-select this one so the dub isn't the
+  /// default. Done once, then the user can override from the Audio menu.
+  String? _originalLang;
+  bool _audioAutoSelected = false;
+  StreamSubscription<Tracks>? _tracksSub;
+
   /// Subtitle text size (adjustable from the subtitle menu). Small (24) is the
   /// smallest offered - it's a comfortable readable size, and the steps go up
   /// from there.
@@ -102,12 +109,15 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     // screen and the system nav bar stops clipping the control bar. "Sticky" so
     // a swipe reveals them briefly then they auto-hide again.
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    // Auto-pick the original-language audio track once the file's tracks load.
+    _tracksSub = _player.stream.tracks.listen((tracks) => _maybeAutoSelectAudio(tracks.audio));
     _load();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _tracksSub?.cancel();
     _player.dispose(); // stops playback + releases mpv
     SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -124,10 +134,13 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
 
   Future<void> _load() async {
     try {
-      // Runtime in parallel with the sources (only needed later, at play time).
+      // Runtime + original language in parallel with the sources (both only
+      // needed later, at/after play time).
       final runtimeFuture = _service.expectedRuntimeMinutes(widget.request);
+      final langFuture = _service.originalLanguage(widget.request);
       final sources = await _service.fetch(widget.request);
       _expectedRuntimeMin = await runtimeFuture;
+      _originalLang = await langFuture;
       if (!mounted) return;
       if (sources.isEmpty) {
         _goFallback();
@@ -163,6 +176,58 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       await (_player.platform as dynamic).setProperty('sub-delay', clamped.toStringAsFixed(2));
     } catch (_) {
       // Property API unavailable on this platform - delay just won't apply.
+    }
+  }
+
+  /// When a file exposes multiple audio tracks (original + dub is common on
+  /// C-drama torrents), pick the original-language one so the dub - which often
+  /// bleeds the original underneath - isn't the default. Runs once, when tracks
+  /// first load; the user can still override from the Audio menu.
+  void _maybeAutoSelectAudio(List<AudioTrack> audios) {
+    if (_audioAutoSelected) return;
+    final real = audios.where((a) => a.id != 'no' && a.id != 'auto').toList();
+    if (real.length < 2) return; // nothing to choose between yet
+    // Wait for track metadata to populate before committing (early emits can
+    // have empty language/title).
+    final hasMeta = real.any((a) => (a.language ?? '').isNotEmpty || (a.title ?? '').isNotEmpty);
+    if (!hasMeta) return;
+    _audioAutoSelected = true;
+
+    final lang = _originalLang;
+    if (lang == null || lang.isEmpty) return;
+    final aliases = _langAliases(lang);
+
+    for (final a in real) {
+      final hay = '${a.language ?? ''} ${a.title ?? ''}'.toLowerCase();
+      if (aliases.any(hay.contains)) {
+        if (_player.state.track.audio.id != a.id) _player.setAudioTrack(a);
+        return;
+      }
+    }
+  }
+
+  /// Language-code/name aliases so a TMDB code ("zh") matches mpv track tags
+  /// ("chi"/"zho"/"mandarin"/...).
+  List<String> _langAliases(String code) {
+    switch (code.toLowerCase()) {
+      case 'zh':
+        return const ['zh', 'zho', 'chi', 'cmn', 'yue', 'mandarin', 'cantonese', 'chinese'];
+      case 'ja':
+        return const ['ja', 'jpn', 'japanese'];
+      case 'ko':
+        return const ['ko', 'kor', 'korean'];
+      case 'hi':
+        return const ['hi', 'hin', 'hindi'];
+      case 'th':
+        return const ['th', 'tha', 'thai'];
+      case 'es':
+        return const ['es', 'spa', 'spanish'];
+      case 'fr':
+        return const ['fr', 'fra', 'fre', 'french'];
+      case 'en':
+        return const ['en', 'eng', 'english'];
+      default:
+        return [code.toLowerCase()];
     }
   }
 

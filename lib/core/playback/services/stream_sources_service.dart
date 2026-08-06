@@ -88,6 +88,27 @@ class StreamSourcesService {
     return null;
   }
 
+  /// The title's original language (TMDB ISO code, e.g. "zh"), used to auto
+  /// -select the original audio track over a dub. Null if unknown.
+  Future<String?> originalLanguage(PlaybackRequest request) async {
+    try {
+      final type = request.isTvEpisode ? 'tv' : 'movie';
+      final r = await _dio.get(
+        'https://api.themoviedb.org/3/$type/${request.tmdbId}',
+        queryParameters: {'api_key': _tmdbKey},
+        options: Options(receiveTimeout: const Duration(seconds: 10)),
+      );
+      final data = r.data is String ? jsonDecode(r.data as String) : r.data;
+      if (data is Map) {
+        final lang = data['original_language'];
+        if (lang is String && lang.isNotEmpty) return lang;
+      }
+    } catch (_) {
+      // unknown - leave audio track on the player's default
+    }
+    return null;
+  }
+
   Future<String?> _imdbId(PlaybackRequest request) async {
     final type = request.isTvEpisode ? 'tv' : 'movie';
     final response = await _dio.get(
