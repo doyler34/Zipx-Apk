@@ -10,7 +10,10 @@ class MoviesResultModel {
     if (json['results'] != null) {
       movies = <MovieModel>[];
       json['results'].forEach((v) {
-        movies!.add(MovieModel.fromJson(v));
+        final movie = MovieModel.fromJson(v);
+        // Skip entries with no poster - a card with no image is just an empty
+        // placeholder, so it shouldn't appear in any list/search/grid.
+        if (movie.posterPath.trim().isNotEmpty) movies!.add(movie);
       });
     } else {
       movies = [];
