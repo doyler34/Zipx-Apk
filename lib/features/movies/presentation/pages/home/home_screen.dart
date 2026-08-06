@@ -26,8 +26,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Placeholder issue-report URL for the beta popup - replace with your own.
-  static const String _betaReportUrl = 'https://github.com/doyler34/Zipx-Apk/issues/new';
+  // Beta issue reports open the user's email app to this address.
+  static const String _betaReportUrl = 'mailto:garethark@outlook.com?subject=Zipx%20Movies%20Beta%20V1%20Issue';
 
   @override
   void initState() {
