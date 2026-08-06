@@ -8,10 +8,17 @@ class StreamSource {
     required this.quality,
     required this.provider,
     required this.headers,
+    this.releaseName,
   });
 
   /// Human label, e.g. "1080p" or the release name.
   final String title;
+
+  /// The raw release/torrent name (e.g. "Pursuit.of.Jade.S01E01.1080p.WEB-DL...")
+  /// when known. Used to fetch subtitles made for this exact release, which are
+  /// in sync - unlike a generic title-matched sub. Null for sources that don't
+  /// expose it.
+  final String? releaseName;
 
   /// Direct video URL (HLS `.m3u8` or progressive `.mp4`).
   final String url;

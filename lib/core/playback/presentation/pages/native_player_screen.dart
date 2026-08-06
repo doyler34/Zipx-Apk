@@ -71,6 +71,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   /// (null when an embedded track or Off is selected instead).
   List<ExternalSubtitle> _externalSubs = const [];
   int? _selectedExternalSub;
+  bool _subsRequested = false;
 
   /// Subtitle text size (adjustable from the subtitle menu). Small (24) is the
   /// smallest offered - it's a comfortable readable size, and the steps go up
@@ -122,10 +123,6 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   }
 
   Future<void> _load() async {
-    // Fetch online subtitles in the background - they're only needed once
-    // playback starts and the user opens the subtitle menu, so this never
-    // blocks getting the video going.
-    unawaited(_loadExternalSubs());
     try {
       // Runtime in parallel with the sources (only needed later, at play time).
       final runtimeFuture = _service.expectedRuntimeMinutes(widget.request);
@@ -169,8 +166,16 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     }
   }
 
-  Future<void> _loadExternalSubs() async {
-    final subs = await _subtitleService.fetch(widget.request);
+  /// Fetches online subtitles once the stream is playing, matched to the
+  /// playing release so they're in sync. Runs once (guarded).
+  void _maybeLoadSubs(StreamSource source) {
+    if (_subsRequested) return;
+    _subsRequested = true;
+    unawaited(_loadExternalSubs(source.releaseName));
+  }
+
+  Future<void> _loadExternalSubs(String? releaseName) async {
+    final subs = await _subtitleService.fetch(widget.request, releaseName: releaseName);
     if (!mounted) return;
     setState(() => _externalSubs = subs);
   }
@@ -236,6 +241,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       }
 
       _recordHistoryOnce(source);
+      _maybeLoadSubs(source);
       setState(() => _stage = _Stage.playing);
     } catch (e) {
       if (token != _attemptToken) return;

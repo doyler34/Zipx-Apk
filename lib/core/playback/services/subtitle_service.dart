@@ -61,19 +61,47 @@ class SubtitleService {
 
   /// Fetches English subtitles from both sources, SubDL first (better
   /// C-drama coverage), then OpenSubtitles.
-  Future<List<ExternalSubtitle>> fetch(PlaybackRequest request) async {
+  ///
+  /// [releaseName] is the raw torrent/release title of the stream being played.
+  /// When given, subtitles made for that exact release are ranked first (and
+  /// labelled "matched") - those are in sync with the video, instead of a
+  /// generic title-matched sub that can drift.
+  Future<List<ExternalSubtitle>> fetch(PlaybackRequest request, {String? releaseName}) async {
     final results = await Future.wait([
-      _fetchSubdl(request),
-      _fetchWyzie(request),
+      _fetchSubdl(request, releaseName),
+      _fetchWyzie(request, releaseName),
     ]);
     return [...results[0], ...results[1]];
+  }
+
+  /// Scores how well a subtitle's release string matches the streamed release:
+  /// the count of shared distinctive tokens (resolution, source, codec, group).
+  /// Higher = more likely to be in sync.
+  static int _releaseScore(String candidate, String target) {
+    if (target.isEmpty || candidate.isEmpty) return 0;
+    final targetTokens = _tokens(target);
+    final candTokens = _tokens(candidate);
+    if (targetTokens.isEmpty || candTokens.isEmpty) return 0;
+    var score = 0;
+    for (final t in targetTokens) {
+      if (candTokens.contains(t)) score++;
+    }
+    return score;
+  }
+
+  static Set<String> _tokens(String s) {
+    return s
+        .toLowerCase()
+        .split(RegExp(r'[^a-z0-9]+'))
+        .where((t) => t.length >= 2)
+        .toSet();
   }
 
   // ---------------------------------------------------------------------------
   // SubDL (zip archives, best C-drama coverage)
   // ---------------------------------------------------------------------------
 
-  Future<List<ExternalSubtitle>> _fetchSubdl(PlaybackRequest request) async {
+  Future<List<ExternalSubtitle>> _fetchSubdl(PlaybackRequest request, String? releaseName) async {
     if (_subdlApiKey.isEmpty) return const [];
     try {
       final params = <String, dynamic>{
@@ -81,7 +109,7 @@ class SubtitleService {
         'tmdb_id': request.tmdbId,
         'type': request.isTvEpisode ? 'tv' : 'movie',
         'languages': 'EN',
-        'subs_per_page': 10,
+        'subs_per_page': 15,
       };
       if (request.isTvEpisode) {
         params['season_number'] = request.seasonNumber;
@@ -101,23 +129,34 @@ class SubtitleService {
       }
       if (decoded is! Map || decoded['subtitles'] is! List) return const [];
 
-      final out = <ExternalSubtitle>[];
-      var n = 0;
+      // (matchScore, url, releaseName) so we can rank release-matched subs first.
+      final rows = <(int, String, String)>[];
       for (final raw in decoded['subtitles'] as List) {
         if (raw is! Map) continue;
         final rel = (raw['url'] ?? '').toString();
         if (rel.isEmpty) continue;
         final url = rel.startsWith('http') ? rel : '$_subdlDownloadBase$rel';
-        n++;
         final release = (raw['release_name'] ?? raw['name'] ?? '').toString();
-        final hint = release.isNotEmpty ? ' · ${_short(release)}' : '';
+        final score = releaseName == null ? 0 : _releaseScore(release, releaseName);
+        rows.add((score, url, release));
+      }
+      // Best release match first (in sync); ties keep source order.
+      rows.sort((a, b) => b.$1.compareTo(a.$1));
+
+      final out = <ExternalSubtitle>[];
+      var n = 0;
+      for (final row in rows) {
+        n++;
+        // A decent number of shared release tokens => very likely in sync.
+        final matched = row.$1 >= 3;
+        final hint = row.$3.isNotEmpty ? ' · ${_short(row.$3)}' : '';
         out.add(ExternalSubtitle(
-          url: url,
-          label: 'English · SubDL${n > 1 ? ' ($n)' : ''}$hint',
+          url: row.$2,
+          label: 'English · SubDL${matched ? ' ✓ matched' : ''}${n > 1 && !matched ? ' ($n)' : ''}$hint',
           kind: SubtitleKind.subdlZip,
           episode: request.episodeNumber,
         ));
-        if (out.length >= 10) break;
+        if (out.length >= 12) break;
       }
       return out;
     } catch (_) {
@@ -178,7 +217,7 @@ class SubtitleService {
   // Wyzie Subs (keyless OpenSubtitles proxy, direct URLs)
   // ---------------------------------------------------------------------------
 
-  Future<List<ExternalSubtitle>> _fetchWyzie(PlaybackRequest request) async {
+  Future<List<ExternalSubtitle>> _fetchWyzie(PlaybackRequest request, String? releaseName) async {
     try {
       final params = <String, dynamic>{
         'id': request.tmdbId,
@@ -188,6 +227,12 @@ class SubtitleService {
       if (request.isTvEpisode) {
         params['season'] = request.seasonNumber;
         params['episode'] = request.episodeNumber;
+      }
+      // Best-effort: ask Wyzie to prefer subs for this exact release/filename
+      // (it matches on these), so the returned sub is more likely in sync.
+      if (releaseName != null && releaseName.isNotEmpty) {
+        params['filename'] = releaseName;
+        params['release'] = releaseName;
       }
 
       final response = await _dio.get(

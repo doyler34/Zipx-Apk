@@ -142,6 +142,7 @@ class StreamSourcesService {
         quality: '${res}p',
         provider: 'Real-Debrid',
         headers: const {},
+        releaseName: _releaseName(name, description),
       )));
     }
 
@@ -157,6 +158,22 @@ class StreamSourcesService {
     });
     // Cap to keep the picker manageable.
     return entries.take(20).map((e) => e.$4).toList();
+  }
+
+  /// The raw release/torrent title, used to match a synced subtitle. Comet
+  /// (Torrentio-style) puts the actual filename on the first line of the
+  /// description; fall back to the name.
+  String? _releaseName(String name, String description) {
+    for (final line in description.split('\n')) {
+      final t = line.trim();
+      // Skip the metadata lines (seeders / size / indexer), which start with an
+      // emoji/symbol rather than the release title.
+      if (t.isEmpty) continue;
+      if (t.startsWith('👤') || t.startsWith('💾') || t.startsWith('⚙️') || t.startsWith('🌐') || t.startsWith('🔗')) continue;
+      return t;
+    }
+    final n = name.replaceAll('⚡', '').trim();
+    return n.isEmpty ? null : n;
   }
 
   String _cometLabel(String name, String description) {
