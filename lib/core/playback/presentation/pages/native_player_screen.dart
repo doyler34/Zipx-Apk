@@ -11,6 +11,7 @@ import '../../domain/entities/stream_source.dart';
 import '../../services/playback_history_service.dart';
 import '../../services/playback_provider_service.dart';
 import '../../services/stream_sources_service.dart';
+import '../../services/subtitle_service.dart';
 import 'player_screen.dart';
 
 /// The primary "Watch Now" screen: fetches direct streams from the sources
@@ -42,6 +43,7 @@ enum _Stage { loading, playing, fallback, error }
 
 class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBindingObserver {
   final StreamSourcesService _service = sl<StreamSourcesService>();
+  final SubtitleService _subtitleService = sl<SubtitleService>();
 
   final Player _player = Player();
   // Created eagerly in initState (NOT lazily): the video output must be
@@ -62,6 +64,13 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
 
   /// Per-source failure reasons, shown on the error screen.
   final List<String> _attemptLog = [];
+
+  /// External (OpenSubtitles via Wyzie) subtitle tracks for this title, fetched
+  /// in the background so text subs are available even when the streamed file
+  /// has none embedded. [_selectedExternalSub] is the index currently applied
+  /// (null when an embedded track or Off is selected instead).
+  List<ExternalSubtitle> _externalSubs = const [];
+  int? _selectedExternalSub;
 
   @override
   void initState() {
@@ -94,6 +103,10 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   }
 
   Future<void> _load() async {
+    // Fetch online subtitles in the background - they're only needed once
+    // playback starts and the user opens the subtitle menu, so this never
+    // blocks getting the video going.
+    unawaited(_loadExternalSubs());
     try {
       // Runtime in parallel with the sources (only needed later, at play time).
       final runtimeFuture = _service.expectedRuntimeMinutes(widget.request);
@@ -109,6 +122,12 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     } catch (_) {
       if (mounted) _goFallback();
     }
+  }
+
+  Future<void> _loadExternalSubs() async {
+    final subs = await _subtitleService.fetch(widget.request);
+    if (!mounted) return;
+    setState(() => _externalSubs = subs);
   }
 
   void _goFallback() {
@@ -256,7 +275,20 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     final subs = _player.state.tracks.subtitle;
     final cur = _player.state.track.subtitle;
     _pickFromSheet('Subtitles', [
-      for (final t in subs) _Choice(_subLabel(t), t.id == cur.id, () => _player.setSubtitleTrack(t)),
+      // Embedded tracks (and Off/Auto). Selected only when no online sub is
+      // active - applying an online sub replaces whatever mpv reports here.
+      for (final t in subs)
+        _Choice(_subLabel(t), _selectedExternalSub == null && t.id == cur.id, () {
+          setState(() => _selectedExternalSub = null);
+          _player.setSubtitleTrack(t);
+        }),
+      // Online (OpenSubtitles) tracks, loaded on demand into mpv.
+      for (var i = 0; i < _externalSubs.length; i++)
+        _Choice('${_externalSubs[i].label} · online', _selectedExternalSub == i, () {
+          final s = _externalSubs[i];
+          setState(() => _selectedExternalSub = i);
+          _player.setSubtitleTrack(SubtitleTrack.uri(s.url, title: s.label, language: s.language));
+        }),
     ]);
   }
 
