@@ -57,7 +57,7 @@ class SubtitleService {
   /// Free SubDL API key (subdl.com -> account -> API). Left blank ships with
   /// only the keyless OpenSubtitles source; set it to enable SubDL's much
   /// better Chinese-drama coverage.
-  static const String _subdlApiKey = '';
+  static const String _subdlApiKey = 'subdl_NzYdZIVX1icsPtWzn5qtoaNo4D4ZJ4bfIeRC-bdpjTU';
 
   /// Fetches English subtitles from both sources, SubDL first (better
   /// C-drama coverage), then OpenSubtitles.
