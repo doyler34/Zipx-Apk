@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../common/widgets/appbars_navbars/custom_appbar.dart';
 import '../../../../common/widgets/texts/header.dart';
-import '../../../../common/widgets/youtube_player/yt_player_widget.dart';
+import '../../../../common/widgets/youtube_player/trailer_preview.dart';
 import '../../../../core/dependency_injection/di.dart';
 import '../../../../core/playback/domain/entities/favourite_entry.dart';
 import '../../../../core/playback/domain/entities/playback_media_type.dart';
@@ -124,16 +124,8 @@ class _TvDetailsBody extends StatelessWidget {
               if (details != null && details.trailerKey.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 const Header(title: 'Trailer'),
-                AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: FittedBox(
-                      fit: BoxFit.fitWidth,
-                      child: YtPlayerWidget(trailerId: details.trailerKey),
-                    ),
-                  ),
-                ),
+                const SizedBox(height: 8),
+                TrailerPreview(videoId: details.trailerKey),
                 const SizedBox(height: 8),
               ],
               if (details != null && details.seasons.isNotEmpty) ...[
