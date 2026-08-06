@@ -13,11 +13,16 @@ class TvDetailsModel extends TvEntity {
     required this.numberOfSeasons,
     required this.seasons,
     required this.genres,
+    required this.trailerKey,
   });
 
   final int numberOfSeasons;
   final List<TvSeasonSummaryModel> seasons;
   final List<String> genres;
+
+  /// YouTube video id for the show's trailer (empty if none). Populated from
+  /// TMDB `videos` (requires `append_to_response=videos`).
+  final String trailerKey;
 
   factory TvDetailsModel.fromJson(Map<String, dynamic> json) {
     return TvDetailsModel(
@@ -34,6 +39,19 @@ class TvDetailsModel extends TvEntity {
           .where((s) => s.seasonNumber > 0)
           .toList(),
       genres: (json['genres'] as List? ?? []).map((e) => (e['name'] ?? '').toString()).toList(),
+      trailerKey: _pickTrailer(json['videos']?['results']),
     );
+  }
+
+  /// Prefer a YouTube "Trailer"; fall back to a "Teaser".
+  static String _pickTrailer(dynamic results) {
+    if (results is! List) return '';
+    Map? teaser;
+    for (final v in results) {
+      if (v is! Map || v['site'] != 'YouTube') continue;
+      if (v['type'] == 'Trailer') return (v['key'] ?? '').toString();
+      teaser ??= (v['type'] == 'Teaser') ? v : null;
+    }
+    return (teaser?['key'] ?? '').toString();
   }
 }

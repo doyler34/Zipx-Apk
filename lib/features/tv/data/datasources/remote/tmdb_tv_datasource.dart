@@ -105,6 +105,7 @@ class TmdbTvDatasource {
       queryParameters: {
         'api_key': settings['api_key'],
         'language': settings['language'],
+        'append_to_response': 'videos',
       },
     );
 
