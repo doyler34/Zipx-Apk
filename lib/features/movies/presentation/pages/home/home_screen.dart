@@ -12,13 +12,32 @@ import 'package:movie_bloc_app/features/personalization/presentation/blocs/setti
 
 import '../../widgets/home/hero_carousel.dart';
 import '../../widgets/home/movie_genres.dart';
+import '../../../../../common/widgets/beta/beta_v1_popup.dart';
 import '../../../../../common/widgets/movie/movies_section.dart';
 import '../../../../../core/dependency_injection/di.dart';
 import '../../../../../core/playback/presentation/widgets/continue_watching_section.dart';
 import '../../../../../core/playback/services/playback_history_service.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  // Placeholder issue-report URL for the beta popup - replace with your own.
+  static const String _betaReportUrl = 'https://github.com/doyler34/Zipx-Apk/issues/new';
+
+  @override
+  void initState() {
+    super.initState();
+    // Show the Beta V1 popup once (throttled by BetaPopupService) after the
+    // first frame, so it appears over the home screen right after launch.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) BetaV1Popup.showIfNeeded(context, reportUrl: _betaReportUrl);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
