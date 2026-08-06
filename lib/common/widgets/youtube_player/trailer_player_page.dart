@@ -43,13 +43,17 @@ class _TrailerPlayerPageState extends State<TrailerPlayerPage> {
   }
 
   String _embedHtml(String videoId) {
-    final src = 'https://www.youtube.com/embed/$videoId'
+    // youtube-nocookie + referrer policy: since late 2025 YouTube rejects embeds
+    // that don't send a proper Referer (errors 152 / 153). The meta tag + the
+    // iframe referrerpolicy make the WebView send strict-origin-when-cross-origin.
+    final src = 'https://www.youtube-nocookie.com/embed/$videoId'
         '?autoplay=1&playsinline=1&rel=0&fs=1&modestbranding=1';
     return '''
 <!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <style>
   html, body { margin: 0; padding: 0; background: #000; height: 100%; overflow: hidden; }
   .wrap { position: relative; width: 100%; height: 100%; }
@@ -59,6 +63,7 @@ class _TrailerPlayerPageState extends State<TrailerPlayerPage> {
 <body>
   <div class="wrap">
     <iframe src="$src"
+      referrerpolicy="strict-origin-when-cross-origin"
       allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
       allowfullscreen></iframe>
   </div>
