@@ -1,5 +1,7 @@
 import 'package:extended_image/extended_image.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../styles/zipx_ui.dart';
 import '../tv/tv_focusable.dart';
@@ -17,6 +19,13 @@ class TrailerPreview extends StatelessWidget {
   final String? title;
 
   void _open(BuildContext context) {
+    // Desktop (Windows/Linux/macOS) has no webview_flutter, so open the trailer
+    // in the system browser there; play in-app on mobile.
+    const desktop = {TargetPlatform.windows, TargetPlatform.linux, TargetPlatform.macOS};
+    if (desktop.contains(defaultTargetPlatform)) {
+      launchUrl(Uri.https('www.youtube.com', '/watch', {'v': videoId}), mode: LaunchMode.externalApplication);
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => TrailerPlayerPage(videoId: videoId, title: title)),
     );

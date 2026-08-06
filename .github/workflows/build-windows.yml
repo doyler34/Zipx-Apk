@@ -1,0 +1,60 @@
+name: Build Windows
+
+# Builds a Windows desktop build of the app and publishes it as a zip to a
+# GitHub Release. The windows/ runner project isn't committed - it's scaffolded
+# here with `flutter create` so it always matches the pinned Flutter version.
+#
+# Native Real-Debrid streaming (media_kit) works on Windows. The VidSrc WebView
+# fallback is Phase 2 (needs a WebView2-based plugin instead of webview_flutter).
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.3'
+          channel: stable
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      # Generate the windows/ runner project for this app (not committed).
+      - name: Scaffold Windows project
+        run: flutter create --platforms=windows .
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows (release)
+        run: flutter build windows --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }}
+
+      - name: Package build
+        shell: pwsh
+        run: |
+          $out = "build/windows/x64/runner/Release"
+          if (!(Test-Path $out)) { $out = "build/windows/runner/Release" }
+          Compress-Archive -Path "$out/*" -DestinationPath "zipx-movies-windows.zip" -Force
+
+      - name: Publish to "latest-windows" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-windows
+          name: Latest Windows build
+          files: zipx-movies-windows.zip
+          fail_on_unmatched_files: true

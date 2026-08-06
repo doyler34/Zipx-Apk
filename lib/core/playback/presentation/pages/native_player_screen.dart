@@ -245,14 +245,21 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     setState(() => _externalSubs = subs);
   }
 
+  /// Desktop has no webview_flutter, so the VidSrc WebView fallback can't run
+  /// there (yet) - native streaming is the only path on desktop.
+  bool get _isDesktop =>
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+
   void _goFallback() {
     if (!mounted) return;
-    if (kDisableWebFallback) {
+    if (kDisableWebFallback || _isDesktop) {
       setState(() {
         _stage = _Stage.error;
         _error = _sources.isEmpty
-            ? 'Native streaming found NO playable source for this title.\n\n(Expected for unreleased / very new titles. Web fallback is OFF for testing.)'
-            : 'The backend returned ${_sources.length} native source(s), but none would open.\n\n(Web fallback is OFF for testing.)';
+            ? 'Native streaming found NO playable source for this title.\n\n(Expected for unreleased / very new titles.)'
+            : 'The backend returned ${_sources.length} native source(s), but none would open.';
       });
       return;
     }
