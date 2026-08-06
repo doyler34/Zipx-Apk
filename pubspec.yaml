@@ -101,15 +101,19 @@ flutter_launcher_icons:
   adaptive_icon_background: "#000000"
   adaptive_icon_foreground: "assets/logos/app_icon.png"
 
-# Loading screen. The full poster fills the screen on older Android; on
-# Android 12+ (which only allows a centred icon) the cropped silhouette shows
-# on black. Regenerated in CI via `dart run flutter_native_splash:create`.
+# Loading screen: the Zipx poster centred on black (light + dark the same). On
+# Android 12+ (which only allows a centred icon) the cropped silhouette shows.
+# Regenerated in CI via `dart run flutter_native_splash:create`.
 flutter_native_splash:
   color: "#000000"
-  background_image: "assets/splash/zipx_splash.png"
+  color_dark: "#000000"
+  image: "assets/splash/zipx_splash.png"
+  image_dark: "assets/splash/zipx_splash.png"
   android_12:
     image: "assets/logos/app_icon.png"
     color: "#000000"
+    image_dark: "assets/logos/app_icon.png"
+    color_dark: "#000000"
   fullscreen: true
   android: true
   ios: true
