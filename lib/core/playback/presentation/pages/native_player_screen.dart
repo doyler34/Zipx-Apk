@@ -81,6 +81,10 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   /// cover (zoomed to fill, crops the edges). Toggled from the control bar.
   BoxFit _videoFit = BoxFit.contain;
 
+  /// Subtitle timing offset in seconds (mpv `sub-delay`). Positive shows subs
+  /// later, negative earlier - lets the user line up an out-of-sync sub file.
+  double _subtitleDelay = 0;
+
   static const Map<String, double> _subtitleSizes = {'S': 24, 'M': 32, 'L': 42, 'XL': 52};
 
   @override
@@ -136,6 +140,32 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       await _playIndex(0);
     } catch (_) {
       if (mounted) _goFallback();
+    }
+  }
+
+  /// Applies a subtitle timing offset via mpv's `sub-delay` property so the
+  /// user can fix an out-of-sync sub. Persists across track switches (it's a
+  /// player-global property). The dynamic call avoids a hard dependency on the
+  /// native-player type; if the property API isn't available it's a no-op.
+  Widget _syncButton(IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: const BoxDecoration(color: Colors.white12, shape: BoxShape.circle),
+        child: Icon(icon, color: Colors.white, size: 20),
+      ),
+    );
+  }
+
+  Future<void> _setSubtitleDelay(double seconds) async {
+    final clamped = seconds.clamp(-20.0, 20.0);
+    setState(() => _subtitleDelay = clamped);
+    try {
+      await (_player.platform as dynamic).setProperty('sub-delay', clamped.toStringAsFixed(2));
+    } catch (_) {
+      // Property API unavailable on this platform - delay just won't apply.
     }
   }
 
@@ -344,6 +374,41 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
                               ),
                             ),
                           ),
+                      ],
+                    ),
+                  ),
+                  // Subtitle sync (delay) - nudge the subs earlier/later to
+                  // line them up with the speech.
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: Row(
+                      children: [
+                        const Text('Sync', style: TextStyle(color: Colors.white70)),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () {
+                            _setSubtitleDelay(0);
+                            setSheet(() {});
+                          },
+                          child: const Text('reset', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                        ),
+                        const Spacer(),
+                        _syncButton(Icons.remove, () {
+                          _setSubtitleDelay(_subtitleDelay - 0.25);
+                          setSheet(() {});
+                        }),
+                        SizedBox(
+                          width: 74,
+                          child: Text(
+                            '${_subtitleDelay > 0 ? '+' : ''}${_subtitleDelay.toStringAsFixed(2)}s',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        _syncButton(Icons.add, () {
+                          _setSubtitleDelay(_subtitleDelay + 0.25);
+                          setSheet(() {});
+                        }),
                       ],
                     ),
                   ),
