@@ -1,27 +1,25 @@
 import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../styles/zipx_ui.dart';
 import '../tv/tv_focusable.dart';
+import 'trailer_player_page.dart';
 
-/// A reliable trailer preview: a 16:9 YouTube thumbnail with a red play button
-/// that opens the trailer in the YouTube app / browser on tap.
+/// A trailer preview: a 16:9 YouTube thumbnail with a red play button that
+/// opens the trailer in an in-app full-screen player on tap.
 ///
-/// Replaces the inline iframe player, which rendered blank on some devices.
+/// Replaces the inline iframe embed, which rendered blank on some devices.
 /// Focusable for TV-remote / keyboard use.
 class TrailerPreview extends StatelessWidget {
-  const TrailerPreview({super.key, required this.videoId});
+  const TrailerPreview({super.key, required this.videoId, this.title});
 
   final String videoId;
+  final String? title;
 
-  Future<void> _open() async {
-    final uri = Uri.https('www.youtube.com', '/watch', {'v': videoId});
-    try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {
-      // Ignore - nothing else we can do if no browser/YouTube app is available.
-    }
+  void _open(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => TrailerPlayerPage(videoId: videoId, title: title)),
+    );
   }
 
   @override
@@ -29,7 +27,7 @@ class TrailerPreview extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: TvFocusable(
-        onPressed: _open,
+        onPressed: () => _open(context),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
           child: AspectRatio(
