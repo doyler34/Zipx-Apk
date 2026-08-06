@@ -72,14 +72,16 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   List<ExternalSubtitle> _externalSubs = const [];
   int? _selectedExternalSub;
 
-  /// Subtitle text size (adjustable from the subtitle menu). Medium by default.
+  /// Subtitle text size (adjustable from the subtitle menu). Small (24) is the
+  /// smallest offered - it's a comfortable readable size, and the steps go up
+  /// from there.
   double _subtitleFontSize = 24;
 
   /// How the video fills the screen: contain (letterboxed, true aspect) or
   /// cover (zoomed to fill, crops the edges). Toggled from the control bar.
   BoxFit _videoFit = BoxFit.contain;
 
-  static const Map<String, double> _subtitleSizes = {'S': 18, 'M': 24, 'L': 32, 'XL': 42};
+  static const Map<String, double> _subtitleSizes = {'S': 24, 'M': 32, 'L': 42, 'XL': 52};
 
   @override
   void initState() {
@@ -493,6 +495,12 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       // Double-tap the left/right of the video to seek back/forward (~10s).
       seekOnDoubleTap: true,
       seekOnDoubleTapEnabledWhileControlsVisible: true,
+      // Lift the seek bar + bottom buttons off the very bottom edge so the
+      // progress bar isn't clipped by the screen edge / gesture area, and pad
+      // the top bar down from the notch.
+      topButtonBarMargin: const EdgeInsets.only(top: 12, left: 8, right: 8),
+      seekBarMargin: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
+      bottomButtonBarMargin: const EdgeInsets.only(left: 16, right: 16, bottom: 20),
       topButtonBar: [
         const BackButton(color: Colors.white),
         Expanded(
