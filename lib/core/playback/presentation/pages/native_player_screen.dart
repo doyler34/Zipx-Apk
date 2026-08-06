@@ -390,10 +390,11 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   void _openSubtitles() {
     final subs = _player.state.tracks.subtitle;
     final cur = _player.state.track.subtitle;
-    // Off/Auto and the torrent-embedded tracks, split so Off can sit at the top
-    // and the embedded tracks at the bottom.
     final off = subs.where((t) => t.id == 'no').toList();
-    final embedded = subs.where((t) => t.id != 'no').toList();
+    // The video's own tracks are the primary option now that they're
+    // size-controllable; English ones sort to the top.
+    final embedded = subs.where((t) => t.id != 'no').toList()
+      ..sort((a, b) => (_isEnglishTrack(a) ? 0 : 1).compareTo(_isEnglishTrack(b) ? 0 : 1));
 
     showModalBottomSheet<void>(
       context: context,
@@ -410,6 +411,17 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
                   title: Text(label, style: const TextStyle(color: Colors.white)),
                   trailing: selected ? const Icon(Icons.check, color: Color(0xFFE11D2A)) : null,
                   onTap: onTap,
+                );
+
+            Widget header(String text) => Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      text.toUpperCase(),
+                      style: const TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.6),
+                    ),
+                  ),
                 );
 
             return SafeArea(
@@ -495,18 +507,20 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
                             _player.setSubtitleTrack(t);
                             Navigator.of(sheetCtx).pop();
                           }),
-                        // Our online English subs, prioritised above the baked-in ones.
-                        for (var i = 0; i < _externalSubs.length; i++)
-                          tile(_externalSubs[i].label, _selectedExternalSub == i, () {
-                            Navigator.of(sheetCtx).pop();
-                            _applyExternalSub(i);
-                          }),
-                        // Subtitles baked into the torrent, at the bottom.
+                        // Primary: the video's own subtitle tracks (English first).
+                        if (embedded.isNotEmpty) header('From the video'),
                         for (final t in embedded)
                           tile(_subLabel(t), noOnline && t.id == cur.id, () {
                             setState(() => _selectedExternalSub = null);
                             _player.setSubtitleTrack(t);
                             Navigator.of(sheetCtx).pop();
+                          }),
+                        // Backup: online subs (SubDL / OpenSubtitles).
+                        if (_externalSubs.isNotEmpty) header('Backup · online'),
+                        for (var i = 0; i < _externalSubs.length; i++)
+                          tile(_externalSubs[i].label, _selectedExternalSub == i, () {
+                            Navigator.of(sheetCtx).pop();
+                            _applyExternalSub(i);
                           }),
                       ],
                     ),
@@ -562,6 +576,12 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     _pickFromSheet('Playback speed', [
       for (final s in speeds) _Choice('${s}x', (s - cur).abs() < 0.01, () => _player.setRate(s)),
     ]);
+  }
+
+  bool _isEnglishTrack(SubtitleTrack t) {
+    final lang = (t.language ?? '').toLowerCase();
+    final title = (t.title ?? '').toLowerCase();
+    return lang == 'en' || lang == 'eng' || lang.startsWith('en-') || title.contains('english');
   }
 
   String _subLabel(SubtitleTrack t) {
