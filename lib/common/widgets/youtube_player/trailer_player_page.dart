@@ -5,11 +5,11 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 /// Full-screen in-app trailer player.
 ///
-/// Loads YouTube's `/embed/` page directly in a WebView rather than going
-/// through the IFrame JS API - the JS API verifies the embedding origin and
-/// rejected the local player page (error 152) for every video. Navigating the
-/// WebView top-level to youtube.com passes that check, so embeddable trailers
-/// play. An "Open in YouTube" action is kept as a fallback.
+/// Serves a tiny HTML page that embeds the video in an `<iframe>`, loaded with
+/// the WebView base URL set to `https://www.youtube.com`. That gives the embed
+/// a valid parent origin/referer, which YouTube's player requires - loading the
+/// player another way returned "origin"/"configuration" errors (152 / 153) for
+/// every video. An "Open in YouTube" action is kept as a fallback.
 class TrailerPlayerPage extends StatefulWidget {
   const TrailerPlayerPage({super.key, required this.videoId, this.title});
 
@@ -26,8 +26,6 @@ class _TrailerPlayerPageState extends State<TrailerPlayerPage> {
   @override
   void initState() {
     super.initState();
-    final url = 'https://www.youtube.com/embed/${widget.videoId}'
-        '?autoplay=1&playsinline=1&rel=0&fs=1&modestbranding=1';
 
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -39,7 +37,34 @@ class _TrailerPlayerPageState extends State<TrailerPlayerPage> {
       platform.setMediaPlaybackRequiresUserGesture(false);
     }
 
-    _controller.loadRequest(Uri.parse(url));
+    // Embed the video in an iframe on a page whose origin is youtube.com, so
+    // the embed has a valid parent origin/referer (fixes errors 152 / 153).
+    _controller.loadHtmlString(_embedHtml(widget.videoId), baseUrl: 'https://www.youtube.com');
+  }
+
+  String _embedHtml(String videoId) {
+    final src = 'https://www.youtube.com/embed/$videoId'
+        '?autoplay=1&playsinline=1&rel=0&fs=1&modestbranding=1';
+    return '''
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<style>
+  html, body { margin: 0; padding: 0; background: #000; height: 100%; overflow: hidden; }
+  .wrap { position: relative; width: 100%; height: 100%; }
+  iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <iframe src="$src"
+      allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+      allowfullscreen></iframe>
+  </div>
+</body>
+</html>
+''';
   }
 
   Future<void> _openExternal() async {
