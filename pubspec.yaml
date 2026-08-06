@@ -63,6 +63,9 @@ dependencies:
   extended_image: ^8.2.1
   dio: ^5.4.3+1
 
+  #Unzip SubDL subtitle archives on-device (they ship subs as .zip)
+  archive: ^3.6.1
+
   #Embedded playback (in-app WebView for streaming providers)
   webview_flutter: ^4.8.0
   webview_flutter_android: ^3.16.6

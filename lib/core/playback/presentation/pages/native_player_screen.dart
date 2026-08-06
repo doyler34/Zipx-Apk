@@ -274,22 +274,55 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   void _openSubtitles() {
     final subs = _player.state.tracks.subtitle;
     final cur = _player.state.track.subtitle;
+    final noOnline = _selectedExternalSub == null;
+    // Off/Auto and the torrent-embedded tracks, split so Off can sit at the top
+    // and the embedded tracks at the bottom.
+    final off = subs.where((t) => t.id == 'no').toList();
+    final embedded = subs.where((t) => t.id != 'no').toList();
     _pickFromSheet('Subtitles', [
-      // Embedded tracks (and Off/Auto). Selected only when no online sub is
-      // active - applying an online sub replaces whatever mpv reports here.
-      for (final t in subs)
-        _Choice(_subLabel(t), _selectedExternalSub == null && t.id == cur.id, () {
+      // Off first, for quick access.
+      for (final t in off)
+        _Choice('Off', noOnline && t.id == cur.id, () {
           setState(() => _selectedExternalSub = null);
           _player.setSubtitleTrack(t);
         }),
-      // Online (OpenSubtitles) tracks, loaded on demand into mpv.
+      // Our online English subs, prioritised above the baked-in ones.
       for (var i = 0; i < _externalSubs.length; i++)
-        _Choice('${_externalSubs[i].label} · online', _selectedExternalSub == i, () {
-          final s = _externalSubs[i];
-          setState(() => _selectedExternalSub = i);
-          _player.setSubtitleTrack(SubtitleTrack.uri(s.url, title: s.label, language: s.language));
+        _Choice(_externalSubs[i].label, _selectedExternalSub == i, () => _applyExternalSub(i)),
+      // Subtitles baked into the torrent, at the bottom.
+      for (final t in embedded)
+        _Choice(_subLabel(t), noOnline && t.id == cur.id, () {
+          setState(() => _selectedExternalSub = null);
+          _player.setSubtitleTrack(t);
         }),
     ]);
+  }
+
+  /// Applies an online subtitle. Direct URLs go straight into mpv; SubDL zips
+  /// are downloaded + unzipped first (with a brief "loading" toast).
+  Future<void> _applyExternalSub(int i) async {
+    final s = _externalSubs[i];
+    if (s.kind == SubtitleKind.direct) {
+      setState(() => _selectedExternalSub = i);
+      await _player.setSubtitleTrack(SubtitleTrack.uri(s.url, title: s.label, language: 'en'));
+      return;
+    }
+    // SubDL zip: fetch + unpack before loading.
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Loading subtitle…'), duration: Duration(seconds: 2)),
+      );
+    }
+    final data = await _subtitleService.resolveSubdlZip(s.url, episode: s.episode);
+    if (!mounted) return;
+    if (data == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Subtitle unavailable')),
+      );
+      return;
+    }
+    setState(() => _selectedExternalSub = i);
+    await _player.setSubtitleTrack(SubtitleTrack.data(data, title: s.label, language: 'en'));
   }
 
   void _openAudio() {
