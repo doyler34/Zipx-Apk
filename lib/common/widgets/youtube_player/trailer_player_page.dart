@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 /// Full-screen in-app trailer player.
 ///
-/// Uses [YoutubePlayerScaffold] (the recommended full-page usage of
-/// youtube_player_iframe) and renders the player directly - no FittedBox /
-/// Transform around the WebView, which is what made the old inline embed render
-/// blank on Android. An "Open in YouTube" action is kept as a fallback.
+/// Loads YouTube's `/embed/` page directly in a WebView rather than going
+/// through the IFrame JS API - the JS API verifies the embedding origin and
+/// rejected the local player page (error 152) for every video. Navigating the
+/// WebView top-level to youtube.com passes that check, so embeddable trailers
+/// play. An "Open in YouTube" action is kept as a fallback.
 class TrailerPlayerPage extends StatefulWidget {
   const TrailerPlayerPage({super.key, required this.videoId, this.title});
 
@@ -19,26 +21,25 @@ class TrailerPlayerPage extends StatefulWidget {
 }
 
 class _TrailerPlayerPageState extends State<TrailerPlayerPage> {
-  late final YoutubePlayerController _controller;
+  late final WebViewController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = YoutubePlayerController.fromVideoId(
-      videoId: widget.videoId,
-      autoPlay: true,
-      params: const YoutubePlayerParams(
-        showControls: true,
-        showFullscreenButton: true,
-        strictRelatedVideos: true,
-      ),
-    );
-  }
+    final url = 'https://www.youtube.com/embed/${widget.videoId}'
+        '?autoplay=1&playsinline=1&rel=0&fs=1&modestbranding=1';
 
-  @override
-  void dispose() {
-    _controller.close();
-    super.dispose();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black);
+
+    // Allow autoplay without a tap (Android only API).
+    final platform = _controller.platform;
+    if (platform is AndroidWebViewController) {
+      platform.setMediaPlaybackRequiresUserGesture(false);
+    }
+
+    _controller.loadRequest(Uri.parse(url));
   }
 
   Future<void> _openExternal() async {
@@ -52,27 +53,28 @@ class _TrailerPlayerPageState extends State<TrailerPlayerPage> {
 
   @override
   Widget build(BuildContext context) {
-    return YoutubePlayerScaffold(
-      controller: _controller,
-      aspectRatio: 16 / 9,
-      builder: (context, player) {
-        return Scaffold(
-          backgroundColor: Colors.black,
-          appBar: AppBar(
-            backgroundColor: Colors.black,
-            foregroundColor: Colors.white,
-            title: Text(widget.title ?? 'Trailer'),
-            actions: [
-              IconButton(
-                tooltip: 'Open in YouTube',
-                icon: const Icon(Icons.open_in_new),
-                onPressed: _openExternal,
-              ),
-            ],
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(widget.title ?? 'Trailer'),
+        actions: [
+          IconButton(
+            tooltip: 'Open in YouTube',
+            icon: const Icon(Icons.open_in_new),
+            onPressed: _openExternal,
           ),
-          body: Center(child: player),
-        );
-      },
+        ],
+      ),
+      body: SafeArea(
+        child: Center(
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: WebViewWidget(controller: _controller),
+          ),
+        ),
+      ),
     );
   }
 }
