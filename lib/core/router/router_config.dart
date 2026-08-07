@@ -12,8 +12,10 @@ import 'package:movie_bloc_app/features/tv/data/models/tv_model.dart';
 import 'package:movie_bloc_app/features/tv/presentation/pages/tv_details_screen.dart';
 import 'package:movie_bloc_app/navigation_menu.dart';
 
+import '../../common/responsive/responsive.dart';
 import '../../core/playback/domain/entities/playback_request.dart';
 import '../../core/playback/presentation/pages/native_player_screen.dart';
+import '../../desktop/desktop_shell.dart';
 
 class CustomGoRouterConfig {
   final GoRouter config = GoRouter(
@@ -52,7 +54,9 @@ class CustomGoRouterConfig {
       GoRoute(
         path: '/',
         builder: (BuildContext context, GoRouterState state) {
-          return const NavigationMenu();
+          // Desktop-class windows get the dedicated desktop UI; phones/tablets
+          // keep the original bottom-bar app.
+          return Responsive.isDesktop(context) ? const DesktopShell() : const NavigationMenu();
         },
       ),
       GoRoute(
