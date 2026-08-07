@@ -282,22 +282,43 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       return;
     }
 
-    // 1) An embedded English subtitle track, if present.
-    for (final t in _player.state.tracks.subtitle) {
-      if (t.id == 'no' || t.id == 'auto') continue;
-      if (_isEnglishTrack(t)) {
-        _subsAutoEnabled = true;
-        _player.setSubtitleTrack(t);
-        return;
-      }
+    // 1) An embedded English subtitle track wins - it's baked into the MKV so
+    //    it's guaranteed in sync (prioritise it over online SubDL, which can be
+    //    the wrong release). Prefer a full track over a "forced/narrative" one
+    //    (those only translate on-screen foreign text, not the dialogue).
+    final embedded = _player.state.tracks.subtitle
+        .where((t) => t.id != 'no' && t.id != 'auto' && _isEnglishTrack(t))
+        .toList();
+    final full = embedded.where((t) => !_isForcedOrNarrative(t)).toList();
+    final pick = full.isNotEmpty ? full.first : (embedded.isNotEmpty ? embedded.first : null);
+    if (pick != null) {
+      _subsAutoEnabled = true;
+      _player.setSubtitleTrack(pick);
+      return;
     }
 
-    // 2) Otherwise the first online English sub, once it has loaded.
+    // 2) No embedded English track. Fall back to an online sub - but ONLY once
+    //    the file's tracks have actually parsed. Online subs often arrive before
+    //    mpv finishes reading the MKV's embedded tracks; applying them early
+    //    would beat (and lock out) a perfectly good embedded track. If tracks
+    //    aren't ready yet, bail without arming - the tracks listener re-runs
+    //    this once they load.
+    final tracksReady =
+        _player.state.tracks.audio.any((t) => t.id != 'no' && t.id != 'auto');
+    if (!tracksReady) return;
     if (_externalSubs.isNotEmpty) {
       _subsAutoEnabled = true;
       final direct = _externalSubs.indexWhere((s) => s.kind == SubtitleKind.direct);
       _applyExternalSub(direct >= 0 ? direct : 0);
     }
+  }
+
+  /// A "forced"/"narrative" subtitle track only translates on-screen foreign
+  /// text (signs, foreign dialogue), not the full dialogue - not what we want to
+  /// auto-enable for anime.
+  bool _isForcedOrNarrative(SubtitleTrack t) {
+    final hay = '${t.title ?? ''} ${t.language ?? ''}'.toLowerCase();
+    return hay.contains('forced') || hay.contains('narrative') || hay.contains('signs');
   }
 
   /// Desktop has no webview_flutter, so the VidSrc WebView fallback can't run
