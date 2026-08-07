@@ -5,11 +5,14 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 /// Full-screen in-app trailer player.
 ///
-/// Serves a tiny HTML page that embeds the video in an `<iframe>`, loaded with
-/// the WebView base URL set to `https://www.youtube.com`. That gives the embed
-/// a valid parent origin/referer, which YouTube's player requires - loading the
-/// player another way returned "origin"/"configuration" errors (152 / 153) for
-/// every video. An "Open in YouTube" action is kept as a fallback.
+/// Loads a small public HTML page hosted on GitHub Pages that renders the
+/// YouTube iframe. This is the key detail: `loadHtmlString` serves the page
+/// from an opaque local origin, so YouTube's player rejects it with "video
+/// unavailable" 152/153 - a `referrerpolicy`/`baseUrl` does NOT fix that in a
+/// WebView. Pointing the WebView at a real HTTPS page gives the iframe a valid
+/// origin/Referer, so playback works. The page lives in its own public repo
+/// (so the app repo can go private without breaking trailers). An "Open in
+/// YouTube" action is kept as a fallback.
 class TrailerPlayerPage extends StatefulWidget {
   const TrailerPlayerPage({super.key, required this.videoId, this.title});
 
@@ -22,6 +25,11 @@ class TrailerPlayerPage extends StatefulWidget {
 
 class _TrailerPlayerPageState extends State<TrailerPlayerPage> {
   late final WebViewController _controller;
+
+  /// Public HTTPS embed page (GitHub Pages, own repo). Renders the YouTube
+  /// iframe from a real origin so the WebView player stops erroring 152/153.
+  /// It reads the video id from `?v=`.
+  static const String _embedBase = 'https://doyler34.github.io/Embed-test/embed.html';
 
   @override
   void initState() {
@@ -37,39 +45,9 @@ class _TrailerPlayerPageState extends State<TrailerPlayerPage> {
       platform.setMediaPlaybackRequiresUserGesture(false);
     }
 
-    // Embed the video in an iframe on a page whose origin is youtube.com, so
-    // the embed has a valid parent origin/referer (fixes errors 152 / 153).
-    _controller.loadHtmlString(_embedHtml(widget.videoId), baseUrl: 'https://www.youtube.com');
-  }
-
-  String _embedHtml(String videoId) {
-    // youtube-nocookie + referrer policy: since late 2025 YouTube rejects embeds
-    // that don't send a proper Referer (errors 152 / 153). The meta tag + the
-    // iframe referrerpolicy make the WebView send strict-origin-when-cross-origin.
-    final src = 'https://www.youtube-nocookie.com/embed/$videoId'
-        '?autoplay=1&playsinline=1&rel=0&fs=1&modestbranding=1';
-    return '''
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<meta name="referrer" content="strict-origin-when-cross-origin">
-<style>
-  html, body { margin: 0; padding: 0; background: #000; height: 100%; overflow: hidden; }
-  .wrap { position: relative; width: 100%; height: 100%; }
-  iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
-</style>
-</head>
-<body>
-  <div class="wrap">
-    <iframe src="$src"
-      referrerpolicy="strict-origin-when-cross-origin"
-      allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-      allowfullscreen></iframe>
-  </div>
-</body>
-</html>
-''';
+    // Load the real hosted page (not loadHtmlString), so the iframe has a valid
+    // HTTPS origin/Referer and YouTube allows playback.
+    _controller.loadRequest(Uri.parse('$_embedBase?v=${widget.videoId}'));
   }
 
   Future<void> _openExternal() async {
