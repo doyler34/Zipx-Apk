@@ -170,10 +170,17 @@ class StreamSourcesService {
       )));
     }
 
-    // Rank: cached first (instant play); then for non-English originals
-    // (anime/foreign) prefer the original/dual audio over a foreign dub; then
-    // prefer 1080p (streams smoothly, decodes on any phone; 4K remuxes are huge
-    // and often won't decode on mobile), then smaller files first.
+    // For a non-English original (anime/foreign): hide foreign-dub sources
+    // entirely - keep only the original/dual audio and any English dub. If none
+    // remain, the caller falls back to the scrapers (often the subbed original).
+    final foreignOriginal = (originalLang ?? '').isNotEmpty && originalLang!.toLowerCase() != 'en';
+    if (foreignOriginal) {
+      entries.retainWhere((e) => _audioRank(e.$4.releaseName ?? '', originalLang) != 2);
+    }
+
+    // Rank: cached first (instant play); then prefer the original/dual audio;
+    // then prefer 1080p (streams smoothly, decodes on any phone; 4K remuxes are
+    // huge and often won't decode on mobile), then smaller files first.
     entries.sort((a, b) {
       if (a.$1 != b.$1) return a.$1 ? -1 : 1;
       final aa = _audioRank(a.$4.releaseName ?? '', originalLang);
@@ -199,10 +206,14 @@ class StreamSourcesService {
     final n = releaseName.toLowerCase();
     final origTags = _origLangTags(lang);
     if (n.contains('dual') || n.contains('multi') || origTags.any(n.contains)) return 0;
+    // A dub in a language that's neither the original nor English. Full words
+    // only (no short tokens like "ita" that match "capital"), and NOT generic
+    // "dubbed"/"dub" so an English dub isn't mistaken for a foreign one.
     const foreignDub = [
-      'spanish', 'latino', 'castellano', 'espanol', 'español', 'italian', 'ita',
-      'german', 'deutsch', 'french', 'truefrench', 'vff', 'hindi', 'dublado',
-      'dubbed', 'dub)', 'dub]', 'dub ',
+      'spanish', 'latino', 'castellano', 'espanol', 'español', 'italian',
+      'german', 'deutsch', 'french', 'truefrench', 'hindi', 'dublado',
+      'russian', 'polish', 'portuguese', 'korean', 'thai', 'tamil', 'telugu',
+      'arabic', 'turkish',
     ];
     if (foreignDub.any(n.contains)) return 2;
     return 1;
