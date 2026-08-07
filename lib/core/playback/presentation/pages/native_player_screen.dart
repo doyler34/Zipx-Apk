@@ -203,10 +203,20 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     final aliases = _langAliases(lang);
 
     for (final a in real) {
-      final hay = '${a.language ?? ''} ${a.title ?? ''}'.toLowerCase();
-      if (aliases.any(hay.contains)) {
+      if (_audioLangIs(a, aliases)) {
         if (_player.state.track.audio.id != a.id) _player.setAudioTrack(a);
         return;
+      }
+    }
+
+    // Anime: if there's no main-language (Japanese) track, fall back to English
+    // - never a third-language dub.
+    if (_isAnime) {
+      for (final a in real) {
+        if (_audioLangIs(a, _langAliases('en'))) {
+          if (_player.state.track.audio.id != a.id) _player.setAudioTrack(a);
+          return;
+        }
       }
     }
   }
@@ -443,9 +453,12 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     final subs = _player.state.tracks.subtitle;
     final cur = _player.state.track.subtitle;
     final off = subs.where((t) => t.id == 'no').toList();
-    // The video's own tracks are the primary option now that they're
-    // size-controllable; English ones sort to the top.
-    final embedded = subs.where((t) => t.id != 'no').toList()
+    // The video's own tracks. English sorts to the top; for anime we keep ONLY
+    // English embedded tracks (nothing else). Online subs are already English.
+    final embedded = subs
+        .where((t) => t.id != 'no')
+        .where((t) => !_isAnime || _isEnglishTrack(t))
+        .toList()
       ..sort((a, b) => (_isEnglishTrack(a) ? 0 : 1).compareTo(_isEnglishTrack(b) ? 0 : 1));
 
     showModalBottomSheet<void>(
@@ -615,8 +628,14 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   }
 
   void _openAudio() {
-    final audios = _player.state.tracks.audio;
     final cur = _player.state.track.audio;
+    var audios = _player.state.tracks.audio.toList();
+    if (_isAnime) {
+      // Anime: only the main language (Japanese) then English - nothing else.
+      final jp = audios.where((t) => _audioLangIs(t, _langAliases('ja'))).toList();
+      final en = audios.where((t) => _audioLangIs(t, _langAliases('en'))).toList();
+      audios = [...jp, ...en];
+    }
     _pickFromSheet('Audio', [
       for (final t in audios) _Choice(_audioLabel(t), t.id == cur.id, () => _player.setAudioTrack(t)),
     ]);
@@ -630,10 +649,19 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     ]);
   }
 
+  /// Anime = a Japanese-original title. For these we restrict tracks to the
+  /// main language (Japanese) + English only.
+  bool get _isAnime => (_originalLang ?? '').toLowerCase() == 'ja';
+
   bool _isEnglishTrack(SubtitleTrack t) {
     final lang = (t.language ?? '').toLowerCase();
     final title = (t.title ?? '').toLowerCase();
     return lang == 'en' || lang == 'eng' || lang.startsWith('en-') || title.contains('english');
+  }
+
+  bool _audioLangIs(AudioTrack t, List<String> aliases) {
+    final hay = '${t.language ?? ''} ${t.title ?? ''}'.toLowerCase();
+    return aliases.any(hay.contains);
   }
 
   String _subLabel(SubtitleTrack t) {
