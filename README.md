@@ -4,9 +4,7 @@
 <br></br></br>
 
 <p align="center">
-  Zipx Movies - Your go-to Flutter app for discovering and exploring movies! Built with BLoC pattern, CLEAN Architecture & powered by TMDB API. Simple to use & easy to read the code.
-  <br><br>
-  Don't forget to leave a star, thanks! 😃
+  Zipx Movies
 </p>
 
 </br></br>
