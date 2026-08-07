@@ -97,6 +97,31 @@ class SubtitleService {
         .toSet();
   }
 
+  /// Distinctive title words used to reject wrong-show SubDL results. Strips the
+  /// "- S01E01" episode suffix and any season/episode markers, then keeps the
+  /// longer (>=4) words when available, else >=3.
+  static List<String> _titleTokens(String title) {
+    var t = title.split(' - ').first;
+    t = t.replaceAll(RegExp(r's\d{1,3}\s*e\d{1,4}', caseSensitive: false), ' ');
+    final toks = t.toLowerCase().split(RegExp(r'[^a-z0-9]+')).where((x) => x.length >= 3).toList();
+    final distinctive = toks.where((x) => x.length >= 4).toList();
+    return distinctive.isNotEmpty ? distinctive : toks;
+  }
+
+  /// Lowercase + strip everything but letters/digits (so "One.Piece" == "one piece").
+  static String _norm(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+  /// True if a release name looks like a multi-episode batch / season pack, so
+  /// it can't be a synced match for one episode.
+  static bool _isBatch(String release) {
+    final r = release.toLowerCase();
+    return RegExp(r's?\d{1,3}\s*e\d{1,4}\s*-\s*s?\d{1,3}\s*e\d{1,4}').hasMatch(r) ||
+        RegExp(r'e\d{1,4}\s*-\s*e?\d{1,4}').hasMatch(r) ||
+        r.contains('batch') ||
+        r.contains('complete') ||
+        r.contains('season pack');
+  }
+
   // ---------------------------------------------------------------------------
   // SubDL (zip archives, best C-drama coverage)
   // ---------------------------------------------------------------------------
@@ -129,6 +154,12 @@ class SubtitleService {
       }
       if (decoded is! Map || decoded['subtitles'] is! List) return const [];
 
+      // SubDL sometimes returns subtitles for a completely different show
+      // (e.g. NCIS for One Piece), especially for anime. Keep only results
+      // whose release name plausibly matches THIS title.
+      final titleTokens = _titleTokens(request.title);
+      final titleJoined = _norm(request.title.split(' - ').first);
+
       // (matchScore, url, releaseName) so we can rank release-matched subs first.
       final rows = <(int, String, String)>[];
       for (final raw in decoded['subtitles'] as List) {
@@ -137,6 +168,11 @@ class SubtitleService {
         if (rel.isEmpty) continue;
         final url = rel.startsWith('http') ? rel : '$_subdlDownloadBase$rel';
         final release = (raw['release_name'] ?? raw['name'] ?? '').toString();
+        final relLower = release.toLowerCase();
+        final relJoined = _norm(release);
+        final matchesTitle = titleTokens.any(relLower.contains) ||
+            (titleJoined.length >= 4 && relJoined.contains(titleJoined));
+        if (titleTokens.isNotEmpty && !matchesTitle) continue; // wrong show - drop
         final score = releaseName == null ? 0 : _releaseScore(release, releaseName);
         rows.add((score, url, release));
       }
@@ -147,8 +183,10 @@ class SubtitleService {
       var n = 0;
       for (final row in rows) {
         n++;
-        // A decent number of shared release tokens => very likely in sync.
-        final matched = row.$1 >= 3;
+        // A decent number of shared release tokens => very likely in sync -
+        // but a multi-episode batch/season-pack is never episode-synced, so
+        // don't claim it's "matched".
+        final matched = row.$1 >= 3 && !_isBatch(row.$3);
         final hint = row.$3.isNotEmpty ? ' · ${_short(row.$3)}' : '';
         out.add(ExternalSubtitle(
           url: row.$2,

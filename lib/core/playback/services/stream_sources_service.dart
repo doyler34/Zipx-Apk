@@ -205,21 +205,32 @@ class StreamSourcesService {
     if (lang.isEmpty || lang == 'en') return 1;
     final n = releaseName.toLowerCase();
     final origTags = _origLangTags(lang);
-    if (n.contains('dual') || n.contains('multi') || origTags.any(n.contains)) return 0;
-    // A dub in a language that's neither the original nor English. Full words
-    // only (no short tokens like "ita" that match "capital"), and NOT generic
+    if (_hasTag(n, 'dual') || _hasTag(n, 'multi') || origTags.any((t) => _hasTag(n, t))) return 0;
+    // A dub in a language that's neither the original nor English. Matched on
+    // whole tokens only (see _hasTag) so short tags like "ita"/"vf" can be
+    // listed without false-matching words like "capital". NOT generic
     // "dubbed"/"dub" so an English dub isn't mistaken for a foreign one.
     // The original language is matched first (origTags -> 0), so listing both
     // 'japanese' and 'korean' here only excludes them when they're NOT the
     // original (e.g. a Japanese dub of a Korean title).
     const foreignDub = [
-      'spanish', 'latino', 'castellano', 'espanol', 'español', 'italian',
-      'german', 'deutsch', 'french', 'truefrench', 'hindi', 'dublado',
-      'russian', 'polish', 'portuguese', 'korean', 'japanese', 'jpn', 'thai',
-      'tamil', 'telugu', 'arabic', 'turkish',
+      'spanish', 'latino', 'latin', 'castellano', 'espanol', 'español', 'esp',
+      'spa', 'italian', 'italiano', 'ita', 'german', 'deutsch', 'ger', 'deu',
+      'french', 'truefrench', 'francais', 'français', 'vf', 'vff', 'vfq', 'fre',
+      'fra', 'hindi', 'hin', 'dublado', 'russian', 'russo', 'rus', 'polish',
+      'pl', 'portuguese', 'portugues', 'português', 'por', 'pt', 'korean',
+      'kor', 'japanese', 'jpn', 'jap', 'thai', 'tamil', 'tam', 'telugu', 'tel',
+      'arabic', 'ara', 'turkish', 'turk',
     ];
-    if (foreignDub.any(n.contains)) return 2;
+    if (foreignDub.any((t) => _hasTag(n, t))) return 2;
     return 1;
+  }
+
+  /// True if [tag] appears in [name] as a whole token (bounded by non-alphanumerics
+  /// or string ends), so short tags like "ita" don't match inside "capital".
+  bool _hasTag(String name, String tag) {
+    final t = RegExp.escape(tag);
+    return RegExp('(?<![a-z0-9])$t(?![a-z0-9])', caseSensitive: false).hasMatch(name);
   }
 
   /// Release-name tags that indicate a title's original-language audio.
