@@ -79,6 +79,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   /// default. Done once, then the user can override from the Audio menu.
   String? _originalLang;
   bool _audioAutoSelected = false;
+  bool _subsAutoEnabled = false;
   StreamSubscription<Tracks>? _tracksSub;
 
   /// Subtitle text size (adjustable from the subtitle menu). Small (24) is the
@@ -111,7 +112,10 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     // a swipe reveals them briefly then they auto-hide again.
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // Auto-pick the original-language audio track once the file's tracks load.
-    _tracksSub = _player.stream.tracks.listen((tracks) => _maybeAutoSelectAudio(tracks.audio));
+    _tracksSub = _player.stream.tracks.listen((tracks) {
+      _maybeAutoSelectAudio(tracks.audio);
+      _maybeAutoEnableSubs();
+    });
     _load();
   }
 
@@ -244,6 +248,46 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     final subs = await _subtitleService.fetch(widget.request, releaseName: releaseName);
     if (!mounted) return;
     setState(() => _externalSubs = subs);
+    // Online subs just arrived - use them if we still need to turn subs on.
+    _maybeAutoEnableSubs();
+  }
+
+  /// For non-English originals (e.g. anime), turn English subtitles ON by
+  /// default: prefer an embedded English track, else the first English online
+  /// sub once it loads. English-original titles are left alone (no forced subs).
+  /// Runs once, and only if the user hasn't already picked a subtitle.
+  void _maybeAutoEnableSubs() {
+    if (_subsAutoEnabled) return;
+    final lang = (_originalLang ?? '').toLowerCase();
+    if (lang.isEmpty || lang == 'en') return;
+    // Don't override a track the user already chose.
+    if (_selectedExternalSub != null) {
+      _subsAutoEnabled = true;
+      return;
+    }
+    final cur = _player.state.track.subtitle;
+    if (cur.id != 'no' && cur.id != 'auto') {
+      // A subtitle is already showing (embedded default) - leave it.
+      _subsAutoEnabled = true;
+      return;
+    }
+
+    // 1) An embedded English subtitle track, if present.
+    for (final t in _player.state.tracks.subtitle) {
+      if (t.id == 'no' || t.id == 'auto') continue;
+      if (_isEnglishTrack(t)) {
+        _subsAutoEnabled = true;
+        _player.setSubtitleTrack(t);
+        return;
+      }
+    }
+
+    // 2) Otherwise the first online English sub, once it has loaded.
+    if (_externalSubs.isNotEmpty) {
+      _subsAutoEnabled = true;
+      final direct = _externalSubs.indexWhere((s) => s.kind == SubtitleKind.direct);
+      _applyExternalSub(direct >= 0 ? direct : 0);
+    }
   }
 
   /// Desktop has no webview_flutter, so the VidSrc WebView fallback can't run

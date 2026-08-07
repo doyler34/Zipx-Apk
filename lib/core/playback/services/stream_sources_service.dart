@@ -38,7 +38,10 @@ class StreamSourcesService {
     try {
       final imdb = await _imdbId(request);
       if (imdb != null && imdb.isNotEmpty) {
-        comet = await _fetchComet(request, imdb);
+        // Original language lets us rank anime/foreign sources by audio
+        // (prefer original / dual audio over a foreign dub).
+        final origLang = await originalLanguage(request);
+        comet = await _fetchComet(request, imdb, origLang);
       }
     } catch (_) {
       // ignore - fall through to the free scrapers
@@ -121,7 +124,7 @@ class StreamSourcesService {
     return null;
   }
 
-  Future<List<StreamSource>> _fetchComet(PlaybackRequest request, String imdb) async {
+  Future<List<StreamSource>> _fetchComet(PlaybackRequest request, String imdb, String? originalLang) async {
     final path = request.isTvEpisode
         ? '$_cometBase/$_cometConfig/stream/series/$imdb:${request.seasonNumber}:${request.episodeNumber}.json'
         : '$_cometBase/$_cometConfig/stream/movie/$imdb.json';
@@ -167,11 +170,15 @@ class StreamSourcesService {
       )));
     }
 
-    // Rank: cached first (instant play), then prefer 1080p (streams smoothly,
-    // decodes on any phone; 4K remuxes are huge and often won't decode on
-    // mobile), then smaller files first.
+    // Rank: cached first (instant play); then for non-English originals
+    // (anime/foreign) prefer the original/dual audio over a foreign dub; then
+    // prefer 1080p (streams smoothly, decodes on any phone; 4K remuxes are huge
+    // and often won't decode on mobile), then smaller files first.
     entries.sort((a, b) {
       if (a.$1 != b.$1) return a.$1 ? -1 : 1;
+      final aa = _audioRank(a.$4.releaseName ?? '', originalLang);
+      final ab = _audioRank(b.$4.releaseName ?? '', originalLang);
+      if (aa != ab) return aa.compareTo(ab);
       final ra = _autoPref(a.$2);
       final rb = _autoPref(b.$2);
       if (ra != rb) return ra.compareTo(rb);
@@ -179,6 +186,40 @@ class StreamSourcesService {
     });
     // Cap to keep the picker manageable.
     return entries.take(20).map((e) => e.$4).toList();
+  }
+
+  /// Audio-language preference for a release name. Lower is better. For an
+  /// English (or unknown) original there's no preference, so everything is 1
+  /// and the audio step has no effect. For a non-English original (anime is
+  /// "ja"): original/dual audio = 0 (best), an obvious foreign dub = 2 (worst),
+  /// everything else = 1.
+  int _audioRank(String releaseName, String? originalLang) {
+    final lang = (originalLang ?? '').toLowerCase();
+    if (lang.isEmpty || lang == 'en') return 1;
+    final n = releaseName.toLowerCase();
+    final origTags = _origLangTags(lang);
+    if (n.contains('dual') || n.contains('multi') || origTags.any(n.contains)) return 0;
+    const foreignDub = [
+      'spanish', 'latino', 'castellano', 'espanol', 'español', 'italian', 'ita',
+      'german', 'deutsch', 'french', 'truefrench', 'vff', 'hindi', 'dublado',
+      'dubbed', 'dub)', 'dub]', 'dub ',
+    ];
+    if (foreignDub.any(n.contains)) return 2;
+    return 1;
+  }
+
+  /// Release-name tags that indicate a title's original-language audio.
+  List<String> _origLangTags(String lang) {
+    switch (lang) {
+      case 'ja':
+        return const ['jpn', 'japanese', 'jap'];
+      case 'ko':
+        return const ['kor', 'korean'];
+      case 'zh':
+        return const ['chi', 'zho', 'chinese', 'mandarin', 'cantonese'];
+      default:
+        return [lang];
+    }
   }
 
   /// The raw release/torrent title, used to match a synced subtitle. Comet
