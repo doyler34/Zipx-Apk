@@ -631,10 +631,12 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     final cur = _player.state.track.audio;
     var audios = _player.state.tracks.audio.toList();
     if (_isAnime) {
-      // Anime: only the main language (Japanese) then English - nothing else.
-      final jp = audios.where((t) => _audioLangIs(t, _langAliases('ja'))).toList();
+      // Anime: only the main language (Japanese/Korean) then English - nothing
+      // else.
+      final mainAliases = _langAliases((_originalLang ?? '').toLowerCase());
+      final main = audios.where((t) => _audioLangIs(t, mainAliases)).toList();
       final en = audios.where((t) => _audioLangIs(t, _langAliases('en'))).toList();
-      audios = [...jp, ...en];
+      audios = [...main, ...en];
     }
     _pickFromSheet('Audio', [
       for (final t in audios) _Choice(_audioLabel(t), t.id == cur.id, () => _player.setAudioTrack(t)),
@@ -649,9 +651,12 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     ]);
   }
 
-  /// Anime = a Japanese-original title. For these we restrict tracks to the
-  /// main language (Japanese) + English only.
-  bool get _isAnime => (_originalLang ?? '').toLowerCase() == 'ja';
+  /// Anime = a Japanese- or Korean-original title. For these we restrict tracks
+  /// to the main language (Japanese/Korean) + English only.
+  bool get _isAnime {
+    final l = (_originalLang ?? '').toLowerCase();
+    return l == 'ja' || l == 'ko';
+  }
 
   bool _isEnglishTrack(SubtitleTrack t) {
     final lang = (t.language ?? '').toLowerCase();

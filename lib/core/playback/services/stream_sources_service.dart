@@ -209,11 +209,14 @@ class StreamSourcesService {
     // A dub in a language that's neither the original nor English. Full words
     // only (no short tokens like "ita" that match "capital"), and NOT generic
     // "dubbed"/"dub" so an English dub isn't mistaken for a foreign one.
+    // The original language is matched first (origTags -> 0), so listing both
+    // 'japanese' and 'korean' here only excludes them when they're NOT the
+    // original (e.g. a Japanese dub of a Korean title).
     const foreignDub = [
       'spanish', 'latino', 'castellano', 'espanol', 'español', 'italian',
       'german', 'deutsch', 'french', 'truefrench', 'hindi', 'dublado',
-      'russian', 'polish', 'portuguese', 'korean', 'thai', 'tamil', 'telugu',
-      'arabic', 'turkish',
+      'russian', 'polish', 'portuguese', 'korean', 'japanese', 'jpn', 'thai',
+      'tamil', 'telugu', 'arabic', 'turkish',
     ];
     if (foreignDub.any(n.contains)) return 2;
     return 1;
