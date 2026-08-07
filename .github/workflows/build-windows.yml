@@ -35,8 +35,10 @@ jobs:
         run: flutter config --enable-windows-desktop
 
       # Generate the windows/ runner project for this app (not committed).
+      # --project-name is required: the checkout folder ("Zipx-Apk") isn't a
+      # valid Dart package name, so use the pubspec name instead.
       - name: Scaffold Windows project
-        run: flutter create --platforms=windows .
+        run: flutter create --platforms=windows --project-name movie_bloc_app .
 
       - name: Install dependencies
         run: flutter pub get
