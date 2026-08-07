@@ -1,0 +1,44 @@
+name: Cleanup old runs
+
+# One-shot maintenance workflow: deletes old Actions run history to declutter
+# the Actions tab, keeping only the most-recent N runs. Manual trigger only
+# (never runs on push), and safe to delete once you've used it.
+#
+# How to use: Actions tab -> "Cleanup old runs" -> "Run workflow" -> set how
+# many recent runs to keep -> Run. Then delete this file.
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: 'Number of most-recent runs to keep (deletes all older ones)'
+        default: '10'
+        required: true
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          KEEP: ${{ github.event.inputs.keep }}
+        run: |
+          set -euo pipefail
+          # Newest-first list of every run ID in the repo.
+          gh api "repos/$REPO/actions/runs?per_page=100" --paginate \
+            -q '.workflow_runs[].id' > runs.txt
+          total=$(wc -l < runs.txt || echo 0)
+          echo "Found $total runs; keeping the newest $KEEP."
+          # Skip the newest KEEP, delete everything older. The currently-running
+          # cleanup run can't delete itself, so failures there are ignored.
+          tail -n +$((KEEP + 1)) runs.txt | while read -r id; do
+            echo "Deleting run $id"
+            gh api -X DELETE "repos/$REPO/actions/runs/$id" || echo "  (skipped $id)"
+          done
+          echo "Cleanup complete."
