@@ -289,16 +289,19 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     final embedded = _player.state.tracks.subtitle
         .where((t) => t.id != 'no' && t.id != 'auto' && _isEnglishTrack(t))
         .toList();
+    // Only a FULL track is worth auto-enabling. A "forced/narrative" track only
+    // translates on-screen signs, not the dialogue - it shows nothing for most
+    // of an episode, so never auto-pick it (the user can still choose it).
     final full = embedded.where((t) => !_isForcedOrNarrative(t)).toList();
-    final pick = full.isNotEmpty ? full.first : (embedded.isNotEmpty ? embedded.first : null);
-    if (pick != null) {
+    if (full.isNotEmpty) {
       _subsAutoEnabled = true;
-      _player.setSubtitleTrack(pick);
+      _player.setSubtitleTrack(full.first);
       return;
     }
 
-    // 2) No embedded English track. Fall back to an online sub - but ONLY once
-    //    the file's tracks have actually parsed. Online subs often arrive before
+    // 2) No FULL embedded English track (only Forced, or none). Fall back to an
+    //    online sub - but ONLY once the file's tracks have actually parsed.
+    //    Online subs often arrive before
     //    mpv finishes reading the MKV's embedded tracks; applying them early
     //    would beat (and lock out) a perfectly good embedded track. If tracks
     //    aren't ready yet, bail without arming - the tracks listener re-runs
@@ -693,6 +696,12 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   String _subLabel(SubtitleTrack t) {
     if (t.id == 'no') return 'Off';
     if (t.id == 'auto') return 'Auto';
+    // English tracks are often muxed with a foreign label ("Inglese", "Anglais"),
+    // even though their language code is `eng`. Normalise those to just
+    // "English" so the picker never shows a confusing foreign name.
+    if (_isEnglishTrack(t)) {
+      return _isForcedOrNarrative(t) ? 'English (Forced)' : 'English';
+    }
     return _trackName(t.title, t.language) ?? 'Subtitle ${t.id}';
   }
 
