@@ -333,12 +333,17 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
 
   void _goFallback() {
     if (!mounted) return;
-    if (kDisableWebFallback || _isDesktop) {
+    // Anime: don't auto-drop to the VidSrc WebView - it rarely has anime, so it
+    // just shows a broken player. Show a clean message instead (the user can
+    // still force the web player manually from the error screen).
+    if (kDisableWebFallback || _isDesktop || _isAnime) {
       setState(() {
         _stage = _Stage.error;
-        _error = _sources.isEmpty
-            ? 'Native streaming found NO playable source for this title.\n\n(Expected for unreleased / very new titles.)'
-            : 'The backend returned ${_sources.length} native source(s), but none would open.';
+        _error = _isAnime
+            ? 'No cached anime source found for this episode.\n\nAnime plays from Real-Debrid / Torii cached torrents - this one isn\'t cached yet.'
+            : _sources.isEmpty
+                ? 'Native streaming found NO playable source for this title.\n\n(Expected for unreleased / very new titles.)'
+                : 'The backend returned ${_sources.length} native source(s), but none would open.';
       });
       return;
     }
