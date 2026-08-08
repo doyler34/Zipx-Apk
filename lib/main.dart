@@ -41,6 +41,8 @@ Future<void> main() async {
   await Hive.openBox('favourites');
   // Remembers which titles have no streams, so browsing can hide dead-ends.
   await Hive.openBox('stream_availability');
+  // User-configurable extra anime Stremio addon URLs (queried alongside Comet).
+  await Hive.openBox('anime_addons');
 
   await initDependencyInjection();
   await sl<ProviderPreferencesService>().initialize();

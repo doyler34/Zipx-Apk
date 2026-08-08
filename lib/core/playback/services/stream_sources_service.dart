@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import '../../dependency_injection/di.dart';
 import '../domain/entities/playback_request.dart';
 import '../domain/entities/stream_source.dart';
+import 'anime_addons_service.dart';
 import 'stream_availability_service.dart';
 
 /// Resolves a [PlaybackRequest] into a ranked list of directly-playable
@@ -48,31 +49,95 @@ class StreamSourcesService {
   }
 
   Future<List<StreamSource>> _fetchSources(PlaybackRequest request) async {
-    // 1) Comet / Real-Debrid first (best: direct, ad-free, new releases).
-    var comet = <StreamSource>[];
-    try {
-      final imdb = await _imdbId(request);
-      if (imdb != null && imdb.isNotEmpty) {
-        // Original language lets us rank anime/foreign sources by audio
-        // (prefer original / dual audio over a foreign dub).
-        final origLang = await originalLanguage(request);
-        comet = await _fetchComet(request, imdb, origLang);
+    // Resolve the IMDb id (Comet + IMDb-scheme addons need it) and the original
+    // language (drives anime detection + audio ranking) up front, in parallel.
+    final meta = await Future.wait([
+      _imdbId(request).catchError((_) => null),
+      originalLanguage(request).catchError((_) => null),
+    ]);
+    final imdb = meta[0];
+    final origLang = meta[1];
+    final l = (origLang ?? '').toLowerCase();
+    final isAnime = l == 'ja' || l == 'ko';
+
+    Future<List<StreamSource>> comet() async {
+      if (imdb == null || imdb.isEmpty) return const [];
+      try {
+        return await _fetchComet(request, imdb, origLang);
+      } catch (_) {
+        return const [];
       }
-    } catch (_) {
-      // ignore - fall through to the free scrapers
     }
 
-    // If Real-Debrid already has it, return immediately and DON'T wait on the
-    // slower free-scraper backend - this is the big speedup for the common
-    // (popular title) case.
-    if (comet.isNotEmpty) return comet;
+    // Anime: query Comet AND the configured anime addons together, then merge -
+    // more sources for anime, older shows and niche content. Each provider is
+    // isolated, so a failing/absent anime addon never affects Comet.
+    if (isAnime) {
+      final results = await Future.wait([comet(), _fetchAnimeAddons(request, imdb, origLang)]);
+      final merged = _dedup([...results[0], ...results[1]]);
+      if (merged.isNotEmpty) return merged;
+      // Nothing from either - fall back to the free scrapers (often subbed).
+      try {
+        return await _fetchEmbed(request);
+      } catch (_) {
+        return const [];
+      }
+    }
 
-    // 2) Only if Real-Debrid came up empty, fall back to the free scrapers.
+    // Non-anime: keep the existing fast path - if Real-Debrid already has it,
+    // return immediately without waiting on the slower free-scraper backend.
+    final cometOnly = await comet();
+    if (cometOnly.isNotEmpty) return cometOnly;
     try {
       return await _fetchEmbed(request);
     } catch (_) {
       return const [];
     }
+  }
+
+  /// Queries every configured anime addon in parallel, each fully isolated so
+  /// one being slow/down/absent can't affect Comet or the others. Returns the
+  /// combined list (deduped + capped by the caller).
+  Future<List<StreamSource>> _fetchAnimeAddons(
+      PlaybackRequest request, String? imdb, String? originalLang) async {
+    final addons = sl<AnimeAddonsService>().addons();
+    if (addons.isEmpty) return const [];
+    final results = await Future.wait(addons.map((a) async {
+      try {
+        return await _fetchStremioAddon(a, request, imdb, originalLang);
+      } catch (_) {
+        return const <StreamSource>[];
+      }
+    }));
+    return results.expand((e) => e).toList();
+  }
+
+  /// Fetches one extra Stremio addon using the standard `/stream/...` protocol
+  /// (same shape Comet returns). IMDb-scheme addons reuse the app's IMDb id;
+  /// kitsu-scheme addons are skipped until the Stage-2 id mapping lands.
+  Future<List<StreamSource>> _fetchStremioAddon(
+      StremioAddon addon, PlaybackRequest request, String? imdb, String? originalLang) async {
+    if (addon.idScheme != AddonIdScheme.imdb) return const [];
+    if (imdb == null || imdb.isEmpty) return const [];
+    final type = request.isTvEpisode ? 'series' : 'movie';
+    final id = request.isTvEpisode ? '$imdb:${request.seasonNumber}:${request.episodeNumber}' : imdb;
+    final response = await _dio.get(
+      '${addon.baseUrl}/stream/$type/$id.json',
+      options: Options(responseType: ResponseType.plain, receiveTimeout: const Duration(seconds: 20)),
+    );
+    final decoded = response.data is String ? jsonDecode(response.data as String) : response.data;
+    return _parseStremioStreams(decoded, provider: addon.name, originalLang: originalLang).take(15).toList();
+  }
+
+  /// Merges provider results, dropping duplicate stream URLs while preserving
+  /// order (Comet first), and caps the list so the picker stays manageable.
+  List<StreamSource> _dedup(List<StreamSource> sources) {
+    final seen = <String>{};
+    final out = <StreamSource>[];
+    for (final s in sources) {
+      if (s.url.isNotEmpty && seen.add(s.url)) out.add(s);
+    }
+    return out.take(30).toList();
   }
 
   // ---------------------------------------------------------------------------
@@ -154,6 +219,15 @@ class StreamSourcesService {
     );
 
     final decoded = response.data is String ? jsonDecode(response.data as String) : response.data;
+    return _parseStremioStreams(decoded, provider: 'Real-Debrid', originalLang: originalLang).take(20).toList();
+  }
+
+  /// Parses a Stremio `/stream` response (`{streams:[...]}`) into ranked,
+  /// playable [StreamSource]s. Shared by Comet and the extra anime addons since
+  /// they all speak the same protocol. Drops junk/cams (< 720p), and for a
+  /// non-English original hides foreign-dub releases; ranks cached-first, then
+  /// original/dual audio, then 1080p, then smaller files.
+  List<StreamSource> _parseStremioStreams(dynamic decoded, {required String provider, String? originalLang}) {
     if (decoded is! Map || decoded['streams'] is! List) return const [];
 
     // (cached, resolution, sizeGB, source) so we can rank before dropping the
@@ -164,38 +238,35 @@ class StreamSourcesService {
       final url = (raw['url'] ?? '').toString();
       if (url.isEmpty) continue;
       final name = (raw['name'] ?? '').toString();
-      final description = (raw['description'] ?? '').toString();
+      final description = (raw['description'] ?? raw['title'] ?? '').toString();
       if (_isBad('$url $name $description')) continue;
       // A real WEB-DL/BluRay release always carries a resolution tag. Cams and
-      // junk that the ranker couldn't classify come through as "unknown" (the
-      // "0p" we saw on the Spider-Man cam), so require a proper resolution.
+      // junk that the ranker couldn't classify come through as "unknown", so
+      // require a proper resolution.
       final res = _resolution('$name $description');
       if (res < 720) continue;
-      // Comet marks Real-Debrid-cached (instant-play) results with a ⚡. An
-      // UNcached one makes RD download the torrent first, which just hangs -
-      // so cached results must sort first.
+      // Cached (⚡) results are instant-play; an uncached one makes RD download
+      // the torrent first, which hangs - so cached must sort first.
       final cached = name.contains('⚡') || name.toLowerCase().contains('cached');
       entries.add((cached, res, _sizeGb(description), StreamSource(
         title: _cometLabel(name, description),
         url: url,
         quality: '${res}p',
-        provider: 'Real-Debrid',
+        provider: provider,
         headers: const {},
         releaseName: _releaseName(name, description),
       )));
     }
 
     // For a non-English original (anime/foreign): hide foreign-dub sources
-    // entirely - keep only the original/dual audio and any English dub. If none
-    // remain, the caller falls back to the scrapers (often the subbed original).
+    // entirely - keep only the original/dual audio and any English dub.
     final foreignOriginal = (originalLang ?? '').isNotEmpty && originalLang!.toLowerCase() != 'en';
     if (foreignOriginal) {
       entries.retainWhere((e) => _audioRank(e.$4.releaseName ?? '', originalLang) != 2);
     }
 
-    // Rank: cached first (instant play); then prefer the original/dual audio;
-    // then prefer 1080p (streams smoothly, decodes on any phone; 4K remuxes are
-    // huge and often won't decode on mobile), then smaller files first.
+    // Rank: cached first (instant play); then prefer original/dual audio; then
+    // 1080p (streams smoothly on any phone), then smaller files first.
     entries.sort((a, b) {
       if (a.$1 != b.$1) return a.$1 ? -1 : 1;
       final aa = _audioRank(a.$4.releaseName ?? '', originalLang);
@@ -206,8 +277,7 @@ class StreamSourcesService {
       if (ra != rb) return ra.compareTo(rb);
       return a.$3.compareTo(b.$3);
     });
-    // Cap to keep the picker manageable.
-    return entries.take(20).map((e) => e.$4).toList();
+    return entries.map((e) => e.$4).toList();
   }
 
   /// Audio-language preference for a release name. Lower is better. For an
