@@ -61,57 +61,44 @@ class StreamSourcesService {
     final l = (origLang ?? '').toLowerCase();
     final isAnime = l == 'ja' || l == 'ko';
 
-    Future<List<StreamSource>> comet() async {
-      if (imdb == null || imdb.isEmpty) return const [];
+    // 1) Comet first. A cached hit is the fast path - the common case for
+    //    popular titles - so play it immediately WITHOUT waiting on the slower
+    //    scraper-based providers (Torii / MediaFusion / embed scrapers).
+    if (imdb != null && imdb.isNotEmpty) {
       try {
-        return await _fetchComet(request, imdb, origLang);
+        final comet = await _fetchComet(request, imdb, origLang);
+        if (comet.isNotEmpty) return comet;
       } catch (_) {
-        return const [];
+        // ignore - fall through to the fan-out
       }
     }
 
-    // Anime: query Comet AND the configured anime addons together, then merge -
-    // more sources for anime, older shows and niche content. Each provider is
-    // isolated, so a failing/absent anime addon never affects Comet.
-    if (isAnime) {
-      final results = await Future.wait([comet(), _fetchAnimeAddons(request, imdb, origLang)]);
-      final merged = _dedup([...results[0], ...results[1]]);
-      if (merged.isNotEmpty) return merged;
-      // Nothing from either - fall back to the free scrapers (often subbed).
-      try {
-        return await _fetchEmbed(request);
-      } catch (_) {
-        return const [];
-      }
-    }
-
-    // Non-anime: keep the existing fast path - if Real-Debrid already has it,
-    // return immediately without waiting on the slower free-scraper backend.
-    final cometOnly = await comet();
-    if (cometOnly.isNotEmpty) return cometOnly;
-    try {
-      return await _fetchEmbed(request);
-    } catch (_) {
-      return const [];
-    }
+    // 2) Comet missed (niche / older / anime it can't number). Only NOW fan out
+    //    to the extra addons and the free scrapers - all in parallel, each fully
+    //    isolated - and merge whatever comes back. Adding more providers costs
+    //    nothing on the fast path; it only ever runs when Comet came up empty.
+    final results = await Future.wait([
+      _fetchExtraAddons(request, imdb, origLang, isAnime),
+      _fetchEmbed(request).catchError((_) => const <StreamSource>[]),
+    ]);
+    return _dedup([...results[0], ...results[1]]);
   }
 
-  /// Queries every configured anime addon in parallel, each fully isolated so
-  /// one being slow/down/absent can't affect Comet or the others. Returns the
-  /// combined list (deduped + capped by the caller).
-  ///
-  /// Anime addons key on Kitsu/MAL/AniList ids + absolute episodes, so the TMDB
-  /// id is mapped first; the IMDb id is kept as a last-resort fallback.
-  Future<List<StreamSource>> _fetchAnimeAddons(
-      PlaybackRequest request, String? imdb, String? originalLang) async {
-    final addons = sl<AnimeAddonsService>().addons();
+  /// Queries every configured extra addon (Torii, MediaFusion, ...) in parallel,
+  /// each fully isolated so one being slow/down/absent can't affect the others.
+  /// Anime-only addons are skipped for non-anime titles. Anime uses the mapped
+  /// Kitsu/MAL/AniList ids (absolute episode); everything else uses the IMDb id.
+  Future<List<StreamSource>> _fetchExtraAddons(
+      PlaybackRequest request, String? imdb, String? originalLang, bool isAnime) async {
+    var addons = sl<AnimeAddonsService>().addons();
+    if (!isAnime) addons = addons.where((a) => !a.animeOnly).toList();
     if (addons.isEmpty) return const [];
 
-    final ids = await _animeStreamIds(request, imdb);
+    final ids = isAnime ? await _animeStreamIds(request, imdb) : _imdbIds(request, imdb);
     if (ids.isEmpty) return const [];
 
     final results = await Future.wait(addons.map((addon) async {
-      // Try each id (kitsu -> anilist -> mal -> imdb) until one returns sources.
+      // Try each id in turn until one returns sources for this addon.
       for (final id in ids) {
         try {
           final r = await _fetchAddonById(addon, request.isTvEpisode, id, originalLang);
@@ -123,6 +110,12 @@ class StreamSourcesService {
       return const <StreamSource>[];
     }));
     return results.expand((e) => e).toList();
+  }
+
+  /// The plain IMDb content id for non-anime addons (`tt…:s:e` for series).
+  List<String> _imdbIds(PlaybackRequest request, String? imdb) {
+    if (imdb == null || imdb.isEmpty) return const [];
+    return [request.isTvEpisode ? '$imdb:${request.seasonNumber}:${request.episodeNumber}' : imdb];
   }
 
   /// Builds the ordered list of content ids to try against anime addons:

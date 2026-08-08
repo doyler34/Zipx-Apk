@@ -17,6 +17,7 @@ class StremioAddon {
     required this.name,
     required this.baseUrl,
     this.idScheme = AddonIdScheme.imdb,
+    this.animeOnly = false,
   });
 
   /// Shown as the source's provider label in the picker.
@@ -27,6 +28,10 @@ class StremioAddon {
   final String baseUrl;
 
   final AddonIdScheme idScheme;
+
+  /// True for anime-specialised addons (Torii): only queried for anime titles,
+  /// so non-anime playback never pays for a request that returns nothing.
+  final bool animeOnly;
 }
 
 /// The configurable list of anime-focused Stremio addons that are queried in
@@ -37,29 +42,33 @@ class AnimeAddonsService {
   static const String boxName = 'anime_addons';
   static const String _urlsKey = 'urls';
 
-  /// Self-hosted Torii base URL (everything before `/manifest.json`), injected
-  /// at build time via `--dart-define=TORII_ADDON_URL=...` so the URL - which
-  /// carries the Real-Debrid key - stays out of source control. Empty in a
-  /// plain local build, which just means Torii isn't queried.
+  /// Base URLs (everything before `/manifest.json`) injected at build time via
+  /// `--dart-define`, so URLs carrying the Real-Debrid key stay out of source
+  /// control. Empty in a plain local build (that provider just isn't queried).
   static const String _toriiUrl = String.fromEnvironment('TORII_ADDON_URL');
+  static const String _mediaFusionUrl = String.fromEnvironment('MEDIAFUSION_ADDON_URL');
 
   Box get _box => Hive.box(boxName);
 
-  /// The Torii build-time addon plus any user-added addon URLs (all IMDb-scheme
-  /// for now). Trailing slashes are normalised so path building stays correct.
+  static String _clean(String url) => url.trim().replaceAll(RegExp(r'/+$'), '');
+
+  /// The build-time addons (Torii = anime-only; MediaFusion = all content) plus
+  /// any user-added addon URLs. Trailing slashes are normalised.
   List<StremioAddon> addons() {
     final out = <StremioAddon>[];
-    final torii = _toriiUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    final torii = _clean(_toriiUrl);
     if (torii.isNotEmpty) {
-      out.add(StremioAddon(name: 'Torii', baseUrl: torii));
+      out.add(StremioAddon(name: 'Torii', baseUrl: torii, animeOnly: true));
+    }
+    final mediaFusion = _clean(_mediaFusionUrl);
+    if (mediaFusion.isNotEmpty) {
+      out.add(StremioAddon(name: 'MediaFusion', baseUrl: mediaFusion));
     }
     final raw = _box.get(_urlsKey);
     if (raw is List) {
       for (final u in raw) {
-        final url = u.toString().trim().replaceAll(RegExp(r'/+$'), '');
-        if (url.isNotEmpty) {
-          out.add(StremioAddon(name: 'Anime addon', baseUrl: url));
-        }
+        final url = _clean(u.toString());
+        if (url.isNotEmpty) out.add(StremioAddon(name: 'Addon', baseUrl: url));
       }
     }
     return out;
