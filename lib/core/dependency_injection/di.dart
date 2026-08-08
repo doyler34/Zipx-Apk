@@ -12,6 +12,7 @@ import 'package:movie_bloc_app/core/playback/services/playback_provider_service.
 import 'package:movie_bloc_app/core/playback/services/anime_addons_service.dart';
 import 'package:movie_bloc_app/core/playback/services/anime_id_mapper.dart';
 import 'package:movie_bloc_app/core/playback/services/provider_preferences_service.dart';
+import 'package:movie_bloc_app/core/playback/services/real_debrid_service.dart';
 import 'package:movie_bloc_app/core/playback/services/stream_availability_service.dart';
 import 'package:movie_bloc_app/core/playback/services/stream_sources_service.dart';
 import 'package:movie_bloc_app/core/playback/services/subtitle_service.dart';
@@ -76,6 +77,7 @@ Future initDependencyInjection() async {
   sl.registerLazySingleton<StreamAvailabilityService>(() => StreamAvailabilityService());
   sl.registerLazySingleton<AnimeAddonsService>(() => AnimeAddonsService());
   sl.registerLazySingleton<AnimeIdMapper>(() => AnimeIdMapper(sl<Dio>()));
+  sl.registerLazySingleton<RealDebridService>(() => RealDebridService(sl<Dio>()));
   sl.registerLazySingleton<StreamSourcesService>(() => StreamSourcesService(sl<Dio>()));
   sl.registerLazySingleton<SubtitleService>(() => SubtitleService(sl<Dio>()));
   sl.registerLazySingleton<FavouriteService>(() => FavouriteService());

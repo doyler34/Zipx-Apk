@@ -262,12 +262,12 @@ class StreamSourcesService {
   /// they all speak the same protocol. Drops junk/cams (< 720p), and for a
   /// non-English original hides foreign-dub releases; ranks cached-first, then
   /// original/dual audio, then 1080p, then smaller files.
-  List<StreamSource> _parseStremioStreams(dynamic decoded, {required String provider, String? originalLang}) {
+  List<StreamSource> _parseStremioStreams(dynamic decoded,
+      {required String provider, String? originalLang, bool uncachedOnly = false}) {
     if (decoded is! Map || decoded['streams'] is! List) return const [];
 
-    // (cached, resolution, sizeGB, source) so we can rank before dropping the
-    // extra fields.
-    final entries = <(bool, int, double, StreamSource)>[];
+    // (cached, resolution, sizeGB, isBatch, seeders, source) for ranking.
+    final entries = <(bool, int, double, bool, int, StreamSource)>[];
     for (final raw in decoded['streams'] as List) {
       if (raw is! Map) continue;
       final url = (raw['url'] ?? '').toString();
@@ -275,15 +275,10 @@ class StreamSourcesService {
       final name = (raw['name'] ?? '').toString();
       final description = (raw['description'] ?? raw['title'] ?? '').toString();
       if (_isBad('$url $name $description')) continue;
-      // A real WEB-DL/BluRay release always carries a resolution tag. Cams and
-      // junk that the ranker couldn't classify come through as "unknown", so
-      // require a proper resolution.
       final res = _resolution('$name $description');
       if (res < 720) continue;
-      // Cached results are instant-play; an uncached one makes RD download the
-      // torrent first, which just hangs the player. Torii marks cache state with
-      // an explicit `_isCached` flag (in behaviorHints); Comet/Torrentio use a
-      // ⚡/"cached" marker in the name. Prefer the explicit flag when present.
+      // Torii marks cache state with an explicit `_isCached` flag (in
+      // behaviorHints); Comet/Torrentio use a ⚡/"cached" name marker.
       final bh = raw['behaviorHints'];
       final bool cached;
       if (bh is Map && bh.containsKey('_isCached')) {
@@ -294,13 +289,17 @@ class StreamSourcesService {
         final blob = '$name $description'.toLowerCase();
         cached = name.contains('⚡') || blob.contains('cached') || blob.contains('instant');
       }
-      entries.add((cached, res, _sizeGb(description), StreamSource(
+      final isBatch = bh is Map && bh['_isBatch'] == true;
+      final seeders = (bh is Map && bh['_seeders'] is num) ? (bh['_seeders'] as num).toInt() : 0;
+      entries.add((cached, res, _sizeGb(description), isBatch, seeders, StreamSource(
         title: _cometLabel(name, description),
         url: url,
         quality: '${res}p',
         provider: provider,
         headers: const {},
         releaseName: _releaseName(name, description),
+        infohash: _infohash(raw, bh),
+        cached: cached,
       )));
     }
 
@@ -308,29 +307,84 @@ class StreamSourcesService {
     // entirely - keep only the original/dual audio and any English dub.
     final foreignOriginal = (originalLang ?? '').isNotEmpty && originalLang!.toLowerCase() != 'en';
     if (foreignOriginal) {
-      entries.retainWhere((e) => _audioRank(e.$4.releaseName ?? '', originalLang) != 2);
+      entries.retainWhere((e) => _audioRank(e.$6.releaseName ?? '', originalLang) != 2);
     }
 
-    // Never offer uncached sources: an uncached Real-Debrid stream isn't ready
-    // (RD would have to download the torrent first) and just hangs the player
-    // for the full timeout. Drop them entirely - if that leaves nothing, the
-    // caller falls back fast (scrapers / VidSrc) instead of stalling on a source
-    // that can't play.
-    entries.retainWhere((e) => e.$1);
+    if (uncachedOnly) {
+      // Uncached candidates we could actually prepare (need an infohash). Rank
+      // by fastest-to-cache: single episodes before batches, then most seeders,
+      // then smallest file.
+      entries.retainWhere((e) => !e.$1 && (e.$6.infohash?.isNotEmpty ?? false));
+      entries.sort((a, b) {
+        if (a.$4 != b.$4) return a.$4 ? 1 : -1;
+        if (a.$5 != b.$5) return b.$5.compareTo(a.$5);
+        return a.$3.compareTo(b.$3);
+      });
+      return entries.map((e) => e.$6).toList();
+    }
 
-    // Rank: cached first (instant play); then prefer original/dual audio; then
-    // 1080p (streams smoothly on any phone), then smaller files first.
+    // Play path: never offer uncached sources - an uncached RD stream isn't
+    // ready and just hangs the player, so drop them (caller falls back fast).
+    entries.retainWhere((e) => e.$1);
+    // Rank: cached first; then original/dual audio; then 1080p; then smaller.
     entries.sort((a, b) {
       if (a.$1 != b.$1) return a.$1 ? -1 : 1;
-      final aa = _audioRank(a.$4.releaseName ?? '', originalLang);
-      final ab = _audioRank(b.$4.releaseName ?? '', originalLang);
+      final aa = _audioRank(a.$6.releaseName ?? '', originalLang);
+      final ab = _audioRank(b.$6.releaseName ?? '', originalLang);
       if (aa != ab) return aa.compareTo(ab);
       final ra = _autoPref(a.$2);
       final rb = _autoPref(b.$2);
       if (ra != rb) return ra.compareTo(rb);
       return a.$3.compareTo(b.$3);
     });
-    return entries.map((e) => e.$4).toList();
+    return entries.map((e) => e.$6).toList();
+  }
+
+  /// Extracts the 40-hex torrent infohash from a Stremio stream: the standard
+  /// `infoHash` field, or Torii's `behaviorHints.bingeGroup` ("..._<40hex>").
+  String? _infohash(Map raw, dynamic bh) {
+    final direct = raw['infoHash'];
+    if (direct is String && RegExp(r'^[a-fA-F0-9]{40}$').hasMatch(direct)) {
+      return direct.toLowerCase();
+    }
+    if (bh is Map) {
+      final m = RegExp(r'[a-fA-F0-9]{40}').firstMatch((bh['bingeGroup'] ?? '').toString());
+      if (m != null) return m.group(0)!.toLowerCase();
+    }
+    return null;
+  }
+
+  /// The best uncached anime source to "prepare" (cache on Real-Debrid), or
+  /// null. Prefers single-episode torrents so caching is fast. Only used by the
+  /// opt-in "prepare episode" flow when there's no cached source.
+  Future<StreamSource?> bestUncachedAnime(PlaybackRequest request) async {
+    try {
+      final meta = await Future.wait([
+        _imdbId(request).catchError((_) => null),
+        originalLanguage(request).catchError((_) => null),
+      ]);
+      final ids = await _animeStreamIds(request, meta[0]);
+      if (ids.isEmpty) return null;
+      for (final addon in sl<AnimeAddonsService>().addons()) {
+        for (final id in ids) {
+          try {
+            final type = request.isTvEpisode ? 'series' : 'movie';
+            final resp = await _dio.get(
+              '${addon.baseUrl}/stream/$type/$id.json',
+              options: Options(responseType: ResponseType.plain, receiveTimeout: const Duration(seconds: 20)),
+            );
+            final decoded = resp.data is String ? jsonDecode(resp.data as String) : resp.data;
+            final unc = _parseStremioStreams(decoded, provider: addon.name, originalLang: meta[1], uncachedOnly: true);
+            if (unc.isNotEmpty) return unc.first;
+          } catch (_) {
+            // isolated - try the next id/addon
+          }
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Audio-language preference for a release name. Lower is better. For an

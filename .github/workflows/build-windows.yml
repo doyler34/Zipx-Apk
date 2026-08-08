@@ -46,7 +46,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Windows (release)
-        run: flutter build windows --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }} --dart-define=TORII_ADDON_URL=${{ secrets.TORII_ADDON_URL }}
+        run: flutter build windows --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }} --dart-define=TORII_ADDON_URL=${{ secrets.TORII_ADDON_URL }} --dart-define=REAL_DEBRID_TOKEN=${{ secrets.REAL_DEBRID_TOKEN }}
 
       - name: Package build
         shell: pwsh

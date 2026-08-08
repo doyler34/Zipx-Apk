@@ -9,7 +9,19 @@ class StreamSource {
     required this.provider,
     required this.headers,
     this.releaseName,
+    this.infohash,
+    this.cached = true,
   });
+
+  /// The torrent infohash (40-hex), when known - used to cache an uncached
+  /// source on Real-Debrid (the "prepare episode" flow). Null for direct
+  /// (non-torrent) sources.
+  final String? infohash;
+
+  /// Whether this source is already cached on the debrid service (instant-play).
+  /// Uncached sources aren't offered for direct playback (they hang), but their
+  /// infohash can be used to prepare/cache them on demand.
+  final bool cached;
 
   /// Human label, e.g. "1080p" or the release name.
   final String title;
