@@ -280,9 +280,15 @@ class StreamSourcesService {
       // require a proper resolution.
       final res = _resolution('$name $description');
       if (res < 720) continue;
-      // Cached (⚡) results are instant-play; an uncached one makes RD download
-      // the torrent first, which hangs - so cached must sort first.
-      final cached = name.contains('⚡') || name.toLowerCase().contains('cached');
+      // Cached results are instant-play; an uncached one makes RD download the
+      // torrent first, which just hangs the player. Detect the common "cached"
+      // markers across Comet/Torii/other addons.
+      final blob = '$name $description'.toLowerCase();
+      final cached = name.contains('⚡') ||
+          blob.contains('cached') ||
+          blob.contains('instant') ||
+          blob.contains('[rd+]') ||
+          blob.contains('rd+');
       entries.add((cached, res, _sizeGb(description), StreamSource(
         title: _cometLabel(name, description),
         url: url,
@@ -298,6 +304,13 @@ class StreamSourcesService {
     final foreignOriginal = (originalLang ?? '').isNotEmpty && originalLang!.toLowerCase() != 'en';
     if (foreignOriginal) {
       entries.retainWhere((e) => _audioRank(e.$4.releaseName ?? '', originalLang) != 2);
+    }
+
+    // Only offer instant-play (cached) sources when any exist: an uncached RD
+    // stream isn't ready, so it just hangs the player for the full timeout and
+    // then falls through. If nothing is cached, keep what we have as a last try.
+    if (entries.any((e) => e.$1)) {
+      entries.retainWhere((e) => e.$1);
     }
 
     // Rank: cached first (instant play); then prefer original/dual audio; then

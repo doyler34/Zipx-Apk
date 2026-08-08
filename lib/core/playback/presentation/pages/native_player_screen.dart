@@ -372,7 +372,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       final ok = await Future.any(<Future<bool>>[
         _player.stream.duration.firstWhere((d) => d > Duration.zero).then((_) => true),
         _player.stream.error.first.then((_) => false),
-      ]).timeout(const Duration(seconds: 20), onTimeout: () => false);
+      ]).timeout(const Duration(seconds: 10), onTimeout: () => false);
       if (token != _attemptToken || !mounted) return;
 
       if (!ok) {
