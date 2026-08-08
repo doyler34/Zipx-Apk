@@ -37,28 +37,32 @@ class AnimeAddonsService {
   static const String boxName = 'anime_addons';
   static const String _urlsKey = 'urls';
 
-  /// Built-in addons shipped with the app. Add the self-hosted Torii base URL
-  /// here once it's running, e.g.
-  ///   StremioAddon(name: 'Torii', baseUrl: 'http://2.24.98.35:8001/<config>'),
-  /// IMDb-scheme addons work immediately; kitsu-scheme ones wait for Stage 2.
-  static const List<StremioAddon> _defaults = [];
+  /// Self-hosted Torii base URL (everything before `/manifest.json`), injected
+  /// at build time via `--dart-define=TORII_ADDON_URL=...` so the URL - which
+  /// carries the Real-Debrid key - stays out of source control. Empty in a
+  /// plain local build, which just means Torii isn't queried.
+  static const String _toriiUrl = String.fromEnvironment('TORII_ADDON_URL');
 
   Box get _box => Hive.box(boxName);
 
-  /// Defaults plus any user-added addon URLs (treated as IMDb-scheme). A URL
-  /// with a trailing slash is normalised so path building stays correct.
+  /// The Torii build-time addon plus any user-added addon URLs (all IMDb-scheme
+  /// for now). Trailing slashes are normalised so path building stays correct.
   List<StremioAddon> addons() {
-    final extra = <StremioAddon>[];
+    final out = <StremioAddon>[];
+    final torii = _toriiUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    if (torii.isNotEmpty) {
+      out.add(StremioAddon(name: 'Torii', baseUrl: torii));
+    }
     final raw = _box.get(_urlsKey);
     if (raw is List) {
       for (final u in raw) {
         final url = u.toString().trim().replaceAll(RegExp(r'/+$'), '');
         if (url.isNotEmpty) {
-          extra.add(StremioAddon(name: 'Anime addon', baseUrl: url));
+          out.add(StremioAddon(name: 'Anime addon', baseUrl: url));
         }
       }
     }
-    return [..._defaults, ...extra];
+    return out;
   }
 
   /// Replaces the user-added addon URL list (for a future settings screen).
