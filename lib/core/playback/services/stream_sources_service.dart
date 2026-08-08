@@ -38,18 +38,22 @@ class StreamSourcesService {
   static const String _tmdbKey = 'd168cb7e62f9692894c20fdb039ae126';
 
   Future<List<StreamSource>> fetch(PlaybackRequest request) async {
-    final sources = await _fetchSources(request);
-    // Learn availability: a title that returns nothing gets hidden from future
-    // browsing; one that returns sources is remembered as playable.
-    unawaited(sl<StreamAvailabilityService>().record(
-      mediaType: request.mediaType,
-      tmdbId: request.tmdbId,
-      hasStreams: sources.isNotEmpty,
-    ));
+    final (sources, isAnime) = await _fetchSources(request);
+    // Learn availability so dead titles get hidden from browsing - but NEVER
+    // hide anime this way: "no cached source" doesn't mean dead, it just means
+    // it may need preparing (uncached), so anime must stay visible. Only record
+    // a negative for non-anime; a positive (found sources) is always fine.
+    if (!isAnime || sources.isNotEmpty) {
+      unawaited(sl<StreamAvailabilityService>().record(
+        mediaType: request.mediaType,
+        tmdbId: request.tmdbId,
+        hasStreams: sources.isNotEmpty,
+      ));
+    }
     return sources;
   }
 
-  Future<List<StreamSource>> _fetchSources(PlaybackRequest request) async {
+  Future<(List<StreamSource>, bool)> _fetchSources(PlaybackRequest request) async {
     // Resolve the IMDb id (Comet + IMDb-scheme addons need it) and the original
     // language (drives anime detection + audio ranking) up front, in parallel.
     final meta = await Future.wait([
@@ -67,7 +71,7 @@ class StreamSourcesService {
     if (imdb != null && imdb.isNotEmpty) {
       try {
         final comet = await _fetchComet(request, imdb, origLang);
-        if (comet.isNotEmpty) return comet;
+        if (comet.isNotEmpty) return (comet, isAnime);
       } catch (_) {
         // ignore - fall through to the fan-out
       }
@@ -81,7 +85,7 @@ class StreamSourcesService {
       _fetchExtraAddons(request, imdb, origLang, isAnime),
       _fetchEmbed(request).catchError((_) => const <StreamSource>[]),
     ]);
-    return _dedup([...results[0], ...results[1]]);
+    return (_dedup([...results[0], ...results[1]]), isAnime);
   }
 
   /// Queries every configured extra addon (Torii, MediaFusion, ...) in parallel,
