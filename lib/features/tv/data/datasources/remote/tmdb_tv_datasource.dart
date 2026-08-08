@@ -5,6 +5,7 @@ import 'package:movie_bloc_app/core/utils/strings/url_strings.dart';
 import 'package:movie_bloc_app/features/movies/data/models/genre_model.dart';
 
 import '../../models/tv_details_model.dart';
+import '../../models/tv_model.dart';
 import '../../models/tv_result_model.dart';
 import '../../models/tv_season_model.dart';
 
@@ -66,6 +67,9 @@ class TmdbTvDatasource {
 
     return (response.data['genres'] as List? ?? [])
         .map((e) => GenreModel.fromJson(e))
+        // Hide the genres whose shows never have streams (soap/talk/news/reality)
+        // so users don't open an empty category.
+        .where((g) => !TvModel.unstreamableGenreIds.contains(g.id))
         .toList();
   }
 
