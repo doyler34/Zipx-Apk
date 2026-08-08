@@ -281,14 +281,19 @@ class StreamSourcesService {
       final res = _resolution('$name $description');
       if (res < 720) continue;
       // Cached results are instant-play; an uncached one makes RD download the
-      // torrent first, which just hangs the player. Detect the common "cached"
-      // markers across Comet/Torii/other addons.
-      final blob = '$name $description'.toLowerCase();
-      final cached = name.contains('⚡') ||
-          blob.contains('cached') ||
-          blob.contains('instant') ||
-          blob.contains('[rd+]') ||
-          blob.contains('rd+');
+      // torrent first, which just hangs the player. Torii marks cache state with
+      // an explicit `_isCached` flag (in behaviorHints); Comet/Torrentio use a
+      // ⚡/"cached" marker in the name. Prefer the explicit flag when present.
+      final bh = raw['behaviorHints'];
+      final bool cached;
+      if (bh is Map && bh.containsKey('_isCached')) {
+        cached = bh['_isCached'] == true;
+      } else if (raw.containsKey('_isCached')) {
+        cached = raw['_isCached'] == true;
+      } else {
+        final blob = '$name $description'.toLowerCase();
+        cached = name.contains('⚡') || blob.contains('cached') || blob.contains('instant');
+      }
       entries.add((cached, res, _sizeGb(description), StreamSource(
         title: _cometLabel(name, description),
         url: url,
@@ -306,12 +311,12 @@ class StreamSourcesService {
       entries.retainWhere((e) => _audioRank(e.$4.releaseName ?? '', originalLang) != 2);
     }
 
-    // Only offer instant-play (cached) sources when any exist: an uncached RD
-    // stream isn't ready, so it just hangs the player for the full timeout and
-    // then falls through. If nothing is cached, keep what we have as a last try.
-    if (entries.any((e) => e.$1)) {
-      entries.retainWhere((e) => e.$1);
-    }
+    // Never offer uncached sources: an uncached Real-Debrid stream isn't ready
+    // (RD would have to download the torrent first) and just hangs the player
+    // for the full timeout. Drop them entirely - if that leaves nothing, the
+    // caller falls back fast (scrapers / VidSrc) instead of stalling on a source
+    // that can't play.
+    entries.retainWhere((e) => e.$1);
 
     // Rank: cached first (instant play); then prefer original/dual audio; then
     // 1080p (streams smoothly on any phone), then smaller files first.
