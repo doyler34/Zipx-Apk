@@ -7,6 +7,7 @@ import '../../dependency_injection/di.dart';
 import '../domain/entities/playback_request.dart';
 import '../domain/entities/stream_source.dart';
 import 'anime_addons_service.dart';
+import 'anime_id_mapper.dart';
 import 'stream_availability_service.dart';
 
 /// Resolves a [PlaybackRequest] into a ranked list of directly-playable
@@ -98,29 +99,63 @@ class StreamSourcesService {
   /// Queries every configured anime addon in parallel, each fully isolated so
   /// one being slow/down/absent can't affect Comet or the others. Returns the
   /// combined list (deduped + capped by the caller).
+  ///
+  /// Anime addons key on Kitsu/MAL/AniList ids + absolute episodes, so the TMDB
+  /// id is mapped first; the IMDb id is kept as a last-resort fallback.
   Future<List<StreamSource>> _fetchAnimeAddons(
       PlaybackRequest request, String? imdb, String? originalLang) async {
     final addons = sl<AnimeAddonsService>().addons();
     if (addons.isEmpty) return const [];
-    final results = await Future.wait(addons.map((a) async {
-      try {
-        return await _fetchStremioAddon(a, request, imdb, originalLang);
-      } catch (_) {
-        return const <StreamSource>[];
+
+    final ids = await _animeStreamIds(request, imdb);
+    if (ids.isEmpty) return const [];
+
+    final results = await Future.wait(addons.map((addon) async {
+      // Try each id (kitsu -> anilist -> mal -> imdb) until one returns sources.
+      for (final id in ids) {
+        try {
+          final r = await _fetchAddonById(addon, request.isTvEpisode, id, originalLang);
+          if (r.isNotEmpty) return r;
+        } catch (_) {
+          // isolated - move on to the next id / addon
+        }
       }
+      return const <StreamSource>[];
     }));
     return results.expand((e) => e).toList();
   }
 
-  /// Fetches one extra Stremio addon using the standard `/stream/...` protocol
-  /// (same shape Comet returns). IMDb-scheme addons reuse the app's IMDb id;
-  /// kitsu-scheme addons are skipped until the Stage-2 id mapping lands.
-  Future<List<StreamSource>> _fetchStremioAddon(
-      StremioAddon addon, PlaybackRequest request, String? imdb, String? originalLang) async {
-    if (addon.idScheme != AddonIdScheme.imdb) return const [];
-    if (imdb == null || imdb.isEmpty) return const [];
-    final type = request.isTvEpisode ? 'series' : 'movie';
-    final id = request.isTvEpisode ? '$imdb:${request.seasonNumber}:${request.episodeNumber}' : imdb;
+  /// Builds the ordered list of content ids to try against anime addons:
+  /// `kitsu:/anilist:/mal:` (from the TMDB->anime mapping, with absolute-episode
+  /// numbering) first, then the plain IMDb id as a fallback.
+  Future<List<String>> _animeStreamIds(PlaybackRequest request, String? imdb) async {
+    final ids = <String>[];
+    final season = request.seasonNumber ?? 1;
+    final episode = request.episodeNumber ?? 1;
+
+    AnimeMapping? m;
+    try {
+      m = await sl<AnimeIdMapper>().resolve(request.tmdbId, season, episode);
+    } catch (_) {
+      m = null;
+    }
+    if (m != null && m.hasAnyId) {
+      final ep = request.isTvEpisode ? ':${m.episode}' : '';
+      if (m.kitsuId != null) ids.add('kitsu:${m.kitsuId}$ep');
+      if (m.anilistId != null) ids.add('anilist:${m.anilistId}$ep');
+      if (m.malId != null) ids.add('mal:${m.malId}$ep');
+    }
+    if (imdb != null && imdb.isNotEmpty) {
+      ids.add(request.isTvEpisode ? '$imdb:$season:$episode' : imdb);
+    }
+    return ids;
+  }
+
+  /// Fetches one addon for a specific content id via the standard Stremio
+  /// `/stream/{type}/{id}.json` protocol (same shape Comet returns).
+  Future<List<StreamSource>> _fetchAddonById(
+      StremioAddon addon, bool isSeries, String id, String? originalLang) async {
+    final type = isSeries ? 'series' : 'movie';
     final response = await _dio.get(
       '${addon.baseUrl}/stream/$type/$id.json',
       options: Options(responseType: ResponseType.plain, receiveTimeout: const Duration(seconds: 20)),
