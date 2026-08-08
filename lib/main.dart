@@ -39,6 +39,8 @@ Future<void> main() async {
   await Hive.openBox('provider_preferences');
   await Hive.openBox('playback_history');
   await Hive.openBox('favourites');
+  // Remembers which titles have no streams, so browsing can hide dead-ends.
+  await Hive.openBox('stream_availability');
 
   await initDependencyInjection();
   await sl<ProviderPreferencesService>().initialize();

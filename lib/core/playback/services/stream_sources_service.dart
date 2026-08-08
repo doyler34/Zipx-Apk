@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
+import '../../dependency_injection/di.dart';
 import '../domain/entities/playback_request.dart';
 import '../domain/entities/stream_source.dart';
+import 'stream_availability_service.dart';
 
 /// Resolves a [PlaybackRequest] into a ranked list of directly-playable
 /// [StreamSource]s for native, ad-free playback.
@@ -33,6 +36,18 @@ class StreamSourcesService {
   static const String _tmdbKey = 'd168cb7e62f9692894c20fdb039ae126';
 
   Future<List<StreamSource>> fetch(PlaybackRequest request) async {
+    final sources = await _fetchSources(request);
+    // Learn availability: a title that returns nothing gets hidden from future
+    // browsing; one that returns sources is remembered as playable.
+    unawaited(sl<StreamAvailabilityService>().record(
+      mediaType: request.mediaType,
+      tmdbId: request.tmdbId,
+      hasStreams: sources.isNotEmpty,
+    ));
+    return sources;
+  }
+
+  Future<List<StreamSource>> _fetchSources(PlaybackRequest request) async {
     // 1) Comet / Real-Debrid first (best: direct, ad-free, new releases).
     var comet = <StreamSource>[];
     try {
