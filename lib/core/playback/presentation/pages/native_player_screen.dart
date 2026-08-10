@@ -55,6 +55,9 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   String _prepareStatus = '';
   int? _preparePercent;
 
+  /// Diagnostic text for the anime no-source screen (RD/mapping/ids/uncached).
+  String _animeDiag = '';
+
   final Player _player = Player();
   // Created eagerly in initState (NOT lazily): the video output must be
   // attached to the player before the first open(), otherwise you get audio
@@ -354,9 +357,9 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
                 ? 'Native streaming found NO playable source for this title.\n\n(Expected for unreleased / very new titles.)'
                 : 'The backend returned ${_sources.length} native source(s), but none would open.';
       });
-      // Anime with no cached source: look for an uncached torrent we could cache
-      // on demand, so the error screen can offer "Prepare this episode".
-      if (_isAnime && _rd.isConfigured) unawaited(_findUncached());
+      // Anime with no cached source: gather a diagnostic + look for an uncached
+      // torrent we could cache on demand ("Prepare this episode").
+      if (_isAnime) unawaited(_findUncached());
       return;
     }
     setState(() => _stage = _Stage.fallback);
@@ -364,9 +367,13 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
 
   /// Finds an uncached anime source (if any) so the user can choose to cache it.
   Future<void> _findUncached() async {
+    final diag = await _service.animeDiag(widget.request);
     final candidate = await _service.bestUncachedAnime(widget.request);
-    if (!mounted || candidate == null || (candidate.infohash?.isEmpty ?? true)) return;
-    setState(() => _uncached = candidate);
+    if (!mounted) return;
+    setState(() {
+      _animeDiag = diag;
+      if (candidate != null && (candidate.infohash?.isNotEmpty ?? false)) _uncached = candidate;
+    });
   }
 
   /// Caches the uncached source on Real-Debrid (add torrent → wait → play). Shows
@@ -897,6 +904,16 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
             const SizedBox(height: 12),
             Text(_error, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
             const SizedBox(height: 16),
+            if (_animeDiag.isNotEmpty) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
+                child: Text(_animeDiag,
+                    style: const TextStyle(color: Colors.white54, fontSize: 11, fontFamily: 'monospace', height: 1.4)),
+              ),
+              const SizedBox(height: 12),
+            ],
             if (_attemptLog.isNotEmpty) ...[
               const Align(
                 alignment: Alignment.centerLeft,
