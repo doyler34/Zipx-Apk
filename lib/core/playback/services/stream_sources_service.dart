@@ -190,28 +190,6 @@ class StreamSourcesService {
     return out.take(30).toList();
   }
 
-  /// On-device diagnostic for the anime "no source" screen: reveals whether RD
-  /// is configured, which anime ids the mapper resolved, and what an uncached
-  /// lookup returned - so a failure can be pinpointed without guessing.
-  Future<String> animeDiag(PlaybackRequest request) async {
-    final b = StringBuffer();
-    b.writeln('RD token: ${sl<RealDebridService>().isConfigured ? "set" : "MISSING"}');
-    b.writeln('addons: ${sl<AnimeAddonsService>().addons().map((a) => a.name).join(", ")}');
-    final imdb = await _imdbId(request).catchError((_) => null);
-    b.writeln('tmdb=${request.tmdbId} imdb=${imdb ?? "-"} S${request.seasonNumber}E${request.episodeNumber}');
-    final m = await sl<AnimeIdMapper>()
-        .resolve(request.tmdbId, request.seasonNumber ?? 1, request.episodeNumber ?? 1)
-        .catchError((_) => null);
-    b.writeln(m == null
-        ? 'mapping: NONE (tmdb id not in dataset)'
-        : 'mapping: kitsu=${m.kitsuId} anilist=${m.anilistId} mal=${m.malId} ep=${m.episode}');
-    final ids = await _animeStreamIds(request, imdb);
-    b.writeln('ids tried: ${ids.isEmpty ? "-" : ids.join("  ")}');
-    final unc = await bestUncachedAnime(request);
-    b.write('uncached found: ${unc == null ? "NONE" : "${unc.provider}  ih=${unc.infohash ?? "-"}"}');
-    return b.toString();
-  }
-
   // ---------------------------------------------------------------------------
   // Comet + Real-Debrid
   // ---------------------------------------------------------------------------
