@@ -6,35 +6,22 @@ import 'package:dio/dio.dart';
 import '../../dependency_injection/di.dart';
 import '../domain/entities/playback_request.dart';
 import '../domain/entities/stream_source.dart';
-import 'anime_addons_service.dart';
-import 'anime_id_mapper.dart';
 import 'stream_availability_service.dart';
 
 /// Resolves a [PlaybackRequest] into a ranked list of directly-playable
 /// [StreamSource]s for native, ad-free playback.
 ///
-/// Two backends, best first:
-///   1. Comet + Real-Debrid - direct RD streams (new releases, high quality).
-///   2. TMDB-Embed-API - free scrapers (VixSrc/Vidlink/NoTorrent/...).
-/// If both come up empty (or unreachable) the caller falls back to the WebView
-/// providers.
+/// Backend: AIOStreams - one aggregated endpoint that wraps every source +
+/// debrid and does the anime id mapping, dedup, cached-filtering and ranking
+/// server-side, so the app only sends it an IMDb id. If it comes up empty (or
+/// unreachable) the caller falls back to the WebView providers.
 class StreamSourcesService {
   StreamSourcesService(this._dio);
 
   final Dio _dio;
 
-  // --- backends (plain HTTP for now; move to https domain once TLS is set up)
-  static const String _embedBase = 'http://2.24.98.35:8787';
-  static const String _cometBase = 'http://2.24.98.35:8000';
-
-  /// Comet install config (from its /configure page). Contains the debrid
-  /// stream proxy password, NOT the Real-Debrid token (that stays on the VPS).
-  /// Regenerate + replace this if the Comet config/proxy-password changes.
-  static const String _cometConfig =
-      'eyJtYXhSZXN1bHRzUGVyUmVzb2x1dGlvbiI6MCwibWF4U2l6ZSI6MCwiY2FjaGVkT25seSI6ZmFsc2UsInNvcnRDYWNoZWRVbmNhY2hlZFRvZ2V0aGVyIjpmYWxzZSwicmVtb3ZlVHJhc2giOnRydWUsInJlc3VsdEZvcm1hdCI6WyJhbGwiXSwiZGVicmlkU2VydmljZXMiOltdLCJlbmFibGVUb3JyZW50IjpmYWxzZSwiZGVkdXBsaWNhdGVTdHJlYW1zIjpmYWxzZSwic2NyYXBlRGVicmlkQWNjb3VudFRvcnJlbnRzIjpmYWxzZSwiZGVicmlkU3RyZWFtUHJveHlQYXNzd29yZCI6IkdhcmVANDc2MCIsImxhbmd1YWdlcyI6eyJyZXF1aXJlZCI6W10sImFsbG93ZWQiOltdLCJleGNsdWRlIjpbXSwicHJlZmVycmVkIjpbXX0sInJlc29sdXRpb25zIjp7fSwib3B0aW9ucyI6eyJyZW1vdmVfcmFua3NfdW5kZXIiOi0xMDAwMDAwMDAwMCwiYWxsb3dfZW5nbGlzaF9pbl9sYW5ndWFnZXMiOmZhbHNlLCJyZW1vdmVfdW5rbm93bl9sYW5ndWFnZXMiOmZhbHNlfX0=';
-
-  /// TMDB v3 key (already public in the app) - used only to map a TMDB id to an
-  /// IMDB id, which Comet needs.
+  /// TMDB v3 key (already public in the app) - used to map a TMDB id to an
+  /// IMDB id (which AIOStreams needs) and to read runtime / original language.
   static const String _tmdbKey = 'd168cb7e62f9692894c20fdb039ae126';
 
   /// AIOStreams aggregated addon base URL (everything before `/stream/...`),
@@ -60,8 +47,8 @@ class StreamSourcesService {
   }
 
   Future<(List<StreamSource>, bool)> _fetchSources(PlaybackRequest request) async {
-    // Resolve the IMDb id (Comet + IMDb-scheme addons need it) and the original
-    // language (drives anime detection + audio ranking) up front, in parallel.
+    // Resolve the IMDb id (AIOStreams needs it) and the original language
+    // (drives anime detection + audio ranking) up front, in parallel.
     final meta = await Future.wait([
       _imdbId(request).catchError((_) => null),
       originalLanguage(request).catchError((_) => null),
@@ -71,127 +58,23 @@ class StreamSourcesService {
     final l = (origLang ?? '').toLowerCase();
     final isAnime = l == 'ja' || l == 'ko';
 
-    // 0) AIOStreams first: one aggregated endpoint that wraps every source +
-    //    debrid and does the anime id mapping, dedup, cached-filtering and
-    //    ranking server-side. Just send it the IMDb id. When it returns cached
-    //    sources we're done - no per-provider juggling needed.
+    // AIOStreams: one aggregated endpoint that wraps every source + debrid and
+    // does the anime id mapping, dedup, cached-filtering and ranking
+    // server-side. Just send it the IMDb id.
     if (_aioUrl.isNotEmpty && imdb != null && imdb.isNotEmpty) {
       try {
         final aio = await _fetchAio(request, imdb, origLang);
         if (aio.isNotEmpty) return (aio, isAnime);
       } catch (_) {
-        // ignore - fall back to the legacy providers below
+        // ignore - the caller falls back to the WebView providers
       }
     }
 
-    // 1) Comet (legacy fallback if AIOStreams is unset / down / empty). A cached
-    //    hit is the fast path, so play it immediately.
-    if (imdb != null && imdb.isNotEmpty) {
-      try {
-        final comet = await _fetchComet(request, imdb, origLang);
-        if (comet.isNotEmpty) return (comet, isAnime);
-      } catch (_) {
-        // ignore - fall through to the fan-out
-      }
-    }
-
-    // 2) Comet missed (niche / older / anime it can't number). Only NOW fan out
-    //    to the extra addons and the free scrapers - all in parallel, each fully
-    //    isolated - and merge whatever comes back. Adding more providers costs
-    //    nothing on the fast path; it only ever runs when Comet came up empty.
-    final results = await Future.wait([
-      _fetchExtraAddons(request, imdb, origLang, isAnime),
-      _fetchEmbed(request).catchError((_) => const <StreamSource>[]),
-    ]);
-    return (_dedup([...results[0], ...results[1]]), isAnime);
-  }
-
-  /// Queries every configured extra addon (Torii, MediaFusion, ...) in parallel,
-  /// each fully isolated so one being slow/down/absent can't affect the others.
-  /// Anime-only addons are skipped for non-anime titles. Anime uses the mapped
-  /// Kitsu/MAL/AniList ids (absolute episode); everything else uses the IMDb id.
-  Future<List<StreamSource>> _fetchExtraAddons(
-      PlaybackRequest request, String? imdb, String? originalLang, bool isAnime) async {
-    var addons = sl<AnimeAddonsService>().addons();
-    if (!isAnime) addons = addons.where((a) => !a.animeOnly).toList();
-    if (addons.isEmpty) return const [];
-
-    final ids = isAnime ? await _animeStreamIds(request, imdb) : _imdbIds(request, imdb);
-    if (ids.isEmpty) return const [];
-
-    final results = await Future.wait(addons.map((addon) async {
-      // Try each id in turn until one returns sources for this addon.
-      for (final id in ids) {
-        try {
-          final r = await _fetchAddonById(addon, request.isTvEpisode, id, originalLang);
-          if (r.isNotEmpty) return r;
-        } catch (_) {
-          // isolated - move on to the next id / addon
-        }
-      }
-      return const <StreamSource>[];
-    }));
-    return results.expand((e) => e).toList();
-  }
-
-  /// The plain IMDb content id for non-anime addons (`tt…:s:e` for series).
-  List<String> _imdbIds(PlaybackRequest request, String? imdb) {
-    if (imdb == null || imdb.isEmpty) return const [];
-    return [request.isTvEpisode ? '$imdb:${request.seasonNumber}:${request.episodeNumber}' : imdb];
-  }
-
-  /// Builds the ordered list of content ids to try against anime addons:
-  /// `kitsu:/anilist:/mal:` (from the TMDB->anime mapping, with absolute-episode
-  /// numbering) first, then the plain IMDb id as a fallback.
-  Future<List<String>> _animeStreamIds(PlaybackRequest request, String? imdb) async {
-    final ids = <String>[];
-    final season = request.seasonNumber ?? 1;
-    final episode = request.episodeNumber ?? 1;
-
-    AnimeMapping? m;
-    try {
-      m = await sl<AnimeIdMapper>().resolve(request.tmdbId, season, episode);
-    } catch (_) {
-      m = null;
-    }
-    if (m != null && m.hasAnyId) {
-      final ep = request.isTvEpisode ? ':${m.episode}' : '';
-      if (m.kitsuId != null) ids.add('kitsu:${m.kitsuId}$ep');
-      if (m.anilistId != null) ids.add('anilist:${m.anilistId}$ep');
-      if (m.malId != null) ids.add('mal:${m.malId}$ep');
-    }
-    if (imdb != null && imdb.isNotEmpty) {
-      ids.add(request.isTvEpisode ? '$imdb:$season:$episode' : imdb);
-    }
-    return ids;
-  }
-
-  /// Fetches one addon for a specific content id via the standard Stremio
-  /// `/stream/{type}/{id}.json` protocol (same shape Comet returns).
-  Future<List<StreamSource>> _fetchAddonById(
-      StremioAddon addon, bool isSeries, String id, String? originalLang) async {
-    final type = isSeries ? 'series' : 'movie';
-    final response = await _dio.get(
-      '${addon.baseUrl}/stream/$type/$id.json',
-      options: Options(responseType: ResponseType.plain, receiveTimeout: const Duration(seconds: 20)),
-    );
-    final decoded = response.data is String ? jsonDecode(response.data as String) : response.data;
-    return _parseStremioStreams(decoded, provider: addon.name, originalLang: originalLang).take(15).toList();
-  }
-
-  /// Merges provider results, dropping duplicate stream URLs while preserving
-  /// order (Comet first), and caps the list so the picker stays manageable.
-  List<StreamSource> _dedup(List<StreamSource> sources) {
-    final seen = <String>{};
-    final out = <StreamSource>[];
-    for (final s in sources) {
-      if (s.url.isNotEmpty && seen.add(s.url)) out.add(s);
-    }
-    return out.take(30).toList();
+    return (const <StreamSource>[], isAnime);
   }
 
   // ---------------------------------------------------------------------------
-  // Comet + Real-Debrid
+  // Real-Debrid metadata
   // ---------------------------------------------------------------------------
 
   /// The title's real runtime in minutes from TMDB, used to reject sample /
@@ -269,27 +152,8 @@ class StreamSourcesService {
     return _parseStremioStreams(decoded, provider: 'AIOStreams', originalLang: originalLang).take(30).toList();
   }
 
-  Future<List<StreamSource>> _fetchComet(PlaybackRequest request, String imdb, String? originalLang) async {
-    final path = request.isTvEpisode
-        ? '$_cometBase/$_cometConfig/stream/series/$imdb:${request.seasonNumber}:${request.episodeNumber}.json'
-        : '$_cometBase/$_cometConfig/stream/movie/$imdb.json';
-
-    final response = await _dio.get(
-      path,
-      options: Options(
-        responseType: ResponseType.plain,
-        // Scraping + RD cache-check can take a little while.
-        receiveTimeout: const Duration(seconds: 45),
-      ),
-    );
-
-    final decoded = response.data is String ? jsonDecode(response.data as String) : response.data;
-    return _parseStremioStreams(decoded, provider: 'Real-Debrid', originalLang: originalLang).take(20).toList();
-  }
-
   /// Parses a Stremio `/stream` response (`{streams:[...]}`) into ranked,
-  /// playable [StreamSource]s. Shared by Comet and the extra anime addons since
-  /// they all speak the same protocol. Drops junk/cams (< 720p), and for a
+  /// playable [StreamSource]s. Drops junk/cams (< 720p), and for a
   /// non-English original hides foreign-dub releases; ranks cached-first, then
   /// original/dual audio, then 1080p, then smaller files.
   List<StreamSource> _parseStremioStreams(dynamic decoded,
@@ -322,7 +186,7 @@ class StreamSourcesService {
       final isBatch = bh is Map && bh['_isBatch'] == true;
       final seeders = (bh is Map && bh['_seeders'] is num) ? (bh['_seeders'] as num).toInt() : 0;
       entries.add((cached, res, _sizeGb(description), isBatch, seeders, StreamSource(
-        title: _cometLabel(name, description),
+        title: _streamLabel(name, description),
         url: url,
         quality: '${res}p',
         provider: provider,
@@ -386,32 +250,28 @@ class StreamSourcesService {
 
   /// The best uncached anime source to "prepare" (cache on Real-Debrid), or
   /// null. Prefers single-episode torrents so caching is fast. Only used by the
-  /// opt-in "prepare episode" flow when there's no cached source.
+  /// opt-in "prepare episode" flow when AIOStreams returned no cached source -
+  /// so it asks AIOStreams for the uncached candidates (needs the endpoint to
+  /// surface uncached results; if it's cached-only this simply finds nothing).
   Future<StreamSource?> bestUncachedAnime(PlaybackRequest request) async {
+    if (_aioUrl.isEmpty) return null;
     try {
       final meta = await Future.wait([
         _imdbId(request).catchError((_) => null),
         originalLanguage(request).catchError((_) => null),
       ]);
-      final ids = await _animeStreamIds(request, meta[0]);
-      if (ids.isEmpty) return null;
-      for (final addon in sl<AnimeAddonsService>().addons()) {
-        for (final id in ids) {
-          try {
-            final type = request.isTvEpisode ? 'series' : 'movie';
-            final resp = await _dio.get(
-              '${addon.baseUrl}/stream/$type/$id.json',
-              options: Options(responseType: ResponseType.plain, receiveTimeout: const Duration(seconds: 20)),
-            );
-            final decoded = resp.data is String ? jsonDecode(resp.data as String) : resp.data;
-            final unc = _parseStremioStreams(decoded, provider: addon.name, originalLang: meta[1], uncachedOnly: true);
-            if (unc.isNotEmpty) return unc.first;
-          } catch (_) {
-            // isolated - try the next id/addon
-          }
-        }
-      }
-      return null;
+      final imdb = meta[0];
+      if (imdb == null || imdb.isEmpty) return null;
+      final base = _aioUrl.replaceAll(RegExp(r'/+$'), '');
+      final type = request.isTvEpisode ? 'series' : 'movie';
+      final id = request.isTvEpisode ? '$imdb:${request.seasonNumber}:${request.episodeNumber}' : imdb;
+      final resp = await _dio.get(
+        '$base/stream/$type/$id.json',
+        options: Options(responseType: ResponseType.plain, receiveTimeout: const Duration(seconds: 45)),
+      );
+      final decoded = resp.data is String ? jsonDecode(resp.data as String) : resp.data;
+      final unc = _parseStremioStreams(decoded, provider: 'AIOStreams', originalLang: meta[1], uncachedOnly: true);
+      return unc.isEmpty ? null : unc.first;
     } catch (_) {
       return null;
     }
@@ -469,8 +329,8 @@ class StreamSourcesService {
     }
   }
 
-  /// The raw release/torrent title, used to match a synced subtitle. Comet
-  /// (Torrentio-style) puts the actual filename on the first line of the
+  /// The raw release/torrent title, used to match a synced subtitle.
+  /// Torrentio-style addons put the actual filename on the first line of the
   /// description; fall back to the name.
   String? _releaseName(String name, String description) {
     for (final line in description.split('\n')) {
@@ -485,7 +345,7 @@ class StreamSourcesService {
     return n.isEmpty ? null : n;
   }
 
-  String _cometLabel(String name, String description) {
+  String _streamLabel(String name, String description) {
     final res = _resolution('$name $description');
     final size = _sizeGb(description);
     final sizeStr = size > 0 ? ' · ${size.toStringAsFixed(1)} GB' : '';
@@ -515,55 +375,8 @@ class StreamSourcesService {
   }
 
   // ---------------------------------------------------------------------------
-  // TMDB-Embed-API (free scrapers)
+  // Junk / quality filters (shared by the stream parser)
   // ---------------------------------------------------------------------------
-
-  Future<List<StreamSource>> _fetchEmbed(PlaybackRequest request) async {
-    final String url;
-    Map<String, dynamic>? query;
-    if (request.isTvEpisode) {
-      url = '$_embedBase/api/streams/series/${request.tmdbId}';
-      query = {'season': request.seasonNumber, 'episode': request.episodeNumber};
-    } else {
-      url = '$_embedBase/api/streams/movie/${request.tmdbId}';
-    }
-
-    final response = await _dio.get(
-      url,
-      queryParameters: query,
-      options: Options(
-        responseType: ResponseType.plain,
-        receiveTimeout: const Duration(seconds: 30),
-        sendTimeout: const Duration(seconds: 15),
-      ),
-    );
-
-    dynamic decoded = response.data;
-    if (decoded is String) {
-      if (decoded.trim().isEmpty) return const [];
-      decoded = jsonDecode(decoded);
-    }
-    if (decoded is! Map || decoded['streams'] is! List) return const [];
-
-    final all = (decoded['streams'] as List)
-        .whereType<Map>()
-        .map((m) => StreamSource.fromJson(m.cast<String, dynamic>()))
-        .where((s) => s.url.isNotEmpty && _isPlayableEmbed(s))
-        .toList();
-
-    all.sort((a, b) => _embedRank(a).compareTo(_embedRank(b)));
-    return all;
-  }
-
-  /// Streaming-only: keep just directly-playable video URLs. Drops
-  /// DahmerMovies (giant MKV, rate-limited) and NoTorrent API (non-video) URLs,
-  /// and anything that looks like a trailer.
-  bool _isPlayableEmbed(StreamSource s) {
-    if (s.provider.toLowerCase() == 'dahmermovies') return false;
-    if (_isBad('${s.url} ${s.title}')) return false;
-    final u = s.url.toLowerCase();
-    return u.contains('.m3u8') || u.contains('.mp4');
-  }
 
   /// Trailers usually come from YouTube (or are literally labelled "trailer").
   /// The real safety net is the short-duration skip in the player; this just
@@ -587,13 +400,6 @@ class StreamSourcesService {
   static bool _looksLikeCam(String text) => _camPattern.hasMatch(text);
 
   static bool _isBad(String text) => _looksLikeTrailer(text) || _looksLikeCam(text);
-
-  int _embedRank(StreamSource s) {
-    var r = 0;
-    if (s.isHls) r -= 1000;
-    r -= _resolution('${s.quality} ${s.title} ${s.url}');
-    return r;
-  }
 
   int _resolution(String text) {
     final hay = text.toLowerCase();
