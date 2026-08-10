@@ -169,10 +169,15 @@ class StreamSourcesService {
       final name = (raw['name'] ?? '').toString();
       final description = (raw['description'] ?? raw['title'] ?? '').toString();
       if (_isBad('$url $name $description')) continue;
+      // Drop confirmed low-quality (<=480p). A res of 0 means "couldn't read the
+      // label" - keep those, since AIOStreams already quality-filters its side.
       final res = _resolution('$name $description');
-      if (res < 720) continue;
-      // Torii marks cache state with an explicit `_isCached` flag (in
-      // behaviorHints); Comet/Torrentio use a ⚡/"cached" name marker.
+      if (res != 0 && res < 720) continue;
+      // Some addons mark cache state with an explicit `_isCached` flag (in
+      // behaviorHints). Otherwise fall back to the text marker: AIOStreams uses
+      // "⚡Ready (RD)" in the description, Comet/Torrentio a ⚡/"cached" marker -
+      // so treat a ⚡ anywhere in the name/description (or "cached"/"instant")
+      // as cached.
       final bh = raw['behaviorHints'];
       final bool cached;
       if (bh is Map && bh.containsKey('_isCached')) {
@@ -181,7 +186,7 @@ class StreamSourcesService {
         cached = raw['_isCached'] == true;
       } else {
         final blob = '$name $description'.toLowerCase();
-        cached = name.contains('⚡') || blob.contains('cached') || blob.contains('instant');
+        cached = blob.contains('⚡') || blob.contains('cached') || blob.contains('instant');
       }
       final isBatch = bh is Map && bh['_isBatch'] == true;
       final seeders = (bh is Map && bh['_seeders'] is num) ? (bh['_seeders'] as num).toInt() : 0;
@@ -403,11 +408,14 @@ class StreamSourcesService {
 
   int _resolution(String text) {
     final hay = text.toLowerCase();
-    if (hay.contains('2160') || hay.contains('4k')) return 2160;
-    if (hay.contains('1440')) return 1440;
-    if (hay.contains('1080')) return 1080;
+    // Numeric labels first, then AIOStreams' letter labels (UHD/QHD/FHD/HD).
+    if (hay.contains('2160') || hay.contains('4k') || hay.contains('uhd')) return 2160;
+    if (hay.contains('1440') || hay.contains('qhd')) return 1440;
+    if (hay.contains('1080') || hay.contains('fhd')) return 1080;
     if (hay.contains('720')) return 720;
     if (hay.contains('480')) return 480;
+    // Bare "HD" (not U/F/Q-HD, handled above) ~ 720p.
+    if (RegExp(r'(?<![a-z0-9])hd(?![a-z0-9])').hasMatch(hay)) return 720;
     return 0;
   }
 }
