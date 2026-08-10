@@ -37,6 +37,12 @@ class StreamSourcesService {
   /// IMDB id, which Comet needs.
   static const String _tmdbKey = 'd168cb7e62f9692894c20fdb039ae126';
 
+  /// AIOStreams aggregated addon base URL (everything before `/stream/...`),
+  /// injected via `--dart-define=AIOSTREAMS_ADDON_URL`. A single endpoint that
+  /// wraps every source + debrid and does the anime id mapping, dedup, cached
+  /// filtering and ranking server-side - so the app just asks it for an IMDb id.
+  static const String _aioUrl = String.fromEnvironment('AIOSTREAMS_ADDON_URL');
+
   Future<List<StreamSource>> fetch(PlaybackRequest request) async {
     final (sources, isAnime) = await _fetchSources(request);
     // Learn availability so dead titles get hidden from browsing - but NEVER
@@ -65,9 +71,21 @@ class StreamSourcesService {
     final l = (origLang ?? '').toLowerCase();
     final isAnime = l == 'ja' || l == 'ko';
 
-    // 1) Comet first. A cached hit is the fast path - the common case for
-    //    popular titles - so play it immediately WITHOUT waiting on the slower
-    //    scraper-based providers (Torii / MediaFusion / embed scrapers).
+    // 0) AIOStreams first: one aggregated endpoint that wraps every source +
+    //    debrid and does the anime id mapping, dedup, cached-filtering and
+    //    ranking server-side. Just send it the IMDb id. When it returns cached
+    //    sources we're done - no per-provider juggling needed.
+    if (_aioUrl.isNotEmpty && imdb != null && imdb.isNotEmpty) {
+      try {
+        final aio = await _fetchAio(request, imdb, origLang);
+        if (aio.isNotEmpty) return (aio, isAnime);
+      } catch (_) {
+        // ignore - fall back to the legacy providers below
+      }
+    }
+
+    // 1) Comet (legacy fallback if AIOStreams is unset / down / empty). A cached
+    //    hit is the fast path, so play it immediately.
     if (imdb != null && imdb.isNotEmpty) {
       try {
         final comet = await _fetchComet(request, imdb, origLang);
@@ -256,6 +274,21 @@ class StreamSourcesService {
     final data = response.data is String ? jsonDecode(response.data as String) : response.data;
     if (data is Map) return data['imdb_id'] as String?;
     return null;
+  }
+
+  /// Queries the AIOStreams aggregated endpoint with the IMDb id. AIOStreams
+  /// resolves anime ids, dedupes, filters to cached and ranks server-side, so
+  /// the response is parsed the same way as any Stremio stream reply.
+  Future<List<StreamSource>> _fetchAio(PlaybackRequest request, String imdb, String? originalLang) async {
+    final base = _aioUrl.replaceAll(RegExp(r'/+$'), '');
+    final type = request.isTvEpisode ? 'series' : 'movie';
+    final id = request.isTvEpisode ? '$imdb:${request.seasonNumber}:${request.episodeNumber}' : imdb;
+    final response = await _dio.get(
+      '$base/stream/$type/$id.json',
+      options: Options(responseType: ResponseType.plain, receiveTimeout: const Duration(seconds: 45)),
+    );
+    final decoded = response.data is String ? jsonDecode(response.data as String) : response.data;
+    return _parseStremioStreams(decoded, provider: 'AIOStreams', originalLang: originalLang).take(30).toList();
   }
 
   Future<List<StreamSource>> _fetchComet(PlaybackRequest request, String imdb, String? originalLang) async {
