@@ -11,7 +11,6 @@ import '../../domain/entities/playback_request.dart';
 import '../../domain/entities/stream_source.dart';
 import '../../services/playback_history_service.dart';
 import '../../services/playback_provider_service.dart';
-import '../../services/real_debrid_service.dart';
 import '../../services/stream_sources_service.dart';
 import '../../services/subtitle_service.dart';
 import 'player_screen.dart';
@@ -46,14 +45,6 @@ enum _Stage { loading, playing, fallback, error }
 class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBindingObserver {
   final StreamSourcesService _service = sl<StreamSourcesService>();
   final SubtitleService _subtitleService = sl<SubtitleService>();
-  final RealDebridService _rd = sl<RealDebridService>();
-
-  /// Set on the anime error screen when an uncached source exists that could be
-  /// cached on demand ("prepare this episode"). Null = nothing to prepare.
-  StreamSource? _uncached;
-  bool _preparing = false;
-  String _prepareStatus = '';
-  int? _preparePercent;
 
   final Player _player = Player();
   // Created eagerly in initState (NOT lazily): the video output must be
@@ -349,68 +340,14 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       setState(() {
         _stage = _Stage.error;
         _error = _isAnime
-            ? 'No cached anime source found for this episode.\n\nAnime plays from Real-Debrid / Torii cached torrents - this one isn\'t cached yet.'
+            ? 'No playable source found for this episode yet.\n\n(AIOStreams returned nothing cached or streamable for it.)'
             : _sources.isEmpty
                 ? 'Native streaming found NO playable source for this title.\n\n(Expected for unreleased / very new titles.)'
                 : 'The backend returned ${_sources.length} native source(s), but none would open.';
       });
-      // Anime with no cached source: gather a diagnostic + look for an uncached
-      // torrent we could cache on demand ("Prepare this episode").
-      if (_isAnime) unawaited(_findUncached());
       return;
     }
     setState(() => _stage = _Stage.fallback);
-  }
-
-  /// Finds an uncached anime source (if any) so the user can choose to cache it.
-  Future<void> _findUncached() async {
-    final candidate = await _service.bestUncachedAnime(widget.request);
-    if (!mounted) return;
-    setState(() {
-      if (candidate != null && (candidate.infohash?.isNotEmpty ?? false)) _uncached = candidate;
-    });
-  }
-
-  /// Caches the uncached source on Real-Debrid (add torrent → wait → play). Shows
-  /// progress the whole time; on success, plays the freshly-cached link.
-  Future<void> _prepareEpisode() async {
-    final src = _uncached;
-    if (src == null || _preparing) return;
-    setState(() {
-      _preparing = true;
-      _prepareStatus = 'Starting…';
-      _preparePercent = null;
-    });
-    final url = await _rd.prepare(
-      src.infohash!,
-      episode: widget.request.episodeNumber,
-      onProgress: (p) {
-        if (!mounted) return;
-        setState(() {
-          _prepareStatus = p.status;
-          _preparePercent = p.percent;
-        });
-      },
-    );
-    if (!mounted) return;
-    if (url == null) {
-      setState(() {
-        _preparing = false;
-        _prepareStatus = 'Preparing failed - try again later.';
-      });
-      return;
-    }
-    // Play the now-cached file.
-    _sources = [StreamSource(
-      title: src.title,
-      url: url,
-      quality: src.quality,
-      provider: 'Real-Debrid (prepared)',
-      headers: const {},
-      releaseName: src.releaseName,
-    )];
-    setState(() => _preparing = false);
-    await _playIndex(0);
   }
 
   void _forceWebPlayer() {
@@ -916,38 +853,6 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-            ],
-            // Anime: offer to cache an uncached source on Real-Debrid on demand.
-            if (_uncached != null) ...[
-              if (_preparing) ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(
-                      width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFE11D2A)),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      _preparePercent != null ? '$_prepareStatus ${_preparePercent}%' : _prepareStatus,
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                  ],
-                ),
-              ] else
-                ElevatedButton.icon(
-                  onPressed: _prepareEpisode,
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE11D2A)),
-                  icon: const Icon(Icons.download_rounded, color: Colors.white),
-                  label: const Text('Prepare this episode', style: TextStyle(color: Colors.white)),
-                ),
-              if (!_preparing)
-                const Padding(
-                  padding: EdgeInsets.only(top: 6),
-                  child: Text('Caches it on Real-Debrid (~1–2 min), then plays.',
-                      style: TextStyle(color: Colors.white38, fontSize: 12)),
-                ),
               const SizedBox(height: 12),
             ],
             ElevatedButton.icon(

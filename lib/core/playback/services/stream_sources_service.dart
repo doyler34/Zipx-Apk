@@ -63,7 +63,7 @@ class StreamSourcesService {
     // server-side. Just send it the IMDb id.
     if (_aioUrl.isNotEmpty && imdb != null && imdb.isNotEmpty) {
       try {
-        final aio = await _fetchAio(request, imdb, origLang);
+        final aio = await _fetchAio(request, imdb);
         if (aio.isNotEmpty) return (aio, isAnime);
       } catch (_) {
         // ignore - the caller falls back to the WebView providers
@@ -137,10 +137,10 @@ class StreamSourcesService {
     return null;
   }
 
-  /// Queries the AIOStreams aggregated endpoint with the IMDb id. AIOStreams
-  /// resolves anime ids, dedupes, filters to cached and ranks server-side, so
-  /// the response is parsed the same way as any Stremio stream reply.
-  Future<List<StreamSource>> _fetchAio(PlaybackRequest request, String imdb, String? originalLang) async {
+  /// Queries the AIOStreams aggregated endpoint with the IMDb id and plays the
+  /// URLs it returns as-is. AIOStreams has already aggregated, deduplicated,
+  /// quality/resolution/language-filtered and ranked the results server-side.
+  Future<List<StreamSource>> _fetchAio(PlaybackRequest request, String imdb) async {
     final base = _aioUrl.replaceAll(RegExp(r'/+$'), '');
     final type = request.isTvEpisode ? 'series' : 'movie';
     final id = request.isTvEpisode ? '$imdb:${request.seasonNumber}:${request.episodeNumber}' : imdb;
@@ -149,199 +149,85 @@ class StreamSourcesService {
       options: Options(responseType: ResponseType.plain, receiveTimeout: const Duration(seconds: 45)),
     );
     final decoded = response.data is String ? jsonDecode(response.data as String) : response.data;
-    return _parseStremioStreams(decoded, provider: 'AIOStreams', originalLang: originalLang).take(30).toList();
+    return _parseStremioStreams(decoded, provider: 'AIOStreams').take(30).toList();
   }
 
-  /// Parses a Stremio `/stream` response (`{streams:[...]}`) into ranked,
-  /// playable [StreamSource]s. Drops junk/cams (< 720p), and for a
-  /// non-English original hides foreign-dub releases; ranks cached-first, then
-  /// original/dual audio, then 1080p, then smaller files.
-  List<StreamSource> _parseStremioStreams(dynamic decoded,
-      {required String provider, String? originalLang, bool uncachedOnly = false}) {
+  /// Parses an AIOStreams `/stream` response (`{streams:[...]}`) into playable
+  /// [StreamSource]s. AIOStreams is the source of truth: it has already
+  /// aggregated, deduplicated, quality/resolution/language-filtered and ranked
+  /// the results, so the client does the minimum - preserve the metadata, order
+  /// cached-first (uncached kept as a fallback), and drop only malformed or
+  /// duplicate playback URLs. It deliberately does NOT re-parse the formatter
+  /// description for audio language: those flags (often dozens of subtitle
+  /// languages) must never reject an otherwise-valid stream.
+  List<StreamSource> _parseStremioStreams(dynamic decoded, {required String provider}) {
     if (decoded is! Map || decoded['streams'] is! List) return const [];
 
-    // (cached, resolution, sizeGB, isBatch, seeders, source) for ranking.
-    final entries = <(bool, int, double, bool, int, StreamSource)>[];
+    final cached = <StreamSource>[];
+    final uncached = <StreamSource>[];
+    final seenUrls = <String>{};
+
     for (final raw in decoded['streams'] as List) {
       if (raw is! Map) continue;
       final url = (raw['url'] ?? '').toString();
-      if (url.isEmpty) continue;
+      if (!_isValidPlaybackUrl(url)) continue;
+      if (!seenUrls.add(url)) continue; // drop identical duplicate playback URLs
+
       final name = (raw['name'] ?? '').toString();
       final description = (raw['description'] ?? raw['title'] ?? '').toString();
-      if (_isBad('$url $name $description')) continue;
-      // Drop confirmed low-quality (<=480p). A res of 0 means "couldn't read the
-      // label" - keep those, since AIOStreams already quality-filters its side.
-      final res = _resolution('$name $description');
-      if (res != 0 && res < 720) continue;
-      // Some addons mark cache state with an explicit `_isCached` flag (in
-      // behaviorHints). Otherwise fall back to the text marker: AIOStreams uses
-      // "⚡Ready (RD)" in the description, Comet/Torrentio a ⚡/"cached" marker -
-      // so treat a ⚡ anywhere in the name/description (or "cached"/"instant")
-      // as cached.
       final bh = raw['behaviorHints'];
-      final bool cached;
-      if (bh is Map && bh.containsKey('_isCached')) {
-        cached = bh['_isCached'] == true;
-      } else if (raw.containsKey('_isCached')) {
-        cached = raw['_isCached'] == true;
-      } else {
-        final blob = '$name $description'.toLowerCase();
-        cached = blob.contains('⚡') || blob.contains('cached') || blob.contains('instant');
-      }
-      final isBatch = bh is Map && bh['_isBatch'] == true;
-      final seeders = (bh is Map && bh['_seeders'] is num) ? (bh['_seeders'] as num).toInt() : 0;
-      entries.add((cached, res, _sizeGb(description), isBatch, seeders, StreamSource(
-        title: _streamLabel(name, description),
+      final filename = (bh is Map ? bh['filename'] : null)?.toString();
+      final videoSize = (bh is Map && bh['videoSize'] is num) ? (bh['videoSize'] as num).toInt() : null;
+      final bingeGroup = (bh is Map ? bh['bingeGroup'] : null)?.toString();
+
+      final isCached = _isCached(raw, bh, name, description);
+      final res = _resolution('$name $description ${filename ?? ''}');
+
+      final source = StreamSource(
+        title: _streamLabel(res, videoSize),
         url: url,
-        quality: '${res}p',
+        quality: res > 0 ? '${res}p' : '',
         provider: provider,
         headers: const {},
-        releaseName: _releaseName(name, description),
-        infohash: _infohash(raw, bh),
-        cached: cached,
-      )));
-    }
-
-    // For a non-English original (anime/foreign): hide foreign-dub sources
-    // entirely - keep only the original/dual audio and any English dub.
-    final foreignOriginal = (originalLang ?? '').isNotEmpty && originalLang!.toLowerCase() != 'en';
-    if (foreignOriginal) {
-      entries.retainWhere((e) => _audioRank(e.$6.releaseName ?? '', originalLang) != 2);
-    }
-
-    if (uncachedOnly) {
-      // Uncached candidates we could actually prepare (need an infohash). Rank
-      // by fastest-to-cache: single episodes before batches, then most seeders,
-      // then smallest file.
-      entries.retainWhere((e) => !e.$1 && (e.$6.infohash?.isNotEmpty ?? false));
-      entries.sort((a, b) {
-        if (a.$4 != b.$4) return a.$4 ? 1 : -1;
-        if (a.$5 != b.$5) return b.$5.compareTo(a.$5);
-        return a.$3.compareTo(b.$3);
-      });
-      return entries.map((e) => e.$6).toList();
-    }
-
-    // Play path: never offer uncached sources - an uncached RD stream isn't
-    // ready and just hangs the player, so drop them (caller falls back fast).
-    entries.retainWhere((e) => e.$1);
-    // Rank: cached first; then original/dual audio; then 1080p; then smaller.
-    entries.sort((a, b) {
-      if (a.$1 != b.$1) return a.$1 ? -1 : 1;
-      final aa = _audioRank(a.$6.releaseName ?? '', originalLang);
-      final ab = _audioRank(b.$6.releaseName ?? '', originalLang);
-      if (aa != ab) return aa.compareTo(ab);
-      final ra = _autoPref(a.$2);
-      final rb = _autoPref(b.$2);
-      if (ra != rb) return ra.compareTo(rb);
-      return a.$3.compareTo(b.$3);
-    });
-    return entries.map((e) => e.$6).toList();
-  }
-
-  /// Extracts the 40-hex torrent infohash from a Stremio stream: the standard
-  /// `infoHash` field, or Torii's `behaviorHints.bingeGroup` ("..._<40hex>").
-  String? _infohash(Map raw, dynamic bh) {
-    final direct = raw['infoHash'];
-    if (direct is String && RegExp(r'^[a-fA-F0-9]{40}$').hasMatch(direct)) {
-      return direct.toLowerCase();
-    }
-    if (bh is Map) {
-      final m = RegExp(r'[a-fA-F0-9]{40}').firstMatch((bh['bingeGroup'] ?? '').toString());
-      if (m != null) return m.group(0)!.toLowerCase();
-    }
-    return null;
-  }
-
-  /// The best uncached anime source to "prepare" (cache on Real-Debrid), or
-  /// null. Prefers single-episode torrents so caching is fast. Only used by the
-  /// opt-in "prepare episode" flow when AIOStreams returned no cached source -
-  /// so it asks AIOStreams for the uncached candidates (needs the endpoint to
-  /// surface uncached results; if it's cached-only this simply finds nothing).
-  Future<StreamSource?> bestUncachedAnime(PlaybackRequest request) async {
-    if (_aioUrl.isEmpty) return null;
-    try {
-      final meta = await Future.wait([
-        _imdbId(request).catchError((_) => null),
-        originalLanguage(request).catchError((_) => null),
-      ]);
-      final imdb = meta[0];
-      if (imdb == null || imdb.isEmpty) return null;
-      final base = _aioUrl.replaceAll(RegExp(r'/+$'), '');
-      final type = request.isTvEpisode ? 'series' : 'movie';
-      final id = request.isTvEpisode ? '$imdb:${request.seasonNumber}:${request.episodeNumber}' : imdb;
-      final resp = await _dio.get(
-        '$base/stream/$type/$id.json',
-        options: Options(responseType: ResponseType.plain, receiveTimeout: const Duration(seconds: 45)),
+        releaseName: (filename != null && filename.isNotEmpty) ? filename : _releaseName(name, description),
+        filename: filename,
+        videoSize: videoSize,
+        bingeGroup: bingeGroup,
+        cached: isCached,
       );
-      final decoded = resp.data is String ? jsonDecode(resp.data as String) : resp.data;
-      final unc = _parseStremioStreams(decoded, provider: 'AIOStreams', originalLang: meta[1], uncachedOnly: true);
-      return unc.isEmpty ? null : unc.first;
-    } catch (_) {
-      return null;
+      (isCached ? cached : uncached).add(source);
     }
+
+    // Cached first (instant play), then uncached as a fallback so obscure/older
+    // content isn't lost. AIOStreams' relative order is preserved within each
+    // group - no client-side re-ranking by size/quality (it already ranked).
+    return [...cached, ...uncached];
   }
 
-  /// Audio-language preference for a release name. Lower is better. For an
-  /// English (or unknown) original there's no preference, so everything is 1
-  /// and the audio step has no effect. For a non-English original (anime is
-  /// "ja"): original/dual audio = 0 (best), an obvious foreign dub = 2 (worst),
-  /// everything else = 1.
-  int _audioRank(String releaseName, String? originalLang) {
-    final lang = (originalLang ?? '').toLowerCase();
-    if (lang.isEmpty || lang == 'en') return 1;
-    final n = releaseName.toLowerCase();
-    final origTags = _origLangTags(lang);
-    if (_hasTag(n, 'dual') || _hasTag(n, 'multi') || origTags.any((t) => _hasTag(n, t))) return 0;
-    // A dub in a language that's neither the original nor English. Matched on
-    // whole tokens only (see _hasTag) so short tags like "ita"/"vf" can be
-    // listed without false-matching words like "capital". NOT generic
-    // "dubbed"/"dub" so an English dub isn't mistaken for a foreign one.
-    // The original language is matched first (origTags -> 0), so listing both
-    // 'japanese' and 'korean' here only excludes them when they're NOT the
-    // original (e.g. a Japanese dub of a Korean title).
-    const foreignDub = [
-      'spanish', 'latino', 'latin', 'castellano', 'espanol', 'español', 'esp',
-      'spa', 'italian', 'italiano', 'ita', 'german', 'deutsch', 'ger', 'deu',
-      'french', 'truefrench', 'francais', 'français', 'vf', 'vff', 'vfq', 'fre',
-      'fra', 'hindi', 'hin', 'dublado', 'russian', 'russo', 'rus', 'polish',
-      'pl', 'portuguese', 'portugues', 'português', 'por', 'pt', 'korean',
-      'kor', 'japanese', 'jpn', 'jap', 'thai', 'tamil', 'tam', 'telugu', 'tel',
-      'arabic', 'ara', 'turkish', 'turk',
-    ];
-    if (foreignDub.any((t) => _hasTag(n, t))) return 2;
-    return 1;
+  /// A syntactically valid http(s) playback URL (basic malformed-URL guard).
+  bool _isValidPlaybackUrl(String url) {
+    if (url.isEmpty) return false;
+    final u = Uri.tryParse(url);
+    return u != null && (u.scheme == 'http' || u.scheme == 'https') && u.host.isNotEmpty;
   }
 
-  /// True if [tag] appears in [name] as a whole token (bounded by non-alphanumerics
-  /// or string ends), so short tags like "ita" don't match inside "capital".
-  bool _hasTag(String name, String tag) {
-    final t = RegExp.escape(tag);
-    return RegExp('(?<![a-z0-9])$t(?![a-z0-9])', caseSensitive: false).hasMatch(name);
+  /// Whether AIOStreams reports this stream as cached: an explicit
+  /// `behaviorHints._isCached`, else the "⚡Ready (RD)" text marker AIOStreams
+  /// puts in the description. Used only to order cached-first - uncached streams
+  /// are still kept.
+  bool _isCached(Map raw, dynamic bh, String name, String description) {
+    if (bh is Map && bh.containsKey('_isCached')) return bh['_isCached'] == true;
+    if (raw.containsKey('_isCached')) return raw['_isCached'] == true;
+    final blob = '$name $description'.toLowerCase();
+    return blob.contains('⚡') || blob.contains('cached') || blob.contains('instant');
   }
 
-  /// Release-name tags that indicate a title's original-language audio.
-  List<String> _origLangTags(String lang) {
-    switch (lang) {
-      case 'ja':
-        return const ['jpn', 'japanese', 'jap'];
-      case 'ko':
-        return const ['kor', 'korean'];
-      case 'zh':
-        return const ['chi', 'zho', 'chinese', 'mandarin', 'cantonese'];
-      default:
-        return [lang];
-    }
-  }
-
-  /// The raw release/torrent title, used to match a synced subtitle.
-  /// Torrentio-style addons put the actual filename on the first line of the
-  /// description; fall back to the name.
+  /// The release/torrent title, used to match a synced subtitle. Prefer
+  /// `behaviorHints.filename`; otherwise take the first real line of the
+  /// description (skipping the emoji metadata lines), falling back to the name.
   String? _releaseName(String name, String description) {
     for (final line in description.split('\n')) {
       final t = line.trim();
-      // Skip the metadata lines (seeders / size / indexer), which start with an
-      // emoji/symbol rather than the release title.
       if (t.isEmpty) continue;
       if (t.startsWith('👤') || t.startsWith('💾') || t.startsWith('⚙️') || t.startsWith('🌐') || t.startsWith('🔗')) continue;
       return t;
@@ -350,62 +236,15 @@ class StreamSourcesService {
     return n.isEmpty ? null : n;
   }
 
-  String _streamLabel(String name, String description) {
-    final res = _resolution('$name $description');
-    final size = _sizeGb(description);
-    final sizeStr = size > 0 ? ' · ${size.toStringAsFixed(1)} GB' : '';
-    return 'Real-Debrid · ${res}p$sizeStr';
+  String _streamLabel(int res, int? videoSize) {
+    final resStr = res > 0 ? '${res}p' : 'Auto';
+    if (videoSize == null || videoSize <= 0) return 'Real-Debrid · $resStr';
+    final gb = videoSize / (1024 * 1024 * 1024);
+    return 'Real-Debrid · $resStr · ${gb.toStringAsFixed(1)} GB';
   }
 
-  /// Lower = tried first for auto-play.
-  int _autoPref(int res) {
-    switch (res) {
-      case 1080:
-        return 0;
-      case 720:
-        return 1;
-      case 2160:
-        return 2;
-      case 1440:
-        return 3;
-      default:
-        return 4;
-    }
-  }
-
-  double _sizeGb(String text) {
-    final m = RegExp(r'([\d.]+)\s*GB', caseSensitive: false).firstMatch(text);
-    if (m != null) return double.tryParse(m.group(1)!) ?? 0;
-    return 0;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Junk / quality filters (shared by the stream parser)
-  // ---------------------------------------------------------------------------
-
-  /// Trailers usually come from YouTube (or are literally labelled "trailer").
-  /// The real safety net is the short-duration skip in the player; this just
-  /// drops the obvious ones up front.
-  static bool _looksLikeTrailer(String text) {
-    final t = text.toLowerCase();
-    return t.contains('youtube.com') ||
-        t.contains('youtu.be') ||
-        t.contains('googlevideo.com') ||
-        t.contains('/trailer') ||
-        t.contains('trailer.');
-  }
-
-  /// Cam / telesync / telecine theatrical rips - low quality, never wanted.
-  /// Word-boundary matched so real tags like "DTS" (audio) aren't caught.
-  static final RegExp _camPattern = RegExp(
-    r'\b(cam|camrip|hdcam|hqcam|ts|hdts|tsrip|telesync|tc|hdtc|telecine|scr|dvdscr|screener|predvd|workprint)\b',
-    caseSensitive: false,
-  );
-
-  static bool _looksLikeCam(String text) => _camPattern.hasMatch(text);
-
-  static bool _isBad(String text) => _looksLikeTrailer(text) || _looksLikeCam(text);
-
+  /// Reads a resolution height from AIOStreams' labels (numeric or UHD/QHD/FHD/HD).
+  /// Display/ordering only - AIOStreams already restricts the actual set.
   int _resolution(String text) {
     final hay = text.toLowerCase();
     // Numeric labels first, then AIOStreams' letter labels (UHD/QHD/FHD/HD).

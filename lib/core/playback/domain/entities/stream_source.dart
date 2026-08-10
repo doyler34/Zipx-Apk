@@ -1,6 +1,6 @@
-/// One playable stream returned by the self-hosted sources backend
-/// (TMDB-Embed-API). Each is a direct video URL (m3u8/mp4) plus any headers it
-/// needs, so it can be played in a native player - no WebView, no ads.
+/// One playable stream returned by AIOStreams. `url` is the final playback URL
+/// (a Real-Debrid stream resolved server-side by AIOStreams) and is played
+/// exactly as returned - the client never rebuilds it from a torrent hash.
 class StreamSource {
   const StreamSource({
     required this.title,
@@ -9,60 +9,48 @@ class StreamSource {
     required this.provider,
     required this.headers,
     this.releaseName,
-    this.infohash,
+    this.filename,
+    this.videoSize,
+    this.bingeGroup,
     this.cached = true,
   });
 
-  /// The torrent infohash (40-hex), when known - used to cache an uncached
-  /// source on Real-Debrid (the "prepare episode" flow). Null for direct
-  /// (non-torrent) sources.
-  final String? infohash;
-
-  /// Whether this source is already cached on the debrid service (instant-play).
-  /// Uncached sources aren't offered for direct playback (they hang), but their
-  /// infohash can be used to prepare/cache them on demand.
+  /// Whether AIOStreams reports this stream as already cached on the debrid
+  /// service (instant-play). Cached streams are preferred, but uncached ones
+  /// are still offered as a fallback so obscure/older content isn't lost.
   final bool cached;
 
-  /// Human label, e.g. "1080p" or the release name.
+  /// Human label, e.g. "Real-Debrid · 1080p".
   final String title;
 
-  /// The raw release/torrent name (e.g. "Pursuit.of.Jade.S01E01.1080p.WEB-DL...")
-  /// when known. Used to fetch subtitles made for this exact release, which are
-  /// in sync - unlike a generic title-matched sub. Null for sources that don't
-  /// expose it.
+  /// The release/torrent name (from `behaviorHints.filename`, else the parsed
+  /// name/description). Used to fetch subtitles made for this exact release,
+  /// which are in sync - unlike a generic title-matched sub.
   final String? releaseName;
 
-  /// Direct video URL (HLS `.m3u8` or progressive `.mp4`).
+  /// `behaviorHints.filename` verbatim, when present. Preserved for autoplay /
+  /// release matching.
+  final String? filename;
+
+  /// `behaviorHints.videoSize` in bytes, when present. Metadata only - never
+  /// used to reject a stream (a BluRay REMUX is legitimately large).
+  final int? videoSize;
+
+  /// `behaviorHints.bingeGroup`, when present. Preserved for next-episode
+  /// autoplay matching.
+  final String? bingeGroup;
+
+  /// Final playback URL from AIOStreams (played as-is).
   final String url;
 
-  /// Quality label from the backend ("1080p", "Auto", ...).
+  /// Quality label ("1080p", "720p", ...).
   final String quality;
 
-  /// Which backend provider produced it (VixSrc, NoTorrent, ...).
+  /// Which backend produced it (here, always AIOStreams).
   final String provider;
 
   /// Request headers the stream needs (User-Agent/Referer). Often empty.
   final Map<String, String> headers;
 
   bool get isHls => url.toLowerCase().contains('.m3u8');
-
-  factory StreamSource.fromJson(Map<String, dynamic> json) {
-    final headers = <String, String>{};
-    final rawHeaders = json['headers'];
-    if (rawHeaders is Map) {
-      rawHeaders.forEach((key, value) {
-        // The backend sometimes returns a Range header ("bytes=0-"); the video
-        // player manages ranges itself, so never forward that one.
-        if (key.toString().toLowerCase() == 'range') return;
-        headers[key.toString()] = value.toString();
-      });
-    }
-    return StreamSource(
-      title: (json['title'] ?? json['name'] ?? 'Stream').toString(),
-      url: (json['url'] ?? '').toString(),
-      quality: (json['quality'] ?? '').toString(),
-      provider: (json['provider'] ?? json['name'] ?? '').toString(),
-      headers: headers,
-    );
-  }
 }
