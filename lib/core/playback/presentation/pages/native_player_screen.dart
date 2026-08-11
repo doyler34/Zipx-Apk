@@ -33,7 +33,7 @@ class NativePlayerScreen extends StatefulWidget {
 const String _userAgent =
     'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 
-enum _Stage { loading, playing, error }
+enum _Stage { loading, playing, prepare, error }
 
 class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBindingObserver {
   final StreamSourcesService _service = sl<StreamSourcesService>();
@@ -45,13 +45,24 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   // with a blank video surface.
   late final VideoController _videoController;
 
+  /// Cached, directly-playable streams (the player + failover use these).
   List<StreamSource> _sources = const [];
+
+  /// Uncached streams (ranked). Not directly playable - offered via the
+  /// "prepare before playback" screen when no cached stream is available.
+  List<StreamSource> _uncached = const [];
+
   int _index = 0;
   int _attemptToken = 0;
   _Stage _stage = _Stage.loading;
   String _status = 'Finding best stream…';
   String _error = '';
   bool _historyRecorded = false;
+
+  /// "Prepare before playback" screen state.
+  bool _preparing = false; // submission in flight
+  bool _prepareSubmitted = false; // backend accepted the preparation request
+  String? _prepareError;
 
   /// Per-source failure reasons, shown on the error screen.
   final List<String> _attemptLog = [];
@@ -131,15 +142,20 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     try {
       // Original language (for audio auto-select) in parallel with the sources.
       final langFuture = _service.originalLanguage(widget.request);
-      final sources = await _service.fetch(widget.request);
+      final all = await _service.fetch(widget.request);
       _originalLang = await langFuture;
       if (!mounted) return;
-      if (sources.isEmpty) {
+      // Split by cache state: cached streams play instantly (and drive
+      // failover); uncached ones are only offered via the "prepare" screen.
+      _sources = all.where((s) => s.cached).toList();
+      _uncached = all.where((s) => !s.cached).toList();
+      if (_sources.isNotEmpty) {
+        await _playIndex(0);
+      } else {
+        // No cached stream. Offer to prepare the best uncached result (if any),
+        // otherwise show the clean "no source" screen.
         _goFallback();
-        return;
       }
-      _sources = sources;
-      await _playIndex(0);
     } catch (_) {
       if (mounted) _goFallback();
     }
@@ -311,15 +327,45 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     return hay.contains('forced') || hay.contains('narrative') || hay.contains('signs');
   }
 
-  /// No web player fallback: when AIOStreams has no playable source, show a
-  /// clean "no source" screen (VidSrc has been removed).
+  /// Called when there's no cached stream to play (none returned, or every
+  /// cached one failed to open). If a preparable uncached result exists, offer
+  /// the "prepare before playback" screen; otherwise show a clean "no source".
+  /// There is no web-player fallback (VidSrc has been removed).
   void _goFallback() {
     if (!mounted) return;
+    if (_uncached.isNotEmpty) {
+      setState(() => _stage = _Stage.prepare);
+      return;
+    }
     setState(() {
       _stage = _Stage.error;
       _error = _sources.isEmpty
           ? 'No playable stream found for this title yet.\n\n(Expected for very new or obscure titles.)'
           : 'Found ${_sources.length} stream(s), but none would open.';
+    });
+  }
+
+  /// Submits the best uncached result for server-side preparation. The backend
+  /// (AIOStreams + debrid) does the caching; the client only fires the request
+  /// and keeps the returned job id. No progress is fabricated.
+  Future<void> _downloadUncached() async {
+    if (_preparing || _uncached.isEmpty) return;
+    setState(() {
+      _preparing = true;
+      _prepareError = null;
+    });
+    final jobId = await _service.submitForPreparation(_uncached.first);
+    if (!mounted) return;
+    setState(() {
+      _preparing = false;
+      if (jobId != null) {
+        _prepareSubmitted = true;
+        // The job id (jobId) is the handle a future Downloads section will
+        // persist + track. No local progress is shown until the backend
+        // exposes real status.
+      } else {
+        _prepareError = 'Couldn\'t start preparing this title. Please try again.';
+      }
     });
   }
 
@@ -799,6 +845,9 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   }
 
   Widget _body() {
+    if (_stage == _Stage.prepare) {
+      return _prepareBody();
+    }
     if (_stage == _Stage.error) {
       return Padding(
         padding: const EdgeInsets.all(20),
@@ -845,6 +894,75 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
         const SizedBox(height: 16),
         Text(_status, style: const TextStyle(color: Colors.white70)),
       ],
+    );
+  }
+
+  /// "This title needs to be prepared" screen, shown when there's no cached
+  /// stream but a preparable result exists. No backend/technical terms are used.
+  Widget _prepareBody() {
+    // After the request is accepted: a clean confirmation, no fabricated progress.
+    if (_prepareSubmitted) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_done_outlined, color: Color(0xFF4ADE80), size: 44),
+            const SizedBox(height: 16),
+            const Text('ZipX is preparing this title.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16)),
+            const SizedBox(height: 8),
+            const Text('It will be ready to watch shortly. You can leave this screen.',
+                textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).maybePop(),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.movie_creation_outlined, color: Colors.white54, size: 44),
+          const SizedBox(height: 16),
+          const Text('This title needs to be prepared before playback.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16)),
+          if (_prepareError != null) ...[
+            const SizedBox(height: 12),
+            Text(_prepareError!, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFF87171))),
+          ],
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              OutlinedButton(
+                onPressed: _preparing ? null : () => Navigator.of(context).maybePop(),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.white70),
+                child: const Text('Cancel'),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: _preparing ? null : _downloadUncached,
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE11D2A)),
+                icon: _preparing
+                    ? const SizedBox(
+                        width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.download_rounded, color: Colors.white),
+                label: const Text('Download', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

@@ -46,6 +46,50 @@ class StreamSourcesService {
     return sources;
   }
 
+  /// Kicks off server-side preparation of an uncached result so it becomes
+  /// playable. Requesting the stream's playback URL makes the backend
+  /// (AIOStreams + the configured debrid) add the release and begin caching it -
+  /// all server-side, so no debrid token ever touches the Flutter client.
+  ///
+  /// Returns a best-effort job identifier the caller can persist/track (the
+  /// release infohash when the backend exposes it, otherwise the stable playback
+  /// URL), or null if the request never reached the backend. It does NOT wait
+  /// for the caching to finish and never fabricates progress - there is no
+  /// backend job/status API yet (see notes).
+  Future<String?> submitForPreparation(StreamSource source) async {
+    if (source.url.isEmpty) return null;
+    try {
+      await _dio.get(
+        source.url,
+        options: Options(
+          responseType: ResponseType.plain,
+          // Any status means the request reached the backend and caching was
+          // triggered; we don't need a 200 to consider it submitted.
+          validateStatus: (_) => true,
+          receiveTimeout: const Duration(seconds: 20),
+          sendTimeout: const Duration(seconds: 15),
+        ),
+      );
+    } on DioException catch (e) {
+      // A receive/send timeout still means the request was sent and caching
+      // began; only a real connection failure means we never reached it.
+      if (e.type != DioExceptionType.receiveTimeout &&
+          e.type != DioExceptionType.sendTimeout) {
+        return null;
+      }
+    } catch (_) {
+      return null;
+    }
+    return _preparationId(source);
+  }
+
+  /// A stable identifier for a preparation job: the 40-hex torrent infohash from
+  /// the stream's bingeGroup when present, otherwise the playback URL.
+  String _preparationId(StreamSource source) {
+    final m = RegExp(r'[a-fA-F0-9]{40}').firstMatch(source.bingeGroup ?? '');
+    return m != null ? m.group(0)!.toLowerCase() : source.url;
+  }
+
   Future<(List<StreamSource>, bool)> _fetchSources(PlaybackRequest request) async {
     // Resolve the IMDb id (AIOStreams needs it) and the original language
     // (drives anime detection + audio ranking) up front, in parallel.
