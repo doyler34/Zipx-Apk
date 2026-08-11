@@ -406,11 +406,16 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       final headers = <String, String>{'User-Agent': _userAgent, ...source.headers};
       await _player.open(Media(source.url, httpHeaders: headers), play: true);
 
-      // Consider the source good once a real duration is known; bail on an
-      // error event or a timeout. RD links (esp. uncached fallbacks) can take a
-      // little while to spin up on mobile, so give them a realistic window.
+      // "Opened OK" = the stream started, signalled by EITHER a positive
+      // duration OR playback position advancing. Position is the safety net so a
+      // valid episode with missing/zero duration metadata is NOT rejected - it's
+      // kept and played. Only a real error event or a timeout (dead/slow host)
+      // fails it, and then failover moves to the next ranked stream. RD links
+      // (esp. uncached fallbacks) can take a little while to spin up on mobile,
+      // so the window is generous.
       final ok = await Future.any(<Future<bool>>[
         _player.stream.duration.firstWhere((d) => d > Duration.zero).then((_) => true),
+        _player.stream.position.firstWhere((p) => p > Duration.zero).then((_) => true),
         _player.stream.error.first.then((_) => false),
       ]).timeout(const Duration(seconds: 20), onTimeout: () => false);
       if (token != _attemptToken || !mounted) return;
