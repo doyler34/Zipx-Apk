@@ -139,9 +139,16 @@ class StreamSourcesService {
       {required String provider, String? originalLang}) {
     if (decoded is! Map || decoded['streams'] is! List) return const [];
 
-    final cached = <StreamSource>[];
-    final uncached = <StreamSource>[];
+    // (score, original index, source). The original index keeps the sort stable
+    // so equal-scored streams keep AIOStreams' own order.
+    final entries = <(int, int, StreamSource)>[];
     final seenUrls = <String>{};
+    final l = (originalLang ?? '').toLowerCase();
+    // "Home audio" title: original language is Japanese/Korean, so that audio is
+    // allowed (anime + JA/KO live-action). Everything else is treated as a
+    // normal English-required title.
+    final homeAudioTitle = l == 'ja' || l == 'ko';
+    var index = 0;
 
     for (final raw in decoded['streams'] as List) {
       if (raw is! Map) continue;
@@ -158,6 +165,7 @@ class StreamSourcesService {
 
       final isCached = _isCached(raw, bh, name, description);
       final res = _resolution('$name $description ${filename ?? ''}');
+      final releaseName = (filename != null && filename.isNotEmpty) ? filename : _releaseName(name, description);
 
       final source = StreamSource(
         title: _streamLabel(res, videoSize),
@@ -165,78 +173,127 @@ class StreamSourcesService {
         quality: res > 0 ? '${res}p' : '',
         provider: provider,
         headers: const {},
-        releaseName: (filename != null && filename.isNotEmpty) ? filename : _releaseName(name, description),
+        releaseName: releaseName,
         filename: filename,
         videoSize: videoSize,
         bingeGroup: bingeGroup,
         cached: isCached,
       );
-      (isCached ? cached : uncached).add(source);
+      // Score on the structured release name (filename preferred) - never the
+      // subtitle-flag-heavy formatter description.
+      final score = _scoreStream(releaseName ?? '', res: res, cached: isCached, homeAudio: homeAudioTitle);
+      entries.add((score, index++, source));
     }
 
-    // Within each group, sink foreign/hardsub-looking releases to the bottom so
-    // an English (or, for anime, original-language) release plays first.
-    _demoteForeign(cached, originalLang);
-    _demoteForeign(uncached, originalLang);
-
-    // Cached first (instant play), then uncached as a fallback so obscure/older
-    // content isn't lost. AIOStreams' relative order is otherwise preserved -
-    // no client-side re-ranking by size/quality (it already ranked).
-    return [...cached, ...uncached];
+    // Best score first; ties keep AIOStreams' original order (stable sort). No
+    // stream is ever dropped - a low score just sinks it to the bottom, so the
+    // user can still pick it from the source list, and it's there as a last
+    // resort when nothing cleaner exists.
+    entries.sort((a, b) {
+      if (a.$1 != b.$1) return b.$1.compareTo(a.$1);
+      return a.$2.compareTo(b.$2);
+    });
+    return entries.map((e) => e.$3).toList();
   }
 
-  /// Stable-partitions a group so releases whose filename looks foreign /
-  /// hardsubbed sink below the rest, without dropping any. Preserves AIOStreams'
-  /// relative order within the "home" and "foreign" tiers.
-  void _demoteForeign(List<StreamSource> list, String? originalLang) {
-    final home = <StreamSource>[];
-    final foreign = <StreamSource>[];
-    for (final s in list) {
-      (_looksForeign(s.releaseName ?? s.filename, originalLang) ? foreign : home).add(s);
-    }
-    list
-      ..clear()
-      ..addAll(home)
-      ..addAll(foreign);
-  }
-
-  /// Best-effort "this release looks foreign / hardsubbed" heuristic on the
-  /// release filename. English is always a home language; for anime the original
-  /// language (Japanese/Korean) is too, so a correct anime release isn't
-  /// demoted. Whole-token matched so short tags don't match inside words.
-  /// Burned-in subs can't be detected directly - this only leans on the name.
-  bool _looksForeign(String? releaseName, String? originalLang) {
-    if (releaseName == null || releaseName.isEmpty) return false;
+  /// Ranks a stream so the app plays a clean English release first instead of
+  /// blindly playing `streams[0]`. Higher is better; nothing is dropped.
+  ///
+  /// Weights are tiered so a higher priority always dominates every lower one,
+  /// matching the requested order:
+  ///   1. English audio        - foreign/dubbed audio is near-disqualifying
+  ///                             (for a JA/KO-original title that audio is "home"
+  ///                             and allowed - anime + JA/KO live-action)
+  ///   2. No hardcoded subs     - HC / HCSUB / KORSUB / CHS / CHT / HARDCODED…
+  ///   3. No other bad tags     - a light nudge against SUBBED (soft subs are
+  ///                             fine and disableable, so it's only a tiebreak)
+  ///   4. Release type          - REMUX > BluRay > WEB-DL > WEBRip > HDRip >
+  ///                             HDTV > DVD
+  ///   5. Cached on Real-Debrid - instant play
+  ///   6. Resolution            - 1080p > 720p
+  ///   7. English subtitle hint - minor
+  ///
+  /// Max positive from (4)-(7) is < the (2)/(3) penalties, and those are < the
+  /// (1) penalty, so the tiers never cross over.
+  int _scoreStream(String releaseName, {required int res, required bool cached, required bool homeAudio}) {
     final n = releaseName.toLowerCase();
-    final home = <String>{'en', 'eng', 'english'};
-    switch ((originalLang ?? '').toLowerCase()) {
-      case 'ja':
-        home.addAll(const ['ja', 'jpn', 'japanese', 'jap']);
-        break;
-      case 'ko':
-        home.addAll(const ['ko', 'kor', 'korean']);
-        break;
-    }
-    const foreignTags = [
-      'lt', 'lit', 'lithuanian', 'rus', 'russian', 'russo', 'ukr', 'ukrainian',
-      'latino', 'latin', 'castellano', 'espanol', 'español', 'spanish', 'spa',
-      'ita', 'italian', 'italiano', 'ger', 'german', 'deutsch', 'deu', 'fre',
-      'fra', 'french', 'truefrench', 'francais', 'français', 'vf', 'vff', 'vfq',
-      'hin', 'hindi', 'tamil', 'tam', 'telugu', 'tel', 'pol', 'polish', 'por',
-      'portuguese', 'portugues', 'português', 'dublado', 'tur', 'turkish',
-      'turk', 'ara', 'arabic', 'kor', 'korean', 'jpn', 'japanese', 'jap', 'chi',
-      'zho', 'chinese', 'mandarin', 'cantonese', 'hardsub', 'hardsubbed',
-      'hardcoded', 'hc',
+    var score = 0;
+
+    // (1) Foreign / dubbed AUDIO - the main thing to avoid for normal titles.
+    if (_hasForeignAudio(n, homeAudio)) score -= 100000;
+
+    // (2) Hardcoded / baked-in subtitles (can't be turned off). Still English
+    //     audio, so it ranks ABOVE foreign-audio releases in the fallback order.
+    if (_hasHardcodedSubs(n)) score -= 10000;
+
+    // (3) Soft "subbed" tag - soft subs are fine (disableable), so only a gentle
+    //     tiebreak, and never for a home-audio (anime/JA/KO) title.
+    if (!homeAudio && _hasTag(n, 'subbed')) score -= 200;
+
+    // (4) Preferred release type.
+    score += _releaseTypeBonus(n);
+
+    // (5) Cached on Real-Debrid.
+    if (cached) score += 300;
+
+    // (6) Resolution.
+    score += res == 1080 ? 100 : (res == 720 ? 50 : 0);
+
+    // (7) English subtitle hint (minor).
+    if (_hasTag(n, 'english') || _hasTag(n, 'eng')) score += 20;
+
+    return score;
+  }
+
+  /// Foreign-language AUDIO indicators (whole-word). For a home-audio title
+  /// (JA/KO original) Japanese/Korean are allowed and "dubbed" is not penalised
+  /// (an English dub is welcome). Uses language *words*, not the "*SUB" tags, so
+  /// a KORSUB / "KOR SUB" release (English audio, baked Korean subs) is caught by
+  /// [_hasHardcodedSubs] instead and stays above truly foreign-audio releases.
+  bool _hasForeignAudio(String n, bool homeAudio) {
+    const words = [
+      'italian', 'italiano', 'german', 'deutsch', 'french', 'francais',
+      'français', 'truefrench', 'spanish', 'espanol', 'español', 'castellano',
+      'latino', 'russian', 'russo', 'hindi', 'polish', 'portuguese',
+      'portugues', 'português', 'dublado', 'turkish', 'arabic', 'chinese',
+      'mandarin', 'cantonese', 'korean', 'japanese',
     ];
-    for (final t in foreignTags) {
-      if (home.contains(t)) continue;
-      if (_hasTag(n, t)) return true;
+    for (final w in words) {
+      if (homeAudio && (w == 'korean' || w == 'japanese')) continue;
+      if (_hasTag(n, w)) return true;
     }
+    // A foreign dub when English is expected (not for a home-audio title).
+    if (!homeAudio && (_hasTag(n, 'dubbed') || _hasTag(n, 'dub'))) return true;
     return false;
   }
 
+  /// Hardcoded / baked-in subtitle tags (the release burns subs into the video,
+  /// so they can't be turned off).
+  bool _hasHardcodedSubs(String n) {
+    const tags = [
+      'hardcoded', 'hardsub', 'hardsubbed', 'hardcore sub', 'korsub', 'kor sub',
+      'kor-sub', 'hcsub', 'hc-sub', 'hc sub', 'hc eng sub', 'chs', 'cht',
+    ];
+    for (final t in tags) {
+      if (_hasTag(n, t)) return true;
+    }
+    return _hasTag(n, 'hc'); // bare "HC" token
+  }
+
+  /// Release-type preference bonus (higher = better source).
+  int _releaseTypeBonus(String n) {
+    if (_hasTag(n, 'remux')) return 3500;
+    if (n.contains('bluray') || n.contains('blu-ray') || _hasTag(n, 'bdrip') || _hasTag(n, 'brrip')) return 3000;
+    if (n.contains('web-dl') || n.contains('webdl') || _hasTag(n, 'web')) return 2500;
+    if (n.contains('webrip') || n.contains('web-rip')) return 2000;
+    if (_hasTag(n, 'hdrip')) return 1500;
+    if (_hasTag(n, 'hdtv')) return 1000;
+    if (_hasTag(n, 'dvdrip') || n.contains('dvd')) return 500;
+    return 0;
+  }
+
   /// True if [tag] appears in [name] as a whole token (bounded by
-  /// non-alphanumerics), so short tags like "lt" don't match inside words.
+  /// non-alphanumerics), so short tags like "hc" don't match inside words.
   bool _hasTag(String name, String tag) {
     final t = RegExp.escape(tag);
     return RegExp('(?<![a-z0-9])$t(?![a-z0-9])', caseSensitive: false).hasMatch(name);
