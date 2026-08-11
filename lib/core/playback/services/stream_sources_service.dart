@@ -247,18 +247,67 @@ class StreamSourcesService {
     }
   }
 
-  /// Ensures one episode is (being) prepared, avoiding duplicates:
-  ///   1) AIOStreams already cached  -> nothing to do
-  ///   2) shared backend already ready/queued/downloading -> nothing to do
-  ///   3) otherwise submit the best uncached candidate.
+  /// Most unique torrent candidates the background flow will try for one episode
+  /// in a single attempt before giving up (retried later on the next look-ahead).
+  static const int _maxPrepareCandidates = 3;
+
+  /// Ensures one upcoming episode is (being) prepared, trying alternate sources
+  /// if one turns out to be a dead/unusable torrent. Highest-ranked first, in
+  /// the existing order. Stops early - and never submits another candidate - the
+  /// moment AIOStreams reports it cached or the shared backend has a ready/active
+  /// job. Tries at most [_maxPrepareCandidates] UNIQUE infohashes; never the same
+  /// hash or a duplicate-infohash release twice. Background only.
   Future<void> _ensurePrepared(PlaybackRequest r) async {
-    final all = await fetchQuiet(r);
-    if (all.any((s) => s.cached)) return; // AIOStreams has it
-    final job = await findPreparedJob(r);
-    if (job != null && job['status'] != 'failed') return; // already ready/active
-    final candidate = all.where((s) => !s.cached).where((s) => (s.infohash ?? '').isNotEmpty);
-    if (candidate.isEmpty) return; // nothing preparable
-    await submitForPreparation(r, candidate.first);
+    final triedHashes = <String>{};
+    for (var attempt = 0; attempt < _maxPrepareCandidates; attempt++) {
+      // Re-check each round: bail if it resolved (cached, or someone/the backend
+      // already has it ready/active) while we were working.
+      final all = await fetchQuiet(r);
+      if (all.any((s) => s.cached)) return; // AIOStreams now cached
+      final existing = await findPreparedJob(r);
+      if (existing != null && existing['status'] != 'failed') return; // ready/active
+
+      // Highest-ranked uncached candidate whose infohash we haven't tried yet
+      // (dedups duplicate releases that resolve to the same infohash).
+      StreamSource? pick;
+      for (final s in all) {
+        if (s.cached) continue;
+        final h = s.infohash;
+        if (h == null || h.isEmpty || triedHashes.contains(h)) continue;
+        pick = s;
+        break;
+      }
+      if (pick == null) return; // no new candidate to try
+      triedHashes.add(pick.infohash!);
+
+      final jobId = await submitForPreparation(r, pick);
+      if (jobId == null) continue; // submission failed - try the next candidate
+
+      // Watch briefly for a terminal failure (dead / magnet_error / error /
+      // episode_not_identified / bad selection). If it's progressing or ready,
+      // we're done; if it failed, clean it up and try the next-ranked candidate.
+      if (await _reachedTerminalFailure(jobId)) {
+        await cancelPreparation(jobId); // free the dead torrent's RD slot
+        continue;
+      }
+      return; // ready / downloading / queued (in progress) - success
+    }
+    // All candidates exhausted for this attempt. No continuous looping - the
+    // next look-ahead pass (or the user reaching the episode) retries fresh.
+  }
+
+  /// Polls a just-submitted job a few times. Returns true if it reached a
+  /// terminal failure, false if it's ready/downloading (working) or still just
+  /// queued after the budget (treated as in-progress, not a failure).
+  Future<bool> _reachedTerminalFailure(String jobId) async {
+    for (var i = 0; i < 3; i++) {
+      final s = await prepareStatus(jobId);
+      final st = s?['status'];
+      if (st == 'failed') return true;
+      if (st == 'ready' || st == 'downloading') return false;
+      await Future.delayed(const Duration(seconds: 8));
+    }
+    return false; // still queued - not a failure
   }
 
   /// Like [fetch] but without recording stream-availability (used for
