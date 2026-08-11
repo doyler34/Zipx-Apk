@@ -37,6 +37,11 @@ class StreamSourcesService {
   static const String _prepareUrl = String.fromEnvironment('PREPARE_ADDON_URL');
   static const String _prepareKey = String.fromEnvironment('PREPARE_API_KEY');
 
+  /// When built with `--dart-define=PREPARE_DEBUG=true`, logs the structured
+  /// fields of each uncached AIOStreams result (to confirm infohash exposure).
+  /// Compile-time false by default, so the block is stripped from normal builds.
+  static const bool _debugPrepare = bool.fromEnvironment('PREPARE_DEBUG');
+
   Future<List<StreamSource>> fetch(PlaybackRequest request) async {
     final (sources, isAnime) = await _fetchSources(request);
     // Learn availability so dead titles get hidden from browsing - but NEVER
@@ -243,6 +248,17 @@ class StreamSourcesService {
       final isCached = _isCached(raw, bh, name, description);
       final res = _resolution('$name $description ${filename ?? ''}');
       final releaseName = (filename != null && filename.isNotEmpty) ? filename : _releaseName(name, description);
+      final infohash = _extractInfohash(raw, bh);
+
+      // Gated diagnostic (compile-time off unless built with
+      // --dart-define=PREPARE_DEBUG=true): reveals which structured fields an
+      // uncached AIOStreams result actually carries, so infohash availability
+      // can be confirmed on-device. Never logs in a normal build.
+      if (_debugPrepare && !isCached) {
+        // ignore: avoid_print
+        print('[prepare] uncached: infoHash=${raw['infoHash']} sources=${raw['sources']} '
+            'bingeGroup=$bingeGroup keys=${raw.keys.toList()} -> extracted=$infohash');
+      }
 
       final source = StreamSource(
         title: _streamLabel(res, videoSize, releaseName),
@@ -254,7 +270,7 @@ class StreamSourcesService {
         filename: filename,
         videoSize: videoSize,
         bingeGroup: bingeGroup,
-        infohash: _extractInfohash(raw, bh),
+        infohash: infohash,
         cached: isCached,
       );
       // Score on the structured release name (filename preferred) - never the
@@ -398,16 +414,46 @@ class StreamSourcesService {
     return blob.contains('⚡') || blob.contains('cached') || blob.contains('instant');
   }
 
-  /// The 40-hex torrent infohash for a stream, when exposed: the Stremio
-  /// `infoHash` field, else a 40-hex substring of `behaviorHints.bingeGroup`.
-  /// Used only to hand an uncached release to the preparation backend.
+  /// The 40-hex torrent infohash for a stream, read ONLY from structured fields
+  /// (never the user-facing description text), in order of reliability:
+  ///   1. the standard Stremio `infoHash` field,
+  ///   2. the Stremio `sources` array ("dht:<hash>", "tracker:..."),
+  ///   3. a `magnet:?xt=urn:btih:<hash>` url (only when the url is a magnet),
+  ///   4. `behaviorHints.bingeGroup`.
+  /// Every match is boundary-anchored so a 40-char slice of a longer hex run
+  /// (e.g. AIOStreams' 64-hex playback refs) can't be mistaken for an infohash.
+  /// Returns null when no structured hash is present.
   String? _extractInfohash(Map raw, dynamic bh) {
-    final direct = raw['infoHash'];
-    if (direct is String && RegExp(r'^[a-fA-F0-9]{40}$').hasMatch(direct)) {
-      return direct.toLowerCase();
+    final direct = _hex40Exact((raw['infoHash'] ?? raw['infohash'])?.toString());
+    if (direct != null) return direct;
+
+    final sources = raw['sources'];
+    if (sources is List) {
+      for (final s in sources) {
+        final h = _hex40Bounded(s?.toString() ?? '');
+        if (h != null) return h;
+      }
     }
-    final bg = (bh is Map ? bh['bingeGroup'] : null)?.toString() ?? '';
-    final m = RegExp(r'[a-fA-F0-9]{40}').firstMatch(bg);
+
+    final url = (raw['url'] ?? '').toString();
+    if (url.startsWith('magnet:')) {
+      final h = _hex40Bounded(url);
+      if (h != null) return h;
+    }
+
+    return _hex40Bounded((bh is Map ? bh['bingeGroup'] : null)?.toString() ?? '');
+  }
+
+  /// The whole string is exactly a 40-hex infohash.
+  String? _hex40Exact(String? s) {
+    if (s == null) return null;
+    return RegExp(r'^[a-fA-F0-9]{40}$').hasMatch(s) ? s.toLowerCase() : null;
+  }
+
+  /// A 40-hex run bounded by non-hex characters (so it isn't part of a longer
+  /// hex string like a 64-hex reference).
+  String? _hex40Bounded(String s) {
+    final m = RegExp(r'(?<![a-fA-F0-9])[a-fA-F0-9]{40}(?![a-fA-F0-9])').firstMatch(s);
     return m?.group(0)?.toLowerCase();
   }
 
