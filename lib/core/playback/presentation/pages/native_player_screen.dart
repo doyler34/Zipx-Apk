@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -40,7 +41,7 @@ class NativePlayerScreen extends StatefulWidget {
 const String _userAgent =
     'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 
-enum _Stage { loading, playing, prepare, error }
+enum _Stage { loading, playing, prepare, preparingNext, error }
 
 class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBindingObserver {
   final StreamSourcesService _service = sl<StreamSourcesService>();
@@ -65,6 +66,16 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   String _status = 'Finding best stream…';
   String _error = '';
   bool _historyRecorded = false;
+
+  /// Rolling-buffer look-ahead runs once per playing episode.
+  bool _upcomingTriggered = false;
+
+  /// End-of-episode autoplay (TV binge) listener.
+  StreamSubscription<bool>? _completedSub;
+
+  /// "Preparing next episode…" wait state: the job being polled + last %.
+  String? _preparingJobId;
+  int? _prepPercent;
 
   /// "Prepare before playback" screen state.
   bool _preparing = false; // submission in flight
@@ -124,6 +135,10 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       _maybeAutoSelectAudio(tracks.audio);
       _maybeAutoEnableSubs();
     });
+    // Binge: when an episode reaches its natural end, roll to the next one.
+    _completedSub = _player.stream.completed.listen((done) {
+      if (done) _onCompleted();
+    });
     _load();
   }
 
@@ -131,6 +146,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _tracksSub?.cancel();
+    _completedSub?.cancel();
     _player.dispose(); // stops playback + releases mpv
     SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -157,18 +173,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       if (primary != null && primary.isNotEmpty) {
         _originalLang = await langFuture;
         if (!mounted) return;
-        _sources = [
-          StreamSource(
-            title: 'ZipX · Ready',
-            url: primary,
-            quality: '',
-            provider: 'ZipX',
-            headers: const {},
-            cached: true,
-          ),
-        ];
-        _uncached = const [];
-        await _playIndex(0);
+        await _playDirect(primary);
         return;
       }
 
@@ -181,31 +186,102 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       _uncached = all.where((s) => !s.cached).toList();
       if (_sources.isNotEmpty) {
         await _playIndex(0);
-      } else {
-        // AIOStreams shows nothing cached - but this title may already be
-        // prepared on the shared backend (someone prepared it; AIOStreams just
-        // hasn't caught up). If so, play that fresh direct URL instantly.
-        final preparedUrl = await _service.findPreparedPlaybackUrl(widget.request);
-        if (!mounted) return;
-        if (preparedUrl != null && preparedUrl.isNotEmpty) {
-          _sources = [
-            StreamSource(
-              title: 'ZipX · Ready',
-              url: preparedUrl,
-              quality: '',
-              provider: 'ZipX',
-              headers: const {},
-              cached: true,
-            ),
-          ];
-          await _playIndex(0);
-        } else {
-          // Offer to prepare the best uncached result (if any), else "no source".
-          _goFallback();
-        }
+        return;
       }
+
+      // AIOStreams shows nothing cached. Ask the shared backend if this exact
+      // episode is already prepared (someone prepared it; AIOStreams just hasn't
+      // caught up) or is in progress.
+      final job = await _service.findPreparedJob(widget.request);
+      if (!mounted) return;
+      final status = job?['status'];
+      if (status == 'ready') {
+        final url = await _service.preparedPlaybackUrl(job!['jobId'] as String);
+        if (!mounted) return;
+        if (url != null && url.isNotEmpty) {
+          await _playDirect(url);
+          return;
+        }
+      } else if (status == 'downloading' || status == 'queued') {
+        // Being prepared already (e.g. by the rolling buffer) - wait, don't
+        // prompt for a manual download.
+        _enterPreparingNext(job!['jobId'] as String);
+        return;
+      }
+      // Nothing ready/active: offer to prepare (or "no source").
+      _goFallback();
     } catch (_) {
       if (mounted) _goFallback();
+    }
+  }
+
+  /// Plays a single pre-resolved direct URL (a ready Download / prepared file).
+  Future<void> _playDirect(String url) async {
+    _sources = [
+      StreamSource(
+        title: 'ZipX · Ready',
+        url: url,
+        quality: '',
+        provider: 'ZipX',
+        headers: const {},
+        cached: true,
+      ),
+    ];
+    _uncached = const [];
+    await _playIndex(0);
+  }
+
+  /// End of episode: for a TV binge, roll to the next episode automatically.
+  /// Resolving/playing it reuses the normal load flow (AIOStreams cached →
+  /// shared-backend ready → "preparing next" wait), so the user isn't sent back
+  /// to source selection. At the end of the series it just ends.
+  void _onCompleted() {
+    if (!mounted || _stage != _Stage.playing) return;
+    if (!widget.request.isTvEpisode) return;
+    unawaited(_autoplayNext());
+  }
+
+  Future<void> _autoplayNext() async {
+    final next = await _service.nextEpisodeRequest(widget.request);
+    if (!mounted || next == null) return; // end of series - end normally
+    // Replace this player with one for the next episode; its _load resolves the
+    // best available source (cached / prepared-ready / preparing).
+    context.pushReplacement('/player', extra: next);
+  }
+
+  /// The next episode isn't cached yet but a preparation job is in progress:
+  /// show a "Preparing next episode…" state and poll until it's ready, then
+  /// play - rather than prompting for a manual download.
+  void _enterPreparingNext(String jobId) {
+    setState(() {
+      _stage = _Stage.preparingNext;
+      _preparingJobId = jobId;
+      _prepPercent = null;
+    });
+    unawaited(_pollPreparation(jobId));
+  }
+
+  Future<void> _pollPreparation(String jobId) async {
+    while (mounted && _stage == _Stage.preparingNext && _preparingJobId == jobId) {
+      final s = await _service.prepareStatus(jobId);
+      if (!mounted || _stage != _Stage.preparingNext || _preparingJobId != jobId) return;
+      final st = s?['status'];
+      if (st == 'ready') {
+        final url = await _service.preparedPlaybackUrl(jobId);
+        if (!mounted) return;
+        if (url != null && url.isNotEmpty) {
+          await _playDirect(url);
+        } else {
+          _goFallback();
+        }
+        return;
+      }
+      if (st == 'failed') {
+        _goFallback();
+        return;
+      }
+      setState(() => _prepPercent = s?['progress'] is num ? (s!['progress'] as num).toInt() : null);
+      await Future.delayed(const Duration(seconds: 10));
     }
   }
 
@@ -510,6 +586,13 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       _recordHistoryOnce(source);
       _maybeLoadSubs(source);
       setState(() => _stage = _Stage.playing);
+      // Binge look-ahead: keep the next ~2 episodes ready in the background.
+      // Runs once per playing episode; each episode watched advances the window,
+      // so old episodes are never re-prepared.
+      if (!_upcomingTriggered && widget.request.isTvEpisode) {
+        _upcomingTriggered = true;
+        unawaited(_service.prepareUpcoming(widget.request, count: 2));
+      }
     } catch (e) {
       if (token != _attemptToken) return;
       var reason = e.toString();
@@ -791,6 +874,16 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     return l == 'ja' || l == 'ko';
   }
 
+  /// "S01E06" for the current episode, else "this title".
+  String _episodeLabel() {
+    final s = widget.request.seasonNumber;
+    final e = widget.request.episodeNumber;
+    if (widget.request.isTvEpisode && s != null && e != null) {
+      return 'S${s.toString().padLeft(2, '0')}E${e.toString().padLeft(2, '0')}';
+    }
+    return 'this title';
+  }
+
   bool _isEnglishTrack(SubtitleTrack t) {
     final lang = (t.language ?? '').toLowerCase();
     final title = (t.title ?? '').toLowerCase();
@@ -935,6 +1028,28 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   Widget _body() {
     if (_stage == _Stage.prepare) {
       return _prepareBody();
+    }
+    if (_stage == _Stage.preparingNext) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: Color(0xFFE11D2A)),
+            const SizedBox(height: 16),
+            Text(
+              _prepPercent != null ? 'Preparing ${_episodeLabel()}… $_prepPercent%' : 'Preparing ${_episodeLabel()}…',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () => Navigator.of(context).maybePop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      );
     }
     if (_stage == _Stage.error) {
       return Padding(

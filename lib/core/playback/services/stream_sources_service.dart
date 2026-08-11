@@ -157,12 +157,11 @@ class StreamSourcesService {
     return null;
   }
 
-  /// Looks up whether this content is already prepared (ready) on the shared
-  /// backend - by content, not job id - and if so returns a fresh directly-
-  /// playable URL. Lets any app instance play a title someone already prepared,
-  /// instantly, even while AIOStreams' cached view is still catching up.
-  /// Returns null when nothing ready exists (caller continues as normal).
-  Future<String?> findPreparedPlaybackUrl(PlaybackRequest request) async {
+  /// Looks up a shared-backend preparation job for this exact content (by
+  /// tmdbId + mediaType + season + episode, NOT job id), preferring a ready one.
+  /// Returns {jobId, status} or null. Because the backend + Real-Debrid account
+  /// are shared, this finds a title ANY user already prepared.
+  Future<Map<String, dynamic>?> findPreparedJob(PlaybackRequest request) async {
     if (!prepareEnabled) return null;
     try {
       final resp = await _dio.get(
@@ -176,14 +175,101 @@ class StreamSourcesService {
         options: Options(headers: {'X-Api-Key': _prepareKey}, receiveTimeout: const Duration(seconds: 20)),
       );
       final data = resp.data is String ? jsonDecode(resp.data as String) : resp.data;
-      if (data is Map && data['status'] == 'ready' && data['jobId'] is String) {
-        return preparedPlaybackUrl(data['jobId'] as String);
-      }
+      if (data is Map && data['jobId'] is String) return Map<String, dynamic>.from(data);
     } catch (_) {
-      // nothing ready / unreachable
+      // nothing found / unreachable
     }
     return null;
   }
+
+  /// If this content is already prepared (ready) on the shared backend, returns
+  /// a fresh directly-playable URL; otherwise null (caller continues normally).
+  Future<String?> findPreparedPlaybackUrl(PlaybackRequest request) async {
+    final job = await findPreparedJob(request);
+    if (job != null && job['status'] == 'ready' && job['jobId'] is String) {
+      return preparedPlaybackUrl(job['jobId'] as String);
+    }
+    return null;
+  }
+
+  /// Resolves the next episode after [r] from TMDB metadata: the next episode in
+  /// the same season, else episode 1 of the next season if it exists. Returns
+  /// null at the end of the series (never invents an episode). Non-TV → null.
+  Future<PlaybackRequest?> nextEpisodeRequest(PlaybackRequest r) async {
+    if (!r.isTvEpisode) return null;
+    final s = r.seasonNumber ?? 1;
+    final e = r.episodeNumber ?? 1;
+    final inSeason = await _seasonEpisodeCount(r.tmdbId, s);
+    if (inSeason != null && e < inSeason) {
+      return r.copyWith(seasonNumber: s, episodeNumber: e + 1);
+    }
+    final nextSeason = await _seasonEpisodeCount(r.tmdbId, s + 1);
+    if (nextSeason != null && nextSeason > 0) {
+      return r.copyWith(seasonNumber: s + 1, episodeNumber: 1);
+    }
+    return null; // end of series
+  }
+
+  /// Episode count for a season from TMDB, or null if the season doesn't exist.
+  Future<int?> _seasonEpisodeCount(int tmdbId, int season) async {
+    try {
+      final r = await _dio.get(
+        'https://api.themoviedb.org/3/tv/$tmdbId/season/$season',
+        queryParameters: {'api_key': _tmdbKey},
+        options: Options(receiveTimeout: const Duration(seconds: 10)),
+      );
+      final data = r.data is String ? jsonDecode(r.data as String) : r.data;
+      if (data is Map && data['episodes'] is List) return (data['episodes'] as List).length;
+    } catch (_) {
+      // no such season / unreachable
+    }
+    return null;
+  }
+
+  /// Rolling-buffer preparation: keeps roughly the next [count] episodes ahead
+  /// of [current] ready. For each upcoming episode: if AIOStreams already has it
+  /// cached, or the shared backend already has a ready/active job for it, do
+  /// nothing; otherwise submit the best uncached candidate. Never prepares old
+  /// episodes (it only walks forward from what's playing) or whole seasons, and
+  /// never duplicates a job (backend dedups + the ready/active check here).
+  Future<void> prepareUpcoming(PlaybackRequest current, {int count = 2}) async {
+    if (!current.isTvEpisode || !prepareEnabled) return;
+    var req = current;
+    for (var i = 0; i < count; i++) {
+      final next = await nextEpisodeRequest(req);
+      if (next == null) break; // season/series end
+      try {
+        await _ensurePrepared(next);
+      } catch (_) {
+        // isolated - keep buffering the rest
+      }
+      req = next;
+    }
+  }
+
+  /// Ensures one episode is (being) prepared, avoiding duplicates:
+  ///   1) AIOStreams already cached  -> nothing to do
+  ///   2) shared backend already ready/queued/downloading -> nothing to do
+  ///   3) otherwise submit the best uncached candidate.
+  Future<void> _ensurePrepared(PlaybackRequest r) async {
+    final all = await fetchQuiet(r);
+    if (all.any((s) => s.cached)) return; // AIOStreams has it
+    final job = await findPreparedJob(r);
+    if (job != null && job['status'] != 'failed') return; // already ready/active
+    final candidate = all.where((s) => !s.cached).where((s) => (s.infohash ?? '').isNotEmpty);
+    if (candidate.isEmpty) return; // nothing preparable
+    await submitForPreparation(r, candidate.first);
+  }
+
+  /// Like [fetch] but without recording stream-availability (used for
+  /// background look-ahead so probing future episodes has no browsing side effects).
+  Future<List<StreamSource>> fetchQuiet(PlaybackRequest request) async {
+    final (sources, _) = await _fetchSources(request);
+    return sources;
+  }
+
+  /// Cancels/removes a preparation job (and its Real-Debrid download).
+  Future<bool> cancelPreparation(String jobId) async {
 
   /// Cancels/removes a preparation job (and its Real-Debrid download).
   Future<bool> cancelPreparation(String jobId) async {
