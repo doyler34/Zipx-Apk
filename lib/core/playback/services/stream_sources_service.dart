@@ -251,13 +251,21 @@ class StreamSourcesService {
       final infohash = _extractInfohash(raw, bh);
 
       // Gated diagnostic (compile-time off unless built with
-      // --dart-define=PREPARE_DEBUG=true): reveals which structured fields an
-      // uncached AIOStreams result actually carries, so infohash availability
-      // can be confirmed on-device. Never logs in a normal build.
+      // --dart-define=PREPARE_DEBUG=true): logs the raw structured fields of an
+      // uncached AIOStreams result so infohash exposure can be confirmed
+      // on-device. Never logs in a normal build. No credentials/keys/auth
+      // headers are ever included (they aren't part of the stream object).
       if (_debugPrepare && !isCached) {
         // ignore: avoid_print
-        print('[prepare] uncached: infoHash=${raw['infoHash']} sources=${raw['sources']} '
-            'bingeGroup=$bingeGroup keys=${raw.keys.toList()} -> extracted=$infohash');
+        print('[PREPARE_DEBUG] uncached stream:\n'
+            '  infoHash=${raw['infoHash']}\n'
+            '  sources=${raw['sources']}\n'
+            '  url=$url\n'
+            '  behaviorHints=$bh\n'
+            '  name=$name\n'
+            '  filename=$filename\n'
+            '  cached=$isCached\n'
+            '  extractedInfoHash=$infohash');
       }
 
       final source = StreamSource(
