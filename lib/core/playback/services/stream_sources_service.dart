@@ -248,7 +248,11 @@ class StreamSourcesService {
       final isCached = _isCached(raw, bh, name, description);
       final res = _resolution('$name $description ${filename ?? ''}');
       final releaseName = (filename != null && filename.isNotEmpty) ? filename : _releaseName(name, description);
-      final infohash = _extractInfohash(raw, bh);
+      // AIOStreams embeds the torrent hash + file index in a base64-JSON segment
+      // of the playback URL; fall back to structured Stremio fields if present.
+      final urlTorrent = _decodeUrlTorrent(url);
+      final infohash = _extractInfohash(raw, bh) ?? urlTorrent.hash;
+      final fileIndex = urlTorrent.index;
 
       // Gated diagnostic (compile-time off unless built with
       // --dart-define=PREPARE_DEBUG=true): logs the raw structured fields of an
@@ -265,7 +269,8 @@ class StreamSourcesService {
             '  name=$name\n'
             '  filename=$filename\n'
             '  cached=$isCached\n'
-            '  extractedInfoHash=$infohash');
+            '  extractedInfoHash=$infohash\n'
+            '  extractedFileIndex=$fileIndex');
       }
 
       final source = StreamSource(
@@ -279,6 +284,7 @@ class StreamSourcesService {
         videoSize: videoSize,
         bingeGroup: bingeGroup,
         infohash: infohash,
+        fileIndex: fileIndex,
         cached: isCached,
       );
       // Score on the structured release name (filename preferred) - never the
@@ -463,6 +469,40 @@ class StreamSourcesService {
   String? _hex40Bounded(String s) {
     final m = RegExp(r'(?<![a-fA-F0-9])[a-fA-F0-9]{40}(?![a-fA-F0-9])').firstMatch(s);
     return m?.group(0)?.toLowerCase();
+  }
+
+  /// AIOStreams embeds the torrent identity in a base64-encoded JSON segment of
+  /// the playback URL, e.g. `{"type":"torrent","hash":"<40hex>","index":4,...}`.
+  /// Scans the URL's path segments for that structured object and returns its
+  /// `hash` (validated 40-hex) and `index` (file index within the torrent, -1 =
+  /// whole/unknown). This is structured data, not the user-facing description.
+  ({String? hash, int? index}) _decodeUrlTorrent(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return (hash: null, index: null);
+    for (final seg in uri.pathSegments) {
+      if (seg.length < 16) continue; // too short to be the torrent JSON
+      final obj = _tryBase64Json(seg);
+      final hash = _hex40Exact(obj?['hash']?.toString());
+      if (hash == null) continue;
+      final idx = obj!['index'];
+      final index = idx is int ? idx : (idx is num ? idx.toInt() : null);
+      return (hash: hash, index: index);
+    }
+    return (hash: null, index: null);
+  }
+
+  /// Best-effort decode of a (possibly base64url, possibly unpadded) base64
+  /// string into a JSON map. Returns null if it isn't base64-encoded JSON.
+  Map<String, dynamic>? _tryBase64Json(String s) {
+    try {
+      var b = s.replaceAll('-', '+').replaceAll('_', '/');
+      final pad = b.length % 4;
+      if (pad != 0) b = b.padRight(b.length + (4 - pad), '=');
+      final obj = jsonDecode(utf8.decode(base64.decode(b)));
+      return obj is Map ? obj.cast<String, dynamic>() : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// The release/torrent title, used to match a synced subtitle. Prefer

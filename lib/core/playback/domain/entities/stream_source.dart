@@ -13,6 +13,7 @@ class StreamSource {
     this.videoSize,
     this.bingeGroup,
     this.infohash,
+    this.fileIndex,
     this.cached = true,
   });
 
@@ -41,10 +42,16 @@ class StreamSource {
   /// autoplay matching.
   final String? bingeGroup;
 
-  /// The 40-hex torrent infohash, when the stream exposes one (`infoHash` field
-  /// or embedded in `bingeGroup`). Sent to the preparation backend so it can
-  /// add an uncached release to Real-Debrid server-side. Null when unknown.
+  /// The 40-hex torrent infohash, when the stream exposes one (structured field
+  /// or the base64-JSON segment of the AIOStreams playback URL). Sent to the
+  /// preparation backend so it can add an uncached release to Real-Debrid
+  /// server-side. Null when unknown.
   final String? infohash;
+
+  /// The file's index within the torrent, from the same AIOStreams URL segment
+  /// (`index`; -1 = whole/unknown). Lets the backend select the exact file for
+  /// a season pack without parsing filenames. Null when unknown.
+  final int? fileIndex;
 
   /// Final playback URL from AIOStreams (played as-is).
   final String url;
