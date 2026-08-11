@@ -8,6 +8,7 @@ import '../../blocs/settings/settings_bloc.dart';
 import 'change_language_tile.dart';
 import 'clear_bookmarks_tile.dart';
 import 'clear_continue_watching_tile.dart';
+import 'downloads_tile.dart';
 import 'streaming_providers_section.dart';
 
 class SettingsList extends StatelessWidget {
@@ -24,6 +25,7 @@ class SettingsList extends StatelessWidget {
               child: const SingleChildScrollView(
                 child: Column(
                   children: [
+                    DownloadsTile(),
                     AdultContentTile(),
                     ClearBookmarksTile(),
                     ClearContinueWatchingTile(),

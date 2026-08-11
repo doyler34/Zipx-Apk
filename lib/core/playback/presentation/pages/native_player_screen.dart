@@ -6,8 +6,10 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../dependency_injection/di.dart';
+import '../../domain/entities/download_item.dart';
 import '../../domain/entities/playback_request.dart';
 import '../../domain/entities/stream_source.dart';
+import '../../services/downloads_service.dart';
 import '../../services/playback_history_service.dart';
 import '../../services/stream_sources_service.dart';
 import '../../services/subtitle_service.dart';
@@ -17,8 +19,8 @@ import '../../services/subtitle_service.dart';
 /// settings menu - embedded subtitle + audio track selection and speed.
 ///
 /// Resilience is built in:
-///  - each source is tried in turn; one that fails to open auto-advances,
-///  - files far too short to be the real title (samples/trailers) are skipped,
+///  - each source is tried in turn; one that fails to open (error/timeout)
+///    auto-advances to the next,
 ///  - if AIOStreams returns nothing playable, a clean "no source" screen is
 ///    shown (there is no web-player fallback).
 class NativePlayerScreen extends StatefulWidget {
@@ -345,24 +347,42 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     });
   }
 
-  /// Submits the best uncached result for server-side preparation. The backend
-  /// (AIOStreams + debrid) does the caching; the client only fires the request
-  /// and keeps the returned job id. No progress is fabricated.
+  /// Submits the best uncached result for server-side preparation, then records
+  /// it under Profile → Downloads so it's tracked (not fire-and-forget).
   Future<void> _downloadUncached() async {
     if (_preparing || _uncached.isEmpty) return;
     setState(() {
       _preparing = true;
       _prepareError = null;
     });
-    final jobId = await _service.submitForPreparation(widget.request, _uncached.first);
+    final src = _uncached.first;
+    final jobId = await _service.submitForPreparation(widget.request, src);
     if (!mounted) return;
+    if (jobId != null) {
+      final downloads = sl<DownloadsService>();
+      // Dedup: only create a card if the backend job isn't already tracked.
+      if (downloads.get(jobId) == null) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        unawaited(downloads.upsert(DownloadItem(
+          jobId: jobId,
+          tmdbId: widget.request.tmdbId,
+          mediaType: widget.request.isTvEpisode ? 'tv' : 'movie',
+          title: widget.request.title,
+          poster: widget.request.posterPath,
+          season: widget.request.seasonNumber,
+          episode: widget.request.episodeNumber,
+          hash: src.infohash,
+          fileIdx: src.fileIndex,
+          status: DownloadStatus.queued,
+          createdAt: now,
+          updatedAt: now,
+        )));
+      }
+    }
     setState(() {
       _preparing = false;
       if (jobId != null) {
         _prepareSubmitted = true;
-        // The job id (jobId) is the handle a future Downloads section will
-        // persist + track. No local progress is shown until the backend
-        // exposes real status.
       } else {
         _prepareError = 'Couldn\'t start preparing this title. Please try again.';
       }
@@ -401,18 +421,11 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
         return;
       }
 
-      // Skip only an obviously-broken tiny file (a stray trailer/sample). We no
-      // longer gate on % of the TMDB runtime: AIOStreams serves full RD release
-      // files, so that rule mostly false-rejected valid streams (wrong runtime,
-      // short films, slow duration reporting).
-      final duration = _player.state.duration;
-      final minReal = _minAcceptableDuration();
-      if (duration > Duration.zero && duration < minReal) {
-        _attemptLog.add('${_label(source)} → ${duration.inMinutes}m (need ≥${minReal.inMinutes}m) - too short, skipped');
-        await _tryNext();
-        return;
-      }
-
+      // No minimum-duration gate. The player-reported duration is unreliable
+      // (it can read low/0 early or be misparsed), so rejecting on it dropped
+      // valid episodes. Samples/extras are already filtered upstream (AIOStreams
+      // + backend file selection); a genuinely bad stream still fails naturally
+      // via the open/error/timeout check above and failover tries the next one.
       _recordHistoryOnce(source);
       _maybeLoadSubs(source);
       setState(() => _stage = _Stage.playing);
@@ -431,12 +444,6 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     } else {
       _goFallback();
     }
-  }
-
-  /// A low absolute floor that only catches an obvious trailer/sample - not a
-  /// fraction of the TMDB runtime (AIOStreams serves full release files).
-  Duration _minAcceptableDuration() {
-    return widget.request.isTvEpisode ? const Duration(minutes: 3) : const Duration(minutes: 10);
   }
 
   void _recordHistoryOnce(StreamSource source) {
@@ -909,11 +916,11 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
           children: [
             const Icon(Icons.cloud_done_outlined, color: Color(0xFF4ADE80), size: 44),
             const SizedBox(height: 16),
-            const Text('ZipX is preparing this title.',
+            const Text('Added to Downloads',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16)),
             const SizedBox(height: 8),
-            const Text('It will be ready to watch shortly. You can leave this screen.',
+            const Text("We're preparing this title. Track it under Profile → Downloads; it'll be ready to watch shortly.",
                 textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
             const SizedBox(height: 20),
             ElevatedButton(

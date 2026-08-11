@@ -61,25 +61,47 @@ class StreamSourcesService {
   /// Whether the server-side preparation backend is configured (URL + key).
   bool get prepareEnabled => _prepareUrl.isNotEmpty && _prepareKey.isNotEmpty;
 
-  /// Submits an uncached release to the ZipX preparation backend, which adds it
-  /// to Real-Debrid server-side (the RD token never touches the app). Returns
-  /// the backend's internal job id to poll/track, or null if it couldn't be
-  /// submitted (backend not configured, no infohash, or the request failed).
+  /// Submits an uncached [source] for a [request] to the preparation backend.
+  /// Returns the backend job id, or null if it couldn't be submitted (backend
+  /// not configured, no infohash, or the request failed).
   Future<String?> submitForPreparation(PlaybackRequest request, StreamSource source) async {
-    if (!prepareEnabled) return null;
     final hash = source.infohash;
     if (hash == null || hash.isEmpty) return null; // can't prepare without a hash
+    return submitPreparation(
+      tmdbId: request.tmdbId.toString(),
+      mediaType: request.isTvEpisode ? 'tv' : 'movie',
+      title: request.title,
+      season: request.isTvEpisode ? request.seasonNumber : null,
+      episode: request.isTvEpisode ? request.episodeNumber : null,
+      hash: hash,
+      fileIdx: source.fileIndex,
+    );
+  }
+
+  /// Low-level submit used by both the player and the Downloads retry flow. The
+  /// backend adds the release to Real-Debrid server-side (RD token never touches
+  /// the app). Returns the backend job id, or null on failure.
+  Future<String?> submitPreparation({
+    required String tmdbId,
+    required String mediaType,
+    required String title,
+    int? season,
+    int? episode,
+    required String hash,
+    int? fileIdx,
+  }) async {
+    if (!prepareEnabled) return null;
     try {
       final resp = await _dio.post(
         '${_prepareBase()}/prepare',
         data: {
-          'tmdbId': request.tmdbId.toString(),
-          'mediaType': request.isTvEpisode ? 'tv' : 'movie',
-          'title': request.title,
-          if (request.isTvEpisode) 'season': request.seasonNumber,
-          if (request.isTvEpisode) 'episode': request.episodeNumber,
+          'tmdbId': tmdbId,
+          'mediaType': mediaType,
+          'title': title,
+          if (mediaType == 'tv') 'season': season,
+          if (mediaType == 'tv') 'episode': episode,
           'hash': hash,
-          if (source.fileIndex != null) 'fileIdx': source.fileIndex,
+          if (fileIdx != null) 'fileIdx': fileIdx,
         },
         options: Options(
           headers: {'X-Api-Key': _prepareKey},
