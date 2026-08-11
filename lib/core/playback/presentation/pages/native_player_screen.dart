@@ -49,7 +49,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   int _index = 0;
   int _attemptToken = 0;
   _Stage _stage = _Stage.loading;
-  String _status = 'Finding streams…';
+  String _status = 'Finding best stream…';
   String _error = '';
   bool _historyRecorded = false;
 
@@ -318,8 +318,8 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     setState(() {
       _stage = _Stage.error;
       _error = _sources.isEmpty
-          ? 'No playable source found for this title yet.\n\n(AIOStreams returned nothing streamable - expected for very new or obscure titles.)'
-          : 'AIOStreams returned ${_sources.length} source(s), but none would open.';
+          ? 'No playable stream found for this title yet.\n\n(Expected for very new or obscure titles.)'
+          : 'Found ${_sources.length} stream(s), but none would open.';
     });
   }
 
@@ -332,7 +332,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     setState(() {
       _stage = _Stage.loading;
       _index = index;
-      _status = 'Loading ${_label(_sources[index])}…';
+      _status = 'Finding best stream…';
     });
 
     final source = _sources[index];
@@ -402,11 +402,12 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     );
   }
 
+  /// Clean, user-facing stream label ("1080p · WEB-DL · 4.2 GB"). The backend
+  /// builds this in [StreamSource.title]; it never contains a provider/debrid
+  /// name, so nothing technical leaks into the player UI.
   String _label(StreamSource s) {
-    final q = s.quality.trim();
-    final provider = s.provider.trim();
-    if (q.isNotEmpty && q.toLowerCase() != 'auto') return '$provider · $q';
-    return provider.isEmpty ? s.title : provider;
+    final t = s.title.trim();
+    return t.isEmpty ? 'Stream' : t;
   }
 
   // --- settings menus (subtitles / audio / speed / sources) -----------------
@@ -691,8 +692,11 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   }
 
   Future<void> _openSourcePicker() async {
+    // Only ever offer the top 5 ranked streams in the manual picker. The full
+    // ranked list ([_sources]) is untouched, so automatic failover can still
+    // advance through every result internally.
     _pickFromSheet('Sources', [
-      for (var i = 0; i < _sources.length; i++)
+      for (var i = 0; i < _sources.length && i < 5; i++)
         _Choice(_label(_sources[i]), i == _index, () {
           if (i != _index) _playIndex(i);
         }),
@@ -719,7 +723,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
           children: [
             Text(widget.request.title, maxLines: 1, overflow: TextOverflow.ellipsis),
             if (_stage == _Stage.loading)
-              const Text('NATIVE · searching…', style: TextStyle(fontSize: 11, color: Color(0xFF4ADE80))),
+              const Text('Finding best stream…', style: TextStyle(fontSize: 11, color: Color(0xFF4ADE80))),
           ],
         ),
       ),
@@ -749,8 +753,16 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-              Text('NATIVE · ${_label(_sources[_index])}',
-                  style: const TextStyle(fontSize: 11, color: Color(0xFF4ADE80), fontWeight: FontWeight.w600)),
+              // ZipX-branded status: green dot + "ZipX Server" (no backend name).
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.circle, size: 8, color: Color(0xFF4ADE80)),
+                  SizedBox(width: 6),
+                  Text('ZipX Server',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF4ADE80), fontWeight: FontWeight.w600)),
+                ],
+              ),
             ],
           ),
         ),

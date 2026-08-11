@@ -168,7 +168,7 @@ class StreamSourcesService {
       final releaseName = (filename != null && filename.isNotEmpty) ? filename : _releaseName(name, description);
 
       final source = StreamSource(
-        title: _streamLabel(res, videoSize),
+        title: _streamLabel(res, videoSize, releaseName),
         url: url,
         quality: res > 0 ? '${res}p' : '',
         provider: provider,
@@ -334,11 +334,32 @@ class StreamSourcesService {
     return n.isEmpty ? null : n;
   }
 
-  String _streamLabel(int res, int? videoSize) {
-    final resStr = res > 0 ? '${res}p' : 'Auto';
-    if (videoSize == null || videoSize <= 0) return 'Real-Debrid · $resStr';
-    final gb = videoSize / (1024 * 1024 * 1024);
-    return 'Real-Debrid · $resStr · ${gb.toStringAsFixed(1)} GB';
+  /// A clean, user-facing stream label ("1080p · WEB-DL · 4.2 GB"). Never
+  /// exposes the backend/debrid/provider name - that stays hidden behind ZipX.
+  String _streamLabel(int res, int? videoSize, String? releaseName) {
+    final parts = <String>[];
+    if (res > 0) parts.add('${res}p');
+    final type = _releaseTypeName(releaseName);
+    if (type != null) parts.add(type);
+    if (videoSize != null && videoSize > 0) {
+      parts.add('${(videoSize / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB');
+    }
+    return parts.isEmpty ? 'Stream' : parts.join(' · ');
+  }
+
+  /// A display release-type name (REMUX/BluRay/WEB-DL/...) parsed from the
+  /// release filename, or null if none is recognisable.
+  String? _releaseTypeName(String? releaseName) {
+    if (releaseName == null || releaseName.isEmpty) return null;
+    final n = releaseName.toLowerCase();
+    if (_hasTag(n, 'remux')) return 'REMUX';
+    if (n.contains('bluray') || n.contains('blu-ray') || _hasTag(n, 'bdrip') || _hasTag(n, 'brrip')) return 'BluRay';
+    if (n.contains('web-dl') || n.contains('webdl') || _hasTag(n, 'web')) return 'WEB-DL';
+    if (n.contains('webrip') || n.contains('web-rip')) return 'WEBRip';
+    if (_hasTag(n, 'hdrip')) return 'HDRip';
+    if (_hasTag(n, 'hdtv')) return 'HDTV';
+    if (_hasTag(n, 'dvdrip') || n.contains('dvd')) return 'DVD';
+    return null;
   }
 
   /// Reads a resolution height from AIOStreams' labels (numeric or UHD/QHD/FHD/HD).
