@@ -196,8 +196,8 @@ class StreamSourcesService {
     return entries.map((e) => e.$3).toList();
   }
 
-  /// Ranks a stream so the app plays a clean English release first instead of
-  /// blindly playing `streams[0]`. Higher is better; nothing is dropped.
+  /// Ranks a stream so the app plays a clean, cached English release first
+  /// instead of blindly playing `streams[0]`. Higher is better; nothing dropped.
   ///
   /// Weights are tiered so a higher priority always dominates every lower one,
   /// matching the requested order:
@@ -205,16 +205,18 @@ class StreamSourcesService {
   ///                             (for a JA/KO-original title that audio is "home"
   ///                             and allowed - anime + JA/KO live-action)
   ///   2. No hardcoded subs     - HC / HCSUB / KORSUB / CHS / CHT / HARDCODED…
-  ///   3. No other bad tags     - a light nudge against SUBBED (soft subs are
-  ///                             fine and disableable, so it's only a tiebreak)
+  ///   3. Cached on Real-Debrid - instant, reliable playback beats a marginal
+  ///                             release-quality gain, so it outranks release type
   ///   4. Release type          - REMUX > BluRay > WEB-DL > WEBRip > HDRip >
   ///                             HDTV > DVD
-  ///   5. Cached on Real-Debrid - instant play
-  ///   6. Resolution            - 1080p > 720p
-  ///   7. English subtitle hint - minor
+  ///   5. Resolution            - 1080p > 720p
+  ///   6. English subtitle hint - minor tiebreak
+  /// (A soft SUBBED tag is a tiny extra nudge - soft subs are fine/disableable.)
   ///
-  /// Max positive from (4)-(7) is < the (2)/(3) penalties, and those are < the
-  /// (1) penalty, so the tiers never cross over.
+  /// The cached bonus (5000) exceeds the whole release-type + resolution + hint
+  /// range (max 3620), so cached always outranks uncached (e.g. a cached 1080p
+  /// WEB-DL beats an uncached 1080p BluRay/REMUX); it stays below the hardcoded
+  /// (10000) and foreign-audio (100000) penalties, so those tiers never cross.
   int _scoreStream(String releaseName, {required int res, required bool cached, required bool homeAudio}) {
     final n = releaseName.toLowerCase();
     var score = 0;
@@ -226,20 +228,21 @@ class StreamSourcesService {
     //     audio, so it ranks ABOVE foreign-audio releases in the fallback order.
     if (_hasHardcodedSubs(n)) score -= 10000;
 
-    // (3) Soft "subbed" tag - soft subs are fine (disableable), so only a gentle
-    //     tiebreak, and never for a home-audio (anime/JA/KO) title.
+    // Soft "subbed" tag - soft subs are fine (disableable), so only a gentle
+    // tiebreak, and never for a home-audio (anime/JA/KO) title.
     if (!homeAudio && _hasTag(n, 'subbed')) score -= 200;
+
+    // (3) Cached on Real-Debrid - instant, reliable playback outranks release
+    //     type (a cached 1080p WEB-DL beats an uncached 1080p BluRay/REMUX).
+    if (cached) score += 5000;
 
     // (4) Preferred release type.
     score += _releaseTypeBonus(n);
 
-    // (5) Cached on Real-Debrid.
-    if (cached) score += 300;
-
-    // (6) Resolution.
+    // (5) Resolution.
     score += res == 1080 ? 100 : (res == 720 ? 50 : 0);
 
-    // (7) English subtitle hint (minor).
+    // (6) English subtitle hint (minor).
     if (_hasTag(n, 'english') || _hasTag(n, 'eng')) score += 20;
 
     return score;
