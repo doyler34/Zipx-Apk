@@ -74,35 +74,8 @@ class StreamSourcesService {
   }
 
   // ---------------------------------------------------------------------------
-  // Real-Debrid metadata
+  // TMDB metadata
   // ---------------------------------------------------------------------------
-
-  /// The title's real runtime in minutes from TMDB, used to reject sample /
-  /// trailer / wrong-content files (anything far shorter than the real movie).
-  /// Null if unknown.
-  Future<int?> expectedRuntimeMinutes(PlaybackRequest request) async {
-    try {
-      final String url;
-      if (request.isTvEpisode) {
-        url = 'https://api.themoviedb.org/3/tv/${request.tmdbId}/season/${request.seasonNumber}/episode/${request.episodeNumber}';
-      } else {
-        url = 'https://api.themoviedb.org/3/movie/${request.tmdbId}';
-      }
-      final r = await _dio.get(
-        url,
-        queryParameters: {'api_key': _tmdbKey},
-        options: Options(receiveTimeout: const Duration(seconds: 10)),
-      );
-      final data = r.data is String ? jsonDecode(r.data as String) : r.data;
-      if (data is Map) {
-        final rt = data['runtime'];
-        if (rt is num && rt > 0) return rt.toInt();
-      }
-    } catch (_) {
-      // unknown - the player falls back to a fixed minimum
-    }
-    return null;
-  }
 
   /// The title's original language (TMDB ISO code, e.g. "zh"), used to auto
   /// -select the original audio track over a dub. Null if unknown.

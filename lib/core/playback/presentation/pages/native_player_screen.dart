@@ -60,9 +60,6 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   String _error = '';
   bool _historyRecorded = false;
 
-  /// Real runtime (minutes) from TMDB, used to reject sample/trailer/junk files.
-  int? _expectedRuntimeMin;
-
   /// Per-source failure reasons, shown on the error screen.
   final List<String> _attemptLog = [];
 
@@ -139,12 +136,9 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
 
   Future<void> _load() async {
     try {
-      // Runtime + original language in parallel with the sources (both only
-      // needed later, at/after play time).
-      final runtimeFuture = _service.expectedRuntimeMinutes(widget.request);
+      // Original language (for audio auto-select) in parallel with the sources.
       final langFuture = _service.originalLanguage(widget.request);
       final sources = await _service.fetch(widget.request);
-      _expectedRuntimeMin = await runtimeFuture;
       _originalLang = await langFuture;
       if (!mounted) return;
       if (sources.isEmpty) {
@@ -373,11 +367,12 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       await _player.open(Media(source.url, httpHeaders: headers), play: true);
 
       // Consider the source good once a real duration is known; bail on an
-      // error event or a timeout (dead/slow host).
+      // error event or a timeout. RD links (esp. uncached fallbacks) can take a
+      // little while to spin up on mobile, so give them a realistic window.
       final ok = await Future.any(<Future<bool>>[
         _player.stream.duration.firstWhere((d) => d > Duration.zero).then((_) => true),
         _player.stream.error.first.then((_) => false),
-      ]).timeout(const Duration(seconds: 10), onTimeout: () => false);
+      ]).timeout(const Duration(seconds: 20), onTimeout: () => false);
       if (token != _attemptToken || !mounted) return;
 
       if (!ok) {
@@ -386,12 +381,14 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
         return;
       }
 
-      // Reject samples/trailers: compare the loaded duration to the title's
-      // real runtime. A 24-min file for a 142-min movie is a sample.
+      // Skip only an obviously-broken tiny file (a stray trailer/sample). We no
+      // longer gate on % of the TMDB runtime: AIOStreams serves full RD release
+      // files, so that rule mostly false-rejected valid streams (wrong runtime,
+      // short films, slow duration reporting).
       final duration = _player.state.duration;
       final minReal = _minAcceptableDuration();
       if (duration > Duration.zero && duration < minReal) {
-        _attemptLog.add('${_label(source)} → ${duration.inMinutes}m (need ≥${minReal.inMinutes}m) - sample/trailer, skipped');
+        _attemptLog.add('${_label(source)} → ${duration.inMinutes}m (need ≥${minReal.inMinutes}m) - too short, skipped');
         await _tryNext();
         return;
       }
@@ -416,12 +413,10 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     }
   }
 
+  /// A low absolute floor that only catches an obvious trailer/sample - not a
+  /// fraction of the TMDB runtime (AIOStreams serves full release files).
   Duration _minAcceptableDuration() {
-    final runtime = _expectedRuntimeMin;
-    if (runtime != null && runtime > 0) {
-      return Duration(minutes: (runtime * 0.6).round());
-    }
-    return widget.request.isTvEpisode ? const Duration(minutes: 8) : const Duration(minutes: 45);
+    return widget.request.isTvEpisode ? const Duration(minutes: 3) : const Duration(minutes: 10);
   }
 
   void _recordHistoryOnce(StreamSource source) {
