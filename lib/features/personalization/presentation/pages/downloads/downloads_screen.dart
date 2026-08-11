@@ -7,7 +7,9 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../../../../../common/styles/zipx_ui.dart';
 import '../../../../../core/dependency_injection/di.dart';
 import '../../../../../core/playback/domain/entities/download_item.dart';
+import '../../../../../core/playback/domain/entities/player_args.dart';
 import '../../../../../core/playback/services/downloads_service.dart';
+import '../../../../../core/playback/services/stream_sources_service.dart';
 import '../../../../../core/utils/strings/url_strings.dart';
 
 /// Profile → Downloads: titles being prepared server-side (by ZipX). Not device
@@ -112,11 +114,15 @@ class _DownloadsScreenState extends State<DownloadsScreen> with WidgetsBindingOb
         ),
       );
 
-  // Ready → play. Never uses a stored URL: hand the request to the normal
-  // player, which re-queries the current sources and plays the best cached one.
-  void _play(DownloadItem item) {
+  // Ready → play. Asks the backend to unrestrict the exact prepared file to a
+  // fresh URL (plays instantly, no waiting on AIOStreams' cached view); if that
+  // isn't available it hands the request to the normal player, which re-queries
+  // current sources. No stale/stored URL is ever reused.
+  Future<void> _play(DownloadItem item) async {
     if (item.status != DownloadStatus.ready) return;
-    context.push('/player', extra: item.toPlaybackRequest());
+    final url = await sl<StreamSourcesService>().preparedPlaybackUrl(item.jobId);
+    if (!mounted) return;
+    context.push('/player', extra: PlayerArgs(request: item.toPlaybackRequest(), primaryUrl: url));
   }
 
   Future<void> _retry(DownloadItem item) async {

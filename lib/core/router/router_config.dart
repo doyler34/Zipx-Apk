@@ -15,6 +15,7 @@ import 'package:movie_bloc_app/navigation_menu.dart';
 
 import '../../common/responsive/responsive.dart';
 import '../../core/playback/domain/entities/playback_request.dart';
+import '../../core/playback/domain/entities/player_args.dart';
 import '../../core/playback/presentation/pages/native_player_screen.dart';
 import '../../desktop/desktop_shell.dart';
 
@@ -94,9 +95,13 @@ class CustomGoRouterConfig {
       GoRoute(
         path: '/player',
         builder: (BuildContext context, GoRouterState state) {
-          // Native streaming first; it falls back to the WebView providers
-          // internally if the backend has no sources / is unreachable.
-          return NativePlayerScreen(request: state.extra as PlaybackRequest);
+          // Accepts a bare PlaybackRequest, or PlayerArgs carrying a
+          // pre-resolved direct URL (a ready Download plays that first).
+          final extra = state.extra;
+          if (extra is PlayerArgs) {
+            return NativePlayerScreen(request: extra.request, primaryUrl: extra.primaryUrl);
+          }
+          return NativePlayerScreen(request: extra as PlaybackRequest);
         },
       ),
       GoRoute(

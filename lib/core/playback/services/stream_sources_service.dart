@@ -135,6 +135,28 @@ class StreamSourcesService {
     return null;
   }
 
+  /// Resolves a ready preparation job to a fresh, directly-playable URL (the
+  /// backend unrestricts the prepared file on demand). Lets a downloaded item
+  /// play immediately without waiting for AIOStreams' cached view to refresh.
+  /// Returns null if it isn't ready yet or the backend couldn't resolve it -
+  /// the caller then falls back to the normal AIOStreams flow.
+  Future<String?> preparedPlaybackUrl(String jobId) async {
+    if (!prepareEnabled) return null;
+    try {
+      final resp = await _dio.get(
+        '${_prepareBase()}/prepare/$jobId/play',
+        options: Options(headers: {'X-Api-Key': _prepareKey}, receiveTimeout: const Duration(seconds: 30)),
+      );
+      final data = resp.data is String ? jsonDecode(resp.data as String) : resp.data;
+      if (data is Map && data['url'] is String && (data['url'] as String).isNotEmpty) {
+        return data['url'] as String;
+      }
+    } catch (_) {
+      // not ready / unreachable - caller falls back to AIOStreams
+    }
+    return null;
+  }
+
   /// Cancels/removes a preparation job (and its Real-Debrid download).
   Future<bool> cancelPreparation(String jobId) async {
     if (!prepareEnabled) return false;

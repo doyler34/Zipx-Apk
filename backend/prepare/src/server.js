@@ -188,6 +188,32 @@ app.get('/prepare/:jobId/status', async (req, res) => {
   res.json(publicJob(job));
 });
 
+// GET /prepare/:jobId/play - resolve a ready job to a fresh, directly-playable
+// URL. This unrestricts the exact prepared file on demand (never stores the
+// URL), so a downloaded episode plays immediately without waiting for
+// AIOStreams' cached view to catch up. 409 if it isn't downloaded yet.
+app.get('/prepare/:jobId/play', async (req, res) => {
+  const job = Store.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'not_found' });
+  if (!job.rdId) return res.status(409).json({ error: 'not_ready' });
+  try {
+    const info = await RealDebrid.info(job.rdId);
+    if (info.status !== 'downloaded') {
+      Store.update(job.id, { status: mapStatus(info.status), rdCheckedAt: Date.now() });
+      return res.status(409).json({ error: 'not_ready', status: mapStatus(info.status) });
+    }
+    // We select exactly one file per job, so links[0] is that file.
+    const links = Array.isArray(info.links) ? info.links : [];
+    if (links.length === 0) return res.status(409).json({ error: 'no_link' });
+    const un = await RealDebrid.unrestrict(links[0]);
+    if (!un || !un.download) return res.status(502).json({ error: 'unrestrict_failed' });
+    Store.update(job.id, { status: 'ready', rdCheckedAt: Date.now() });
+    return res.json({ url: un.download });
+  } catch {
+    return res.status(502).json({ error: 'play_failed' });
+  }
+});
+
 // DELETE /prepare/:jobId - cancel/remove a tracked job (and its RD download).
 app.delete('/prepare/:jobId', async (req, res) => {
   const job = Store.get(req.params.jobId);

@@ -82,6 +82,17 @@ the existing job is returned instead of starting a second download.
 Refreshes from Real-Debrid at most once every 10s per job, regardless of how
 often the app polls.
 
+### `GET /prepare/{jobId}/play`
+
+Unrestricts the prepared file to a **fresh, directly-playable URL** on demand so
+a ready item plays immediately (no waiting for AIOStreams' cached view). The URL
+is never stored (RD `download` links are temporary). `409` if the job isn't
+downloaded yet.
+
+```json
+{ "url": "https://<rd-host>/d/…" }
+```
+
 ### `DELETE /prepare/{jobId}`
 
 Cancels/removes the job and deletes the torrent from Real-Debrid. Returns

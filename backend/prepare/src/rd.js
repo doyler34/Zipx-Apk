@@ -48,4 +48,7 @@ export const RealDebrid = {
     rd(`/torrents/selectFiles/${id}`, { method: 'POST', form: { files: fileIds.join(',') } }),
   info: (id) => rd(`/torrents/info/${id}`),
   delete: (id) => rd(`/torrents/delete/${id}`, { method: 'DELETE' }),
+  // Turn a cached RD file link into a fresh, directly-playable URL. Generated on
+  // demand each time (RD's `download` links are temporary) and never stored.
+  unrestrict: (link) => rd('/unrestrict/link', { method: 'POST', form: { link } }),
 };

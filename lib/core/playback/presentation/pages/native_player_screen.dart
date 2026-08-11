@@ -24,9 +24,14 @@ import '../../services/subtitle_service.dart';
 ///  - if AIOStreams returns nothing playable, a clean "no source" screen is
 ///    shown (there is no web-player fallback).
 class NativePlayerScreen extends StatefulWidget {
-  const NativePlayerScreen({super.key, required this.request});
+  const NativePlayerScreen({super.key, required this.request, this.primaryUrl});
 
   final PlaybackRequest request;
+
+  /// A pre-resolved, directly-playable URL (e.g. from a ready Download). When
+  /// set it's played immediately, skipping the AIOStreams lookup - so a
+  /// downloaded item plays without waiting for AIOStreams' cached view.
+  final String? primaryUrl;
 
   @override
   State<NativePlayerScreen> createState() => _NativePlayerScreenState();
@@ -142,8 +147,31 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
 
   Future<void> _load() async {
     try {
-      // Original language (for audio auto-select) in parallel with the sources.
+      // Original language (for audio auto-select), fetched either way.
       final langFuture = _service.originalLanguage(widget.request);
+
+      // Ready Download: play the pre-resolved direct URL immediately, skipping
+      // the AIOStreams lookup (and its cached-view lag). If it fails to open,
+      // failover/_goFallback falls back to a normal AIOStreams resolve.
+      final primary = widget.primaryUrl;
+      if (primary != null && primary.isNotEmpty) {
+        _originalLang = await langFuture;
+        if (!mounted) return;
+        _sources = [
+          StreamSource(
+            title: 'ZipX · Ready',
+            url: primary,
+            quality: '',
+            provider: 'ZipX',
+            headers: const {},
+            cached: true,
+          ),
+        ];
+        _uncached = const [];
+        await _playIndex(0);
+        return;
+      }
+
       final all = await _service.fetch(widget.request);
       _originalLang = await langFuture;
       if (!mounted) return;
@@ -161,6 +189,28 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     } catch (_) {
       if (mounted) _goFallback();
     }
+  }
+
+  /// Falls back to a normal AIOStreams resolve when the pre-resolved direct URL
+  /// (from a Ready Download) didn't play. Runs at most once.
+  bool _aioFallbackTried = false;
+  Future<bool> _tryAioFallback() async {
+    if (_aioFallbackTried || widget.primaryUrl == null) return false;
+    _aioFallbackTried = true;
+    try {
+      final all = await _service.fetch(widget.request);
+      if (!mounted) return false;
+      final cached = all.where((s) => s.cached).toList();
+      _uncached = all.where((s) => !s.cached).toList();
+      if (cached.isNotEmpty) {
+        _sources = cached;
+        await _playIndex(0);
+        return true;
+      }
+    } catch (_) {
+      // fall through
+    }
+    return false;
   }
 
   /// Applies a subtitle timing offset via mpv's `sub-delay` property so the
@@ -335,6 +385,14 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   /// There is no web-player fallback (VidSrc has been removed).
   void _goFallback() {
     if (!mounted) return;
+    // If a Ready-Download direct URL was tried and didn't open, resolve through
+    // AIOStreams once before giving up.
+    if (widget.primaryUrl != null && !_aioFallbackTried) {
+      unawaited(_tryAioFallback().then((ok) {
+        if (!ok && mounted) _goFallback();
+      }));
+      return;
+    }
     if (_uncached.isNotEmpty) {
       setState(() => _stage = _Stage.prepare);
       return;
