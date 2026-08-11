@@ -1,0 +1,25 @@
+# ZipX preparation service (port 3020).
+#
+# Submits uncached releases to Real-Debrid and tracks their download status so
+# the app can poll a job instead of failing with "no source". Built from local
+# source (not a pulled image), so deploy/update with:
+#   docker compose up -d --build
+#
+# The Real-Debrid token stays here in .env and never reaches the app. Persistent
+# job state lives in ./data (SQLite), so jobs survive restarts.
+services:
+  zipx-prepare:
+    build: .
+    container_name: zipx-prepare
+    restart: unless-stopped
+    ports:
+      - "3020:3020"
+    environment:
+      PORT: "3020"
+      DB_PATH: data/prepare.db
+      # Real-Debrid API token - server-side only, never sent to the app.
+      RD_API_KEY: ${RD_API_KEY}
+      # Shared secret the app sends as the X-Api-Key header.
+      PREPARE_API_KEY: ${PREPARE_API_KEY}
+    volumes:
+      - ./data:/app/data

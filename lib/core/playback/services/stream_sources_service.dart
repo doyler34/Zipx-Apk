@@ -30,6 +30,13 @@ class StreamSourcesService {
   /// filtering and ranking server-side - so the app just asks it for an IMDb id.
   static const String _aioUrl = String.fromEnvironment('AIOSTREAMS_ADDON_URL');
 
+  /// ZipX preparation service base URL + shared key (see backend/prepare/), used
+  /// to prepare uncached releases server-side. Injected via
+  /// `--dart-define=PREPARE_ADDON_URL` / `--dart-define=PREPARE_API_KEY`. No
+  /// Real-Debrid token is ever in the app - the service holds it.
+  static const String _prepareUrl = String.fromEnvironment('PREPARE_ADDON_URL');
+  static const String _prepareKey = String.fromEnvironment('PREPARE_API_KEY');
+
   Future<List<StreamSource>> fetch(PlaybackRequest request) async {
     final (sources, isAnime) = await _fetchSources(request);
     // Learn availability so dead titles get hidden from browsing - but NEVER
@@ -46,49 +53,75 @@ class StreamSourcesService {
     return sources;
   }
 
-  /// Kicks off server-side preparation of an uncached result so it becomes
-  /// playable. Requesting the stream's playback URL makes the backend
-  /// (AIOStreams + the configured debrid) add the release and begin caching it -
-  /// all server-side, so no debrid token ever touches the Flutter client.
-  ///
-  /// Returns a best-effort job identifier the caller can persist/track (the
-  /// release infohash when the backend exposes it, otherwise the stable playback
-  /// URL), or null if the request never reached the backend. It does NOT wait
-  /// for the caching to finish and never fabricates progress - there is no
-  /// backend job/status API yet (see notes).
-  Future<String?> submitForPreparation(StreamSource source) async {
-    if (source.url.isEmpty) return null;
+  /// Whether the server-side preparation backend is configured (URL + key).
+  bool get prepareEnabled => _prepareUrl.isNotEmpty && _prepareKey.isNotEmpty;
+
+  /// Submits an uncached release to the ZipX preparation backend, which adds it
+  /// to Real-Debrid server-side (the RD token never touches the app). Returns
+  /// the backend's internal job id to poll/track, or null if it couldn't be
+  /// submitted (backend not configured, no infohash, or the request failed).
+  Future<String?> submitForPreparation(PlaybackRequest request, StreamSource source) async {
+    if (!prepareEnabled) return null;
+    final hash = source.infohash;
+    if (hash == null || hash.isEmpty) return null; // can't prepare without a hash
     try {
-      await _dio.get(
-        source.url,
+      final resp = await _dio.post(
+        '${_prepareBase()}/prepare',
+        data: {
+          'tmdbId': request.tmdbId.toString(),
+          'mediaType': request.isTvEpisode ? 'tv' : 'movie',
+          'title': request.title,
+          if (request.isTvEpisode) 'season': request.seasonNumber,
+          if (request.isTvEpisode) 'episode': request.episodeNumber,
+          'hash': hash,
+        },
         options: Options(
-          responseType: ResponseType.plain,
-          // Any status means the request reached the backend and caching was
-          // triggered; we don't need a 200 to consider it submitted.
-          validateStatus: (_) => true,
-          receiveTimeout: const Duration(seconds: 20),
+          headers: {'X-Api-Key': _prepareKey},
+          receiveTimeout: const Duration(seconds: 30),
           sendTimeout: const Duration(seconds: 15),
         ),
       );
-    } on DioException catch (e) {
-      // A receive/send timeout still means the request was sent and caching
-      // began; only a real connection failure means we never reached it.
-      if (e.type != DioExceptionType.receiveTimeout &&
-          e.type != DioExceptionType.sendTimeout) {
-        return null;
-      }
+      final data = resp.data is String ? jsonDecode(resp.data as String) : resp.data;
+      if (data is Map && data['jobId'] is String) return data['jobId'] as String;
     } catch (_) {
-      return null;
+      // fall through - submission failed
     }
-    return _preparationId(source);
+    return null;
   }
 
-  /// A stable identifier for a preparation job: the 40-hex torrent infohash from
-  /// the stream's bingeGroup when present, otherwise the playback URL.
-  String _preparationId(StreamSource source) {
-    final m = RegExp(r'[a-fA-F0-9]{40}').firstMatch(source.bingeGroup ?? '');
-    return m != null ? m.group(0)!.toLowerCase() : source.url;
+  /// Polls a preparation job. Returns the backend's status map
+  /// ({status, progress?, speed?, error?}) or null on failure. Never fabricates
+  /// values - progress/speed are present only when Real-Debrid reported them.
+  Future<Map<String, dynamic>?> prepareStatus(String jobId) async {
+    if (!prepareEnabled) return null;
+    try {
+      final resp = await _dio.get(
+        '${_prepareBase()}/prepare/$jobId/status',
+        options: Options(headers: {'X-Api-Key': _prepareKey}, receiveTimeout: const Duration(seconds: 20)),
+      );
+      final data = resp.data is String ? jsonDecode(resp.data as String) : resp.data;
+      if (data is Map) return Map<String, dynamic>.from(data);
+    } catch (_) {
+      // ignore
+    }
+    return null;
   }
+
+  /// Cancels/removes a preparation job (and its Real-Debrid download).
+  Future<bool> cancelPreparation(String jobId) async {
+    if (!prepareEnabled) return false;
+    try {
+      await _dio.delete(
+        '${_prepareBase()}/prepare/$jobId',
+        options: Options(headers: {'X-Api-Key': _prepareKey}),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String _prepareBase() => _prepareUrl.replaceAll(RegExp(r'/+$'), '');
 
   Future<(List<StreamSource>, bool)> _fetchSources(PlaybackRequest request) async {
     // Resolve the IMDb id (AIOStreams needs it) and the original language
@@ -221,6 +254,7 @@ class StreamSourcesService {
         filename: filename,
         videoSize: videoSize,
         bingeGroup: bingeGroup,
+        infohash: _extractInfohash(raw, bh),
         cached: isCached,
       );
       // Score on the structured release name (filename preferred) - never the
@@ -362,6 +396,19 @@ class StreamSourcesService {
     if (raw.containsKey('_isCached')) return raw['_isCached'] == true;
     final blob = '$name $description'.toLowerCase();
     return blob.contains('⚡') || blob.contains('cached') || blob.contains('instant');
+  }
+
+  /// The 40-hex torrent infohash for a stream, when exposed: the Stremio
+  /// `infoHash` field, else a 40-hex substring of `behaviorHints.bingeGroup`.
+  /// Used only to hand an uncached release to the preparation backend.
+  String? _extractInfohash(Map raw, dynamic bh) {
+    final direct = raw['infoHash'];
+    if (direct is String && RegExp(r'^[a-fA-F0-9]{40}$').hasMatch(direct)) {
+      return direct.toLowerCase();
+    }
+    final bg = (bh is Map ? bh['bingeGroup'] : null)?.toString() ?? '';
+    final m = RegExp(r'[a-fA-F0-9]{40}').firstMatch(bg);
+    return m?.group(0)?.toLowerCase();
   }
 
   /// The release/torrent title, used to match a synced subtitle. Prefer

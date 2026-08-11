@@ -12,6 +12,7 @@ class StreamSource {
     this.filename,
     this.videoSize,
     this.bingeGroup,
+    this.infohash,
     this.cached = true,
   });
 
@@ -39,6 +40,11 @@ class StreamSource {
   /// `behaviorHints.bingeGroup`, when present. Preserved for next-episode
   /// autoplay matching.
   final String? bingeGroup;
+
+  /// The 40-hex torrent infohash, when the stream exposes one (`infoHash` field
+  /// or embedded in `bingeGroup`). Sent to the preparation backend so it can
+  /// add an uncached release to Real-Debrid server-side. Null when unknown.
+  final String? infohash;
 
   /// Final playback URL from AIOStreams (played as-is).
   final String url;

@@ -93,7 +93,7 @@ jobs:
       # The TMDB key is a built-in default in source (UserSettings), so no
       # build-time secret is required for it.
       - name: Build release APK
-        run: flutter build apk --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }} --dart-define=AIOSTREAMS_ADDON_URL=${{ secrets.AIOSTREAMS_ADDON_URL }}
+        run: flutter build apk --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }} --dart-define=AIOSTREAMS_ADDON_URL=${{ secrets.AIOSTREAMS_ADDON_URL }} --dart-define=PREPARE_ADDON_URL=${{ secrets.PREPARE_ADDON_URL }} --dart-define=PREPARE_API_KEY=${{ secrets.PREPARE_API_KEY }}
 
       - name: Rename APK
         run: cp build/app/outputs/flutter-apk/app-release.apk zipx-movies.apk

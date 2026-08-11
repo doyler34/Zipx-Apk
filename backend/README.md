@@ -8,6 +8,10 @@ requires updating the app.
   high-quality streams. The app's top source.
 - **`tmdb-embed-api/`** (port 8787) - free-scraper source (VixSrc/Vidlink/
   NoTorrent/...), used when Real-Debrid has nothing.
+- **`prepare/`** (port 3020) - preparation service: submits an uncached release
+  to Real-Debrid and tracks its download so the app can offer "prepare before
+  playback" instead of failing. Custom source (build locally), not a pulled
+  image - deploy/update with `docker compose up -d --build`. See its README.
 
 The app queries Comet first, then TMDB-Embed-API, then falls back to the
 in-app WebView providers (VidSrc etc.).

@@ -354,7 +354,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       _preparing = true;
       _prepareError = null;
     });
-    final jobId = await _service.submitForPreparation(_uncached.first);
+    final jobId = await _service.submitForPreparation(widget.request, _uncached.first);
     if (!mounted) return;
     setState(() {
       _preparing = false;
