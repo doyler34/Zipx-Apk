@@ -180,6 +180,25 @@ app.post('/prepare', async (req, res) => {
   res.status(201).json({ jobId: job.id, status: job.status });
 });
 
+// GET /prepare/find - is this content already prepared on the shared account?
+// Lets ANY app instance discover a ready job by content (not jobId), so cached
+// titles play instantly for everyone without waiting on AIOStreams. Declared
+// before the /:jobId routes so "find" isn't matched as a job id.
+app.get('/prepare/find', (req, res) => {
+  const { tmdbId, mediaType, season, episode } = req.query;
+  if (!tmdbId || (mediaType !== 'movie' && mediaType !== 'tv')) {
+    return res.status(400).json({ error: 'invalid_request' });
+  }
+  const job = Store.findByContent({
+    tmdbId: String(tmdbId),
+    mediaType,
+    season: mediaType === 'tv' && season != null && season !== '' ? Number(season) : null,
+    episode: mediaType === 'tv' && episode != null && episode !== '' ? Number(episode) : null,
+  });
+  if (!job) return res.status(404).json({ error: 'not_found' });
+  res.json({ jobId: job.id, status: job.status });
+});
+
 // GET /prepare/:jobId/status - poll a job (refreshes from RD, rate-limited).
 app.get('/prepare/:jobId/status', async (req, res) => {
   let job = Store.get(req.params.jobId);

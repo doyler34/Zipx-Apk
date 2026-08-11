@@ -82,6 +82,16 @@ the existing job is returned instead of starting a second download.
 Refreshes from Real-Debrid at most once every 10s per job, regardless of how
 often the app polls.
 
+### `GET /prepare/find?tmdbId=&mediaType=&season=&episode=`
+
+Is this content already prepared on the shared account? Looks a job up by
+**content** (not jobId), preferring a ready one, so any app instance can
+discover a title someone else prepared and play it instantly. `404` if none.
+
+```json
+{ "jobId": "b0c1…", "status": "ready" }
+```
+
 ### `GET /prepare/{jobId}/play`
 
 Unrestricts the prepared file to a **fresh, directly-playable URL** on demand so

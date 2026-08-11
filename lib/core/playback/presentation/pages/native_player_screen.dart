@@ -182,9 +182,27 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       if (_sources.isNotEmpty) {
         await _playIndex(0);
       } else {
-        // No cached stream. Offer to prepare the best uncached result (if any),
-        // otherwise show the clean "no source" screen.
-        _goFallback();
+        // AIOStreams shows nothing cached - but this title may already be
+        // prepared on the shared backend (someone prepared it; AIOStreams just
+        // hasn't caught up). If so, play that fresh direct URL instantly.
+        final preparedUrl = await _service.findPreparedPlaybackUrl(widget.request);
+        if (!mounted) return;
+        if (preparedUrl != null && preparedUrl.isNotEmpty) {
+          _sources = [
+            StreamSource(
+              title: 'ZipX · Ready',
+              url: preparedUrl,
+              quality: '',
+              provider: 'ZipX',
+              headers: const {},
+              cached: true,
+            ),
+          ];
+          await _playIndex(0);
+        } else {
+          // Offer to prepare the best uncached result (if any), else "no source".
+          _goFallback();
+        }
       }
     } catch (_) {
       if (mounted) _goFallback();

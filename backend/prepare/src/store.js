@@ -51,6 +51,19 @@ export const Store = {
       .get(String(tmdbId), season ?? -1, episode ?? -1, hash);
   },
 
+  // The best job for a piece of content regardless of who created it (the DB is
+  // shared), preferring a ready one. Lets any app instance discover that an
+  // episode/movie is already prepared on the shared debrid account.
+  findByContent({ tmdbId, mediaType, season, episode }) {
+    return db
+      .prepare(
+        `SELECT * FROM jobs
+           WHERE tmdbId = ? AND mediaType = ? AND ifnull(season,-1) = ? AND ifnull(episode,-1) = ?
+           ORDER BY (status = 'ready') DESC, createdAt DESC LIMIT 1`,
+      )
+      .get(String(tmdbId), mediaType, season ?? -1, episode ?? -1);
+  },
+
   create(job) {
     const id = randomUUID();
     const ts = now();

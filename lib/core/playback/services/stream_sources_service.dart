@@ -157,6 +157,34 @@ class StreamSourcesService {
     return null;
   }
 
+  /// Looks up whether this content is already prepared (ready) on the shared
+  /// backend - by content, not job id - and if so returns a fresh directly-
+  /// playable URL. Lets any app instance play a title someone already prepared,
+  /// instantly, even while AIOStreams' cached view is still catching up.
+  /// Returns null when nothing ready exists (caller continues as normal).
+  Future<String?> findPreparedPlaybackUrl(PlaybackRequest request) async {
+    if (!prepareEnabled) return null;
+    try {
+      final resp = await _dio.get(
+        '${_prepareBase()}/prepare/find',
+        queryParameters: {
+          'tmdbId': request.tmdbId.toString(),
+          'mediaType': request.isTvEpisode ? 'tv' : 'movie',
+          if (request.isTvEpisode) 'season': request.seasonNumber,
+          if (request.isTvEpisode) 'episode': request.episodeNumber,
+        },
+        options: Options(headers: {'X-Api-Key': _prepareKey}, receiveTimeout: const Duration(seconds: 20)),
+      );
+      final data = resp.data is String ? jsonDecode(resp.data as String) : resp.data;
+      if (data is Map && data['status'] == 'ready' && data['jobId'] is String) {
+        return preparedPlaybackUrl(data['jobId'] as String);
+      }
+    } catch (_) {
+      // nothing ready / unreachable
+    }
+    return null;
+  }
+
   /// Cancels/removes a preparation job (and its Real-Debrid download).
   Future<bool> cancelPreparation(String jobId) async {
     if (!prepareEnabled) return false;
