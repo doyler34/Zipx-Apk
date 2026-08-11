@@ -63,10 +63,10 @@ class StreamSourcesService {
     // server-side. Just send it the IMDb id.
     if (_aioUrl.isNotEmpty && imdb != null && imdb.isNotEmpty) {
       try {
-        final aio = await _fetchAio(request, imdb);
+        final aio = await _fetchAio(request, imdb, origLang);
         if (aio.isNotEmpty) return (aio, isAnime);
       } catch (_) {
-        // ignore - the caller falls back to the WebView providers
+        // ignore - the caller shows a "no source" screen
       }
     }
 
@@ -113,7 +113,7 @@ class StreamSourcesService {
   /// Queries the AIOStreams aggregated endpoint with the IMDb id and plays the
   /// URLs it returns as-is. AIOStreams has already aggregated, deduplicated,
   /// quality/resolution/language-filtered and ranked the results server-side.
-  Future<List<StreamSource>> _fetchAio(PlaybackRequest request, String imdb) async {
+  Future<List<StreamSource>> _fetchAio(PlaybackRequest request, String imdb, String? originalLang) async {
     final base = _aioUrl.replaceAll(RegExp(r'/+$'), '');
     final type = request.isTvEpisode ? 'series' : 'movie';
     final id = request.isTvEpisode ? '$imdb:${request.seasonNumber}:${request.episodeNumber}' : imdb;
@@ -122,7 +122,7 @@ class StreamSourcesService {
       options: Options(responseType: ResponseType.plain, receiveTimeout: const Duration(seconds: 45)),
     );
     final decoded = response.data is String ? jsonDecode(response.data as String) : response.data;
-    return _parseStremioStreams(decoded, provider: 'AIOStreams').take(30).toList();
+    return _parseStremioStreams(decoded, provider: 'AIOStreams', originalLang: originalLang).take(30).toList();
   }
 
   /// Parses an AIOStreams `/stream` response (`{streams:[...]}`) into playable
@@ -130,10 +130,13 @@ class StreamSourcesService {
   /// aggregated, deduplicated, quality/resolution/language-filtered and ranked
   /// the results, so the client does the minimum - preserve the metadata, order
   /// cached-first (uncached kept as a fallback), and drop only malformed or
-  /// duplicate playback URLs. It deliberately does NOT re-parse the formatter
-  /// description for audio language: those flags (often dozens of subtitle
-  /// languages) must never reject an otherwise-valid stream.
-  List<StreamSource> _parseStremioStreams(dynamic decoded, {required String provider}) {
+  /// duplicate playback URLs. It never REJECTS a stream over language: it only
+  /// DEMOTES releases whose filename looks foreign/hardsubbed (burned-in subs)
+  /// so an English release plays first, keeping the foreign one as a last
+  /// resort. Matched on `behaviorHints.filename`, not the subtitle-flag-heavy
+  /// formatter description.
+  List<StreamSource> _parseStremioStreams(dynamic decoded,
+      {required String provider, String? originalLang}) {
     if (decoded is! Map || decoded['streams'] is! List) return const [];
 
     final cached = <StreamSource>[];
@@ -171,10 +174,72 @@ class StreamSourcesService {
       (isCached ? cached : uncached).add(source);
     }
 
+    // Within each group, sink foreign/hardsub-looking releases to the bottom so
+    // an English (or, for anime, original-language) release plays first.
+    _demoteForeign(cached, originalLang);
+    _demoteForeign(uncached, originalLang);
+
     // Cached first (instant play), then uncached as a fallback so obscure/older
-    // content isn't lost. AIOStreams' relative order is preserved within each
-    // group - no client-side re-ranking by size/quality (it already ranked).
+    // content isn't lost. AIOStreams' relative order is otherwise preserved -
+    // no client-side re-ranking by size/quality (it already ranked).
     return [...cached, ...uncached];
+  }
+
+  /// Stable-partitions a group so releases whose filename looks foreign /
+  /// hardsubbed sink below the rest, without dropping any. Preserves AIOStreams'
+  /// relative order within the "home" and "foreign" tiers.
+  void _demoteForeign(List<StreamSource> list, String? originalLang) {
+    final home = <StreamSource>[];
+    final foreign = <StreamSource>[];
+    for (final s in list) {
+      (_looksForeign(s.releaseName ?? s.filename, originalLang) ? foreign : home).add(s);
+    }
+    list
+      ..clear()
+      ..addAll(home)
+      ..addAll(foreign);
+  }
+
+  /// Best-effort "this release looks foreign / hardsubbed" heuristic on the
+  /// release filename. English is always a home language; for anime the original
+  /// language (Japanese/Korean) is too, so a correct anime release isn't
+  /// demoted. Whole-token matched so short tags don't match inside words.
+  /// Burned-in subs can't be detected directly - this only leans on the name.
+  bool _looksForeign(String? releaseName, String? originalLang) {
+    if (releaseName == null || releaseName.isEmpty) return false;
+    final n = releaseName.toLowerCase();
+    final home = <String>{'en', 'eng', 'english'};
+    switch ((originalLang ?? '').toLowerCase()) {
+      case 'ja':
+        home.addAll(const ['ja', 'jpn', 'japanese', 'jap']);
+        break;
+      case 'ko':
+        home.addAll(const ['ko', 'kor', 'korean']);
+        break;
+    }
+    const foreignTags = [
+      'lt', 'lit', 'lithuanian', 'rus', 'russian', 'russo', 'ukr', 'ukrainian',
+      'latino', 'latin', 'castellano', 'espanol', 'español', 'spanish', 'spa',
+      'ita', 'italian', 'italiano', 'ger', 'german', 'deutsch', 'deu', 'fre',
+      'fra', 'french', 'truefrench', 'francais', 'français', 'vf', 'vff', 'vfq',
+      'hin', 'hindi', 'tamil', 'tam', 'telugu', 'tel', 'pol', 'polish', 'por',
+      'portuguese', 'portugues', 'português', 'dublado', 'tur', 'turkish',
+      'turk', 'ara', 'arabic', 'kor', 'korean', 'jpn', 'japanese', 'jap', 'chi',
+      'zho', 'chinese', 'mandarin', 'cantonese', 'hardsub', 'hardsubbed',
+      'hardcoded', 'hc',
+    ];
+    for (final t in foreignTags) {
+      if (home.contains(t)) continue;
+      if (_hasTag(n, t)) return true;
+    }
+    return false;
+  }
+
+  /// True if [tag] appears in [name] as a whole token (bounded by
+  /// non-alphanumerics), so short tags like "lt" don't match inside words.
+  bool _hasTag(String name, String tag) {
+    final t = RegExp.escape(tag);
+    return RegExp('(?<![a-z0-9])$t(?![a-z0-9])', caseSensitive: false).hasMatch(name);
   }
 
   /// A syntactically valid http(s) playback URL (basic malformed-URL guard).

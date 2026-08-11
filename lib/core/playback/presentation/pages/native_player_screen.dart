@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -10,20 +9,18 @@ import '../../../dependency_injection/di.dart';
 import '../../domain/entities/playback_request.dart';
 import '../../domain/entities/stream_source.dart';
 import '../../services/playback_history_service.dart';
-import '../../services/playback_provider_service.dart';
 import '../../services/stream_sources_service.dart';
 import '../../services/subtitle_service.dart';
-import 'player_screen.dart';
 
-/// The primary "Watch Now" screen: fetches direct streams from the sources
-/// backend and plays them in a native, ad-free player (media_kit / mpv), with a
-/// real settings menu - embedded subtitle + audio track selection and speed.
+/// The primary "Watch Now" screen: fetches direct streams from AIOStreams and
+/// plays them in a native, ad-free player (media_kit / mpv), with a real
+/// settings menu - embedded subtitle + audio track selection and speed.
 ///
 /// Resilience is built in:
 ///  - each source is tried in turn; one that fails to open auto-advances,
 ///  - files far too short to be the real title (samples/trailers) are skipped,
-///  - if the backend returns nothing (or is unreachable) it falls back to the
-///    WebView provider player ([PlayerScreen]) so playback still works.
+///  - if AIOStreams returns nothing playable, a clean "no source" screen is
+///    shown (there is no web-player fallback).
 class NativePlayerScreen extends StatefulWidget {
   const NativePlayerScreen({super.key, required this.request});
 
@@ -33,14 +30,10 @@ class NativePlayerScreen extends StatefulWidget {
   State<NativePlayerScreen> createState() => _NativePlayerScreenState();
 }
 
-/// When true the native player shows a clear error instead of silently handing
-/// off to the WebView player - useful for testing. Normally false.
-const bool kDisableWebFallback = false;
-
 const String _userAgent =
     'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 
-enum _Stage { loading, playing, fallback, error }
+enum _Stage { loading, playing, error }
 
 class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBindingObserver {
   final StreamSourcesService _service = sl<StreamSourcesService>();
@@ -318,35 +311,16 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     return hay.contains('forced') || hay.contains('narrative') || hay.contains('signs');
   }
 
-  /// Desktop has no webview_flutter, so the VidSrc WebView fallback can't run
-  /// there (yet) - native streaming is the only path on desktop.
-  bool get _isDesktop =>
-      defaultTargetPlatform == TargetPlatform.windows ||
-      defaultTargetPlatform == TargetPlatform.linux ||
-      defaultTargetPlatform == TargetPlatform.macOS;
-
+  /// No web player fallback: when AIOStreams has no playable source, show a
+  /// clean "no source" screen (VidSrc has been removed).
   void _goFallback() {
     if (!mounted) return;
-    // Anime: don't auto-drop to the VidSrc WebView - it rarely has anime, so it
-    // just shows a broken player. Show a clean message instead (the user can
-    // still force the web player manually from the error screen).
-    if (kDisableWebFallback || _isDesktop || _isAnime) {
-      setState(() {
-        _stage = _Stage.error;
-        _error = _isAnime
-            ? 'No playable source found for this episode yet.\n\n(AIOStreams returned nothing cached or streamable for it.)'
-            : _sources.isEmpty
-                ? 'Native streaming found NO playable source for this title.\n\n(Expected for unreleased / very new titles.)'
-                : 'The backend returned ${_sources.length} native source(s), but none would open.';
-      });
-      return;
-    }
-    setState(() => _stage = _Stage.fallback);
-  }
-
-  void _forceWebPlayer() {
-    if (!mounted) return;
-    setState(() => _stage = _Stage.fallback);
+    setState(() {
+      _stage = _Stage.error;
+      _error = _sources.isEmpty
+          ? 'No playable source found for this title yet.\n\n(AIOStreams returned nothing streamable - expected for very new or obscure titles.)'
+          : 'AIOStreams returned ${_sources.length} source(s), but none would open.';
+    });
   }
 
   Future<void> _playIndex(int index) async {
@@ -727,14 +701,6 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
 
   @override
   Widget build(BuildContext context) {
-    if (_stage == _Stage.fallback) {
-      return PlayerScreen(
-        request: widget.request,
-        playbackProviderService: sl<PlaybackProviderService>(),
-        historyService: sl<PlaybackHistoryService>(),
-      );
-    }
-
     if (_stage == _Stage.playing) {
       // Full-bleed video; all controls (back, settings, seek) live inside the
       // player overlay so they work in fullscreen too.
@@ -851,9 +817,9 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
               const SizedBox(height: 12),
             ],
             ElevatedButton.icon(
-              onPressed: _forceWebPlayer,
-              icon: const Icon(Icons.public),
-              label: const Text('Use web player'),
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Go back'),
             ),
           ],
         ),
