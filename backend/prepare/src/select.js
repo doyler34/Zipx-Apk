@@ -9,6 +9,7 @@ const EXTRAS_RE =
 
 const isVideo = (f) => VIDEO_RE.test(f.path || '');
 const basename = (p) => String(p || '').split('/').pop();
+const isJunk = (f) => SAMPLE_RE.test(basename(f.path)) || EXTRAS_RE.test(basename(f.path));
 
 // S/E matchers for a season+episode: S02E07 / s2e7, 2x07, and a bare E07.
 function episodeMatchers(season, episode) {
@@ -24,13 +25,27 @@ function episodeMatchers(season, episode) {
 // Returns { fileIds: [...], reason } on success, or { error } on failure.
 // On a TV pack where the episode can't be uniquely identified, it fails safely
 // rather than selecting every file (which would download the whole season).
-export function selectFiles(files, { mediaType, season, episode }) {
-  const videos = (files || []).filter(isVideo);
+//
+// `fileIdx` is AIOStreams' structured file index (0-based, within the torrent).
+// It's the PREFERRED selector when valid; everything else is the fallback.
+export function selectFiles(files, { mediaType, season, episode, fileIdx }) {
+  const all = files || [];
+
+  // Preferred: AIOStreams' structured index. Real-Debrid file ids are 1-based
+  // in torrent order, so the torrent's 0-based index maps to id === fileIdx + 1.
+  // Only trust it if it lands on a real, non-sample/extras video file - a wrong
+  // or out-of-range index simply falls through to the matching logic below.
+  if (Number.isInteger(fileIdx) && fileIdx >= 0) {
+    const target = all.find((f) => f.id === fileIdx + 1);
+    if (target && isVideo(target) && !isJunk(target)) {
+      return { fileIds: [target.id], reason: 'aiostreams_index' };
+    }
+  }
+
+  const videos = all.filter(isVideo);
   if (videos.length === 0) return { error: 'no_video_file' };
 
-  const clean = videos.filter(
-    (f) => !SAMPLE_RE.test(basename(f.path)) && !EXTRAS_RE.test(basename(f.path)),
-  );
+  const clean = videos.filter((f) => !isJunk(f));
   const pool = clean.length ? clean : videos;
 
   if (mediaType === 'tv') {

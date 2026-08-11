@@ -16,6 +16,7 @@ db.exec(`
     season         INTEGER,
     episode        INTEGER,
     hash           TEXT NOT NULL,
+    fileIdx        INTEGER,
     rdId           TEXT,
     status         TEXT NOT NULL,
     progress       INTEGER,
@@ -29,6 +30,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_jobs_dedup
     ON jobs (tmdbId, season, episode, hash, status);
 `);
+
+// Lightweight migration for a DB created before fileIdx existed.
+const cols = db.prepare('PRAGMA table_info(jobs)').all().map((c) => c.name);
+if (!cols.includes('fileIdx')) db.exec('ALTER TABLE jobs ADD COLUMN fileIdx INTEGER');
 
 const now = () => Date.now();
 
@@ -51,11 +56,12 @@ export const Store = {
     const ts = now();
     db.prepare(
       `INSERT INTO jobs
-        (id,tmdbId,mediaType,title,season,episode,hash,rdId,status,progress,speed,error,needsSelection,rdCheckedAt,createdAt,updatedAt)
+        (id,tmdbId,mediaType,title,season,episode,hash,fileIdx,rdId,status,progress,speed,error,needsSelection,rdCheckedAt,createdAt,updatedAt)
        VALUES
-        (@id,@tmdbId,@mediaType,@title,@season,@episode,@hash,@rdId,@status,@progress,@speed,@error,@needsSelection,0,@createdAt,@updatedAt)`,
+        (@id,@tmdbId,@mediaType,@title,@season,@episode,@hash,@fileIdx,@rdId,@status,@progress,@speed,@error,@needsSelection,0,@createdAt,@updatedAt)`,
     ).run({
       id,
+      fileIdx: null,
       rdId: null,
       status: 'queued',
       progress: null,

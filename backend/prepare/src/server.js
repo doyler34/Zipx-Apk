@@ -17,6 +17,9 @@ app.use(express.json({ limit: '16kb' }));
 
 const API_KEY = process.env.PREPARE_API_KEY || '';
 const HASH_RE = /^[a-fA-F0-9]{40}$/;
+// Sanity bound for a torrent file index (season packs are dozens of files, not
+// tens of thousands) - anything beyond this is treated as "no specific file".
+const MAX_FILE_IDX = 10_000;
 // Don't hammer Real-Debrid: a job refreshes from RD at most this often, no
 // matter how frequently the app polls GET /status.
 const RD_REFRESH_MS = 10_000;
@@ -115,7 +118,7 @@ async function refresh(job) {
 
 // POST /prepare - submit an uncached release for preparation.
 app.post('/prepare', async (req, res) => {
-  const { tmdbId, mediaType, title, season, episode, hash } = req.body || {};
+  const { tmdbId, mediaType, title, season, episode, hash, fileIdx } = req.body || {};
 
   // Validate: only accept a real 40-hex infohash (we build the magnet
   // ourselves), so this can never be used as an open proxy for arbitrary URLs.
@@ -126,6 +129,16 @@ app.post('/prepare', async (req, res) => {
     return res.status(400).json({ error: 'invalid_episode' });
   }
 
+  // fileIdx is optional. It must be an integer when present; a valid, in-range
+  // (0..MAX_FILE_IDX) index is kept, while -1 or absurd values become null
+  // ("no specific file") so selection falls back safely - never a hard reject
+  // that would waste a valid hash.
+  let idx = null;
+  if (fileIdx !== undefined && fileIdx !== null) {
+    if (!Number.isInteger(fileIdx)) return res.status(400).json({ error: 'invalid_fileIdx' });
+    if (fileIdx >= 0 && fileIdx <= MAX_FILE_IDX) idx = fileIdx;
+  }
+
   const norm = {
     tmdbId: String(tmdbId),
     mediaType,
@@ -133,6 +146,7 @@ app.post('/prepare', async (req, res) => {
     season: mediaType === 'tv' ? season : null,
     episode: mediaType === 'tv' ? episode : null,
     hash: String(hash).toLowerCase(),
+    fileIdx: idx,
   };
 
   // Dedup: reuse an existing active job for the same content+release instead of

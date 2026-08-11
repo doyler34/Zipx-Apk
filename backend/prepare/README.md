@@ -48,9 +48,15 @@ Request:
   "title": "Fight Club",
   "season": 2,                   // tv only
   "episode": 7,                  // tv only
-  "hash": "<40-hex infohash>"
+  "hash": "<40-hex infohash>",
+  "fileIdx": 4                   // optional: AIOStreams' file index (0-based)
 }
 ```
+
+`fileIdx` is optional. When it's a valid, in-range index that lands on a real
+video file, that exact file is selected. `-1`, out-of-range, or a
+sample/extras/non-video target is ignored and selection falls back to the logic
+below. A non-integer `fileIdx` is rejected (`400 invalid_fileIdx`).
 
 Response `201`:
 
@@ -92,8 +98,14 @@ Cancels/removes the job and deletes the torrent from Real-Debrid. Returns
 
 ## File selection
 
-- **Movie:** the largest video file, after dropping obvious `sample`/extras.
-- **TV:** the file whose name matches the requested `SxxEyy` (also `2x07` and a
-  bare `Eyy`). A single-video torrent is taken as the episode. If the pack has
-  multiple files and none can be identified as the requested episode, the job
-  **fails safely** rather than downloading the whole season.
+1. **Preferred — AIOStreams file index:** when `fileIdx` is valid, the exact
+   file is selected (Real-Debrid file ids are 1-based in torrent order, so
+   `id === fileIdx + 1`). The target must be a real video file (not a
+   sample/extra), or this is skipped.
+2. **Fallback (index missing / -1 / out of range / wrong target):**
+   - **Movie:** the largest video file, after dropping obvious `sample`/extras.
+   - **TV:** the file whose name matches the requested `SxxEyy` (also `2x07` and
+     a bare `Eyy`). A single-video torrent is taken as the episode. If the pack
+     has multiple files and none can be identified as the requested episode, the
+     job **fails safely** (`episode_not_identified`) rather than downloading the
+     whole season.

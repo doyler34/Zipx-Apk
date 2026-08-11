@@ -79,6 +79,7 @@ class StreamSourcesService {
           if (request.isTvEpisode) 'season': request.seasonNumber,
           if (request.isTvEpisode) 'episode': request.episodeNumber,
           'hash': hash,
+          if (source.fileIndex != null) 'fileIdx': source.fileIndex,
         },
         options: Options(
           headers: {'X-Api-Key': _prepareKey},
