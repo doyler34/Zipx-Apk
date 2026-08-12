@@ -92,8 +92,27 @@ jobs:
       # increasing); versionName = 1.0.<run number>.
       # The TMDB key is a built-in default in source (UserSettings), so no
       # build-time secret is required for it.
+      # Retry up to 3 times: media_kit's native libs are pulled from GitHub
+      # release assets at gradle-configure time, and that CDN occasionally
+      # returns a transient 503 - which is a flaky download, not a real build
+      # failure. Re-running the build re-attempts the download.
       - name: Build release APK
-        run: flutter build apk --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }} --dart-define=AIOSTREAMS_ADDON_URL=${{ secrets.AIOSTREAMS_ADDON_URL }} --dart-define=PREPARE_ADDON_URL=${{ secrets.PREPARE_ADDON_URL }} --dart-define=PREPARE_API_KEY=${{ secrets.PREPARE_API_KEY }}
+        run: |
+          build() {
+            flutter build apk --release \
+              --build-number=${{ github.run_number }} \
+              --build-name=1.0.${{ github.run_number }} \
+              --dart-define=AIOSTREAMS_ADDON_URL=${{ secrets.AIOSTREAMS_ADDON_URL }} \
+              --dart-define=PREPARE_ADDON_URL=${{ secrets.PREPARE_ADDON_URL }} \
+              --dart-define=PREPARE_API_KEY=${{ secrets.PREPARE_API_KEY }}
+          }
+          for n in 1 2 3; do
+            if build; then exit 0; fi
+            echo "::warning::APK build attempt $n failed (often a transient media_kit dependency download). Retrying in $((n*20))s..."
+            sleep $((n*20))
+          done
+          echo "::error::APK build failed after 3 attempts."
+          exit 1
 
       - name: Rename APK
         run: cp build/app/outputs/flutter-apk/app-release.apk zipx-movies.apk
