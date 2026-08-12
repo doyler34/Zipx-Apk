@@ -97,7 +97,10 @@ jobs:
           $port = if ($env:VPS_PORT) { $env:VPS_PORT } else { "22" }
           scp -o StrictHostKeyChecking=no -P $port -i $keyPath "ZipX-Setup.exe" "$($env:VPS_USER)@$($env:VPS_HOST):$($env:VPS_DOWNLOAD_DIR)/"
           if ($LASTEXITCODE -ne 0) { Write-Error "scp upload failed"; exit 1 }
-          Remove-Item $keyPath -Force
+          # Best-effort cleanup - the runner temp is wiped after the job anyway,
+          # so never let a failed delete fail the build (the key file is locked
+          # to read-only for ssh, which can make Remove-Item "access denied").
+          Remove-Item $keyPath -Force -ErrorAction SilentlyContinue
 
       - name: Publish to "latest-windows" release
         uses: softprops/action-gh-release@v2
