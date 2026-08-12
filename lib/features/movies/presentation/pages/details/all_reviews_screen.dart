@@ -1,9 +1,7 @@
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:movie_bloc_app/common/widgets/appbars_navbars/custom_appbar.dart';
-import 'package:movie_bloc_app/common/widgets/icons/background_icon.dart';
 import 'package:movie_bloc_app/common/widgets/texts/centered_message.dart';
 import 'package:movie_bloc_app/core/dependency_injection/di.dart';
 import 'package:movie_bloc_app/features/movies/presentation/blocs/details/reviews/reviews_bloc.dart';
@@ -36,7 +34,6 @@ class AllReviewsScreen extends StatelessWidget {
           },
           body: Stack(
             children: [
-              const BackgroundIcon(icon: FontAwesomeIcons.comment),
               BlocBuilder<ReviewsBloc, ReviewsState>(
                 builder: (context, state) {
                   if (state is ReviewsError) {

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:movie_bloc_app/common/widgets/icons/background_icon.dart';
 import 'package:movie_bloc_app/common/widgets/texts/centered_message.dart';
 import 'package:movie_bloc_app/core/dependency_injection/di.dart';
 import 'package:movie_bloc_app/core/playback/domain/entities/playback_media_type.dart';
@@ -44,10 +42,7 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        const BackgroundIcon(icon: FontAwesomeIcons.bookmark),
-        BlocBuilder<BookmarksBloc, BookmarksState>(
+    return BlocBuilder<BookmarksBloc, BookmarksState>(
           bloc: context.read<BookmarksBloc>(),
           builder: (context, state) {
             final List<MovieModel> movies = context.read<BookmarksBloc>().bookmarks;
@@ -83,8 +78,6 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
               ),
             );
           },
-        ),
-      ],
     );
   }
 
