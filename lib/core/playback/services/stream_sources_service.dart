@@ -332,9 +332,6 @@ class StreamSourcesService {
 
   /// Cancels/removes a preparation job (and its Real-Debrid download).
   Future<bool> cancelPreparation(String jobId) async {
-
-  /// Cancels/removes a preparation job (and its Real-Debrid download).
-  Future<bool> cancelPreparation(String jobId) async {
     if (!prepareEnabled) return false;
     try {
       await _dio.delete(
