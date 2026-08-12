@@ -11,6 +11,7 @@ import '../../features/tv/data/models/tv_model.dart';
 import '../../features/tv/presentation/blocs/tv_home_cubit.dart';
 import '../../features/tv/presentation/widgets/tv_card.dart';
 import '../widgets/hover_scale.dart';
+import '../widgets/h_scroll_row.dart';
 
 /// Desktop TV Shows: its own cinematic hero + horizontal rows of shows, wired to
 /// [TvHomeCubit]. Same shape as the desktop movie home but populated with TV
@@ -222,16 +223,13 @@ class _TvRow extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(48, 20, 48, 10),
           child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w700)),
         ),
-        SizedBox(
+        HScrollRow(
           height: 360,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 44),
-            itemCount: shows.length,
-            itemBuilder: (context, i) => SizedBox(
-              width: 215,
-              child: HoverScale(child: TvCard(show: shows[i])),
-            ),
+          padding: const EdgeInsets.symmetric(horizontal: 44),
+          itemCount: shows.length,
+          itemBuilder: (context, i) => SizedBox(
+            width: 215,
+            child: HoverScale(child: TvCard(show: shows[i])),
           ),
         ),
       ],

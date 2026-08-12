@@ -16,6 +16,7 @@ import '../../features/movies/data/models/movie_model.dart';
 import '../../features/movies/data/models/reviews_result_model.dart';
 import '../../features/movies/presentation/blocs/details/details/details_bloc.dart';
 import '../widgets/hover_scale.dart';
+import '../widgets/h_scroll_row.dart';
 
 /// Desktop movie details: a full-width backdrop banner, then the poster beside
 /// the title/meta/overview and actions, then the full detail set - facts, cast,
@@ -288,13 +289,11 @@ class _Cast extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionTitle('Cast'),
-        SizedBox(
+        HScrollRow(
           height: 176,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: DesktopMovieDetails._pad - 4),
-            itemCount: actors.length,
-            itemBuilder: (context, i) {
+          padding: const EdgeInsets.symmetric(horizontal: DesktopMovieDetails._pad - 4),
+          itemCount: actors.length,
+          itemBuilder: (context, i) {
               final a = actors[i];
               return Container(
                 width: 104,
@@ -325,7 +324,6 @@ class _Cast extends StatelessWidget {
                 ),
               );
             },
-          ),
         ),
       ],
     );
@@ -371,16 +369,13 @@ class _MoreLikeThis extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionTitle('More Like This'),
-        SizedBox(
+        HScrollRow(
           height: 360,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: DesktopMovieDetails._pad - 4),
-            itemCount: movies.length,
-            itemBuilder: (context, i) => SizedBox(
-              width: 215,
-              child: HoverScale(child: MovieCard(movie: movies[i], isHomePage: true)),
-            ),
+          padding: const EdgeInsets.symmetric(horizontal: DesktopMovieDetails._pad - 4),
+          itemCount: movies.length,
+          itemBuilder: (context, i) => SizedBox(
+            width: 215,
+            child: HoverScale(child: MovieCard(movie: movies[i], isHomePage: true)),
           ),
         ),
       ],

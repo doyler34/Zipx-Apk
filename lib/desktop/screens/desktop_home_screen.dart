@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../common/styles/zipx_ui.dart';
 import '../../common/widgets/movie/movie_card.dart';
 import '../widgets/hover_scale.dart';
+import '../widgets/h_scroll_row.dart';
 import '../../core/playback/domain/entities/playback_media_type.dart';
 import '../../core/playback/domain/entities/playback_request.dart';
 import '../../features/movies/data/models/movie_model.dart';
@@ -252,16 +253,13 @@ class _Row extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(48, 20, 48, 10),
           child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w700)),
         ),
-        SizedBox(
+        HScrollRow(
           height: 360,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 44),
-            itemCount: movies.length,
-            itemBuilder: (context, i) => SizedBox(
-              width: 215,
-              child: HoverScale(child: MovieCard(movie: movies[i], isHomePage: true)),
-            ),
+          padding: const EdgeInsets.symmetric(horizontal: 44),
+          itemCount: movies.length,
+          itemBuilder: (context, i) => SizedBox(
+            width: 215,
+            child: HoverScale(child: MovieCard(movie: movies[i], isHomePage: true)),
           ),
         ),
       ],
