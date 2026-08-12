@@ -42,23 +42,37 @@ jobs:
       - name: Scaffold Windows project
         run: flutter create --platforms=windows --project-name movie_bloc_app .
 
+      # Convert the ZipX app icon (PNG) to a multi-size .ico and drop it in as
+      # the Windows runner icon, so the built exe carries the ZipX icon (not the
+      # default Flutter one). ImageMagick ships on the hosted windows image.
+      - name: Brand the app icon
+        shell: pwsh
+        run: |
+          magick "assets/logos/app_icon.png" -background none -define icon:auto-resize=256,128,96,64,48,32,16 "zipx.ico"
+          Copy-Item "zipx.ico" "windows/runner/resources/app_icon.ico" -Force
+
       - name: Install dependencies
         run: flutter pub get
 
       - name: Build Windows (release)
         run: flutter build windows --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }} --dart-define=AIOSTREAMS_ADDON_URL=${{ secrets.AIOSTREAMS_ADDON_URL }} --dart-define=PREPARE_ADDON_URL=${{ secrets.PREPARE_ADDON_URL }} --dart-define=PREPARE_API_KEY=${{ secrets.PREPARE_API_KEY }}
 
-      - name: Package build
+      - name: Build installer (Inno Setup)
         shell: pwsh
         run: |
           $out = "build/windows/x64/runner/Release"
           if (!(Test-Path $out)) { $out = "build/windows/runner/Release" }
-          Compress-Archive -Path "$out/*" -DestinationPath "zipx-movies-windows.zip" -Force
+          $src = (Resolve-Path $out).Path
+          $icon = (Resolve-Path "zipx.ico").Path
+          choco install innosetup -y --no-progress
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & "$iscc" "/DMyAppVersion=1.0.${{ github.run_number }}" "/DSourceDir=$src" "/DMyAppIcon=$icon" "/O$($PWD.Path)" "installer\zipx.iss"
+          if (!(Test-Path "ZipX-Setup.exe")) { Write-Error "Installer not produced"; exit 1 }
 
       - name: Publish to "latest-windows" release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-windows
           name: Latest Windows build
-          files: zipx-movies-windows.zip
+          files: ZipX-Setup.exe
           fail_on_unmatched_files: true
