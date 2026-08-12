@@ -507,7 +507,15 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       _preparing = true;
       _prepareError = null;
     });
-    final src = _uncached.first;
+    // For a TV episode, prefer a single-file release (fileIndex -1/absent) so a
+    // manual prepare never pulls a whole season/complete pack either; fall back
+    // to the top candidate if only packs exist.
+    final src = widget.request.isTvEpisode
+        ? _uncached.firstWhere(
+            (s) => s.fileIndex == null || s.fileIndex! < 0,
+            orElse: () => _uncached.first,
+          )
+        : _uncached.first;
     final jobId = await _service.submitForPreparation(widget.request, src);
     if (!mounted) return;
     if (jobId != null) {

@@ -268,12 +268,14 @@ class StreamSourcesService {
       if (existing != null && existing['status'] != 'failed') return; // ready/active
 
       // Highest-ranked uncached candidate whose infohash we haven't tried yet
-      // (dedups duplicate releases that resolve to the same infohash).
+      // (dedups duplicate releases that resolve to the same infohash), and which
+      // is a SINGLE-FILE episode release - never a season/complete pack.
       StreamSource? pick;
       for (final s in all) {
         if (s.cached) continue;
         final h = s.infohash;
         if (h == null || h.isEmpty || triedHashes.contains(h)) continue;
+        if (!_isSingleFileEpisode(s, r)) continue;
         pick = s;
         break;
       }
@@ -294,6 +296,17 @@ class StreamSourcesService {
     }
     // All candidates exhausted for this attempt. No continuous looping - the
     // next look-ahead pass (or the user reaching the episode) retries fresh.
+  }
+
+  /// A candidate is safe to auto-prepare for a TV episode only if it's a
+  /// SINGLE-FILE release - the whole torrent is just this episode. AIOStreams'
+  /// fileIndex is -1/absent for a single-file torrent and >=0 when the file is
+  /// one of many (a season/complete pack). Preparing a pack risks Real-Debrid
+  /// exposing the entire season/series (it caches whole torrents), so packs are
+  /// skipped for background preparation. Movies are unaffected.
+  bool _isSingleFileEpisode(StreamSource s, PlaybackRequest r) {
+    if (!r.isTvEpisode) return true;
+    return s.fileIndex == null || s.fileIndex! < 0;
   }
 
   /// Polls a just-submitted job a few times. Returns true if it reached a
