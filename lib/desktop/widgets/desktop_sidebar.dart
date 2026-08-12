@@ -14,8 +14,11 @@ const List<DesktopNavItem> kDesktopNavItems = [
   DesktopNavItem(Icons.search_rounded, 'Search'),
   DesktopNavItem(Icons.tv_rounded, 'TV Shows'),
   DesktopNavItem(Icons.bookmark_rounded, 'Watchlist'),
-  DesktopNavItem(Icons.person_rounded, 'Profile'),
 ];
+
+/// Profile lives at the very bottom of the rail (its content index follows the
+/// main destinations).
+const int kDesktopProfileIndex = 4;
 
 /// The persistent left navigation rail for the desktop UI: the ZIPX wordmark on
 /// top, the destinations below with a red pill behind the active one. Collapses
@@ -60,7 +63,49 @@ class DesktopSidebar extends StatelessWidget {
                 onTap: () => onSelected(i),
               ),
             const Spacer(),
+            // Profile pinned to the bottom-left as a circular account icon.
+            Padding(
+              padding: EdgeInsets.fromLTRB(expanded ? 18 : 0, 0, 0, 20),
+              child: Align(
+                alignment: expanded ? Alignment.centerLeft : Alignment.center,
+                child: _ProfileButton(
+                  selected: currentIndex == kDesktopProfileIndex,
+                  onTap: () => onSelected(kDesktopProfileIndex),
+                ),
+              ),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Circular account button pinned to the bottom of the rail.
+class _ProfileButton extends StatelessWidget {
+  const _ProfileButton({required this.selected, required this.onTap});
+
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Tooltip(
+          message: 'Profile',
+          child: Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: selected ? ZipxUi.red : ZipxUi.surfaceHigh,
+              border: Border.all(color: selected ? ZipxUi.red : Colors.white24, width: 1.5),
+            ),
+            child: const Icon(Icons.person_rounded, color: Colors.white, size: 24),
+          ),
         ),
       ),
     );

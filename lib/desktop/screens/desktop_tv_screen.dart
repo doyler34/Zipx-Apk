@@ -4,97 +4,84 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../common/styles/zipx_ui.dart';
-import '../../common/widgets/movie/movie_card.dart';
+import '../../core/dependency_injection/di.dart';
 import '../../core/playback/domain/entities/playback_media_type.dart';
 import '../../core/playback/domain/entities/playback_request.dart';
-import '../../features/movies/data/models/movie_model.dart';
-import '../../features/movies/data/models/movies_result_model.dart';
-import '../../features/movies/presentation/blocs/home/home/home_bloc.dart';
-import '../../features/personalization/presentation/blocs/bookmarks/bookmarks_bloc.dart';
-import '../../features/personalization/presentation/blocs/settings/settings_bloc.dart';
+import '../../features/tv/data/models/tv_model.dart';
+import '../../features/tv/presentation/blocs/tv_home_cubit.dart';
+import '../../features/tv/presentation/widgets/tv_card.dart';
 
-/// Desktop Home: a cinematic backdrop hero plus horizontal poster rows, wired
-/// to the real [HomeBloc]. Reuses [MovieCard] so posters, rating badges and
-/// bookmark toggles are identical to the phone app.
-class DesktopHomeScreen extends StatelessWidget {
-  const DesktopHomeScreen({super.key});
+/// Desktop TV Shows: its own cinematic hero + horizontal rows of shows, wired to
+/// [TvHomeCubit]. Same shape as the desktop movie home but populated with TV
+/// categories and genre rows, using the shared [TvCard].
+class DesktopTvScreen extends StatelessWidget {
+  const DesktopTvScreen({super.key});
 
   static String _backdrop(String path) => 'https://image.tmdb.org/t/p/w1280$path';
 
-  List<MovieModel> _filter(MoviesResultModel result, bool showAdult) {
-    final movies = result.movies ?? const <MovieModel>[];
-    final visible = showAdult ? movies : movies.where((m) => !m.adult).toList();
-    // Drop posterless entries, same rule as the rest of the app.
-    return visible.where((m) => m.posterPath.trim().isNotEmpty).toList();
-  }
+  List<TvModel> _clean(List<TvModel> shows) =>
+      shows.where((s) => s.posterPath.trim().isNotEmpty && !s.isLikelyUnstreamable).toList();
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<SettingsBloc, SettingsState>(
-      builder: (context, settings) {
-        final showAdult = settings is SettingsChanged && settings.showAdultContent;
-        return BlocBuilder<HomeBloc, HomeState>(
-          builder: (context, state) {
-            if (state is HomeInitial) {
-              context.read<HomeBloc>().add(LoadHome());
-              context.read<BookmarksBloc>().add(LoadBookmarks());
-              return const Center(child: CircularProgressIndicator(color: ZipxUi.red));
-            }
-            if (state is HomeLoading) {
-              return const Center(child: CircularProgressIndicator(color: ZipxUi.red));
-            }
-            if (state is HomeError) {
-              return Center(child: Text(state.message, style: const TextStyle(color: Colors.white70)));
-            }
-            if (state is HomeLoaded) {
-              final trending = _filter(state.trendingMovies, showAdult);
-              return SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (trending.isNotEmpty) _Hero(movie: trending.first),
-                    const SizedBox(height: 12),
-                    _Row(title: 'Trending Now', movies: trending),
-                    _Row(title: 'Upcoming Movies', movies: _filter(state.upcomingMovies, showAdult)),
-                    _Row(title: 'Now Playing', movies: _filter(state.nowPlayingMovies, showAdult)),
-                    _Row(title: 'Top Rated', movies: _filter(state.topRatedMovies, showAdult)),
-                    _Row(title: 'Popular', movies: _filter(state.popularMovies, showAdult)),
-                    const SizedBox(height: 32),
-                  ],
-                ),
-              );
-            }
-            return const SizedBox.shrink();
-          },
-        );
-      },
+    return BlocProvider(
+      create: (_) => sl<TvHomeCubit>()..loadHome(),
+      child: BlocBuilder<TvHomeCubit, TvHomeState>(
+        builder: (context, state) {
+          if (state.isLoading && state.trending.isEmpty) {
+            return const Center(child: CircularProgressIndicator(color: ZipxUi.red));
+          }
+          if (state.errorMessage != null && state.trending.isEmpty) {
+            return Center(child: Text(state.errorMessage!, style: const TextStyle(color: Colors.white70)));
+          }
+          final trending = _clean(state.trending);
+          return SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (trending.isNotEmpty) _TvHero(show: trending.first),
+                const SizedBox(height: 12),
+                _TvRow(title: 'Trending Now', shows: trending),
+                _TvRow(title: 'Popular', shows: _clean(state.popular)),
+                _TvRow(title: 'Top Rated', shows: _clean(state.topRated)),
+                _TvRow(title: 'On The Air', shows: _clean(state.onTheAir)),
+                _TvRow(title: 'Airing Today', shows: _clean(state.airingToday)),
+                for (final section in state.genreSections)
+                  _TvRow(title: section.$1, shows: _clean(section.$2)),
+                const SizedBox(height: 32),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
 
-/// Full-width cinematic hero backed by the top trending title.
-class _Hero extends StatelessWidget {
-  const _Hero({required this.movie});
+class _TvHero extends StatelessWidget {
+  const _TvHero({required this.show});
 
-  final MovieModel movie;
+  final TvModel show;
 
   void _play(BuildContext context) {
     context.push(
       '/player',
       extra: PlaybackRequest(
-        tmdbId: movie.id,
-        mediaType: PlaybackMediaType.movie,
-        title: movie.title,
-        posterPath: movie.posterPath,
+        tmdbId: show.id,
+        mediaType: PlaybackMediaType.tv,
+        title: show.name,
+        seasonNumber: 1,
+        episodeNumber: 1,
+        posterPath: show.posterPath,
       ),
     );
   }
 
-  void _moreInfo(BuildContext context) => context.push('/details/${movie.id}', extra: movie);
+  void _moreInfo(BuildContext context) => context.push('/tv/${show.id}', extra: show);
 
   @override
   Widget build(BuildContext context) {
-    final year = movie.releaseDate.length >= 4 ? movie.releaseDate.substring(0, 4) : '';
+    final year = show.firstAirDate.length >= 4 ? show.firstAirDate.substring(0, 4) : '';
     return LayoutBuilder(
       builder: (context, c) {
         final height = (c.maxWidth * 0.42).clamp(360.0, 560.0);
@@ -104,16 +91,10 @@ class _Hero extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (movie.backdropPath.trim().isNotEmpty)
-                ExtendedImage.network(
-                  DesktopHomeScreen._backdrop(movie.backdropPath),
-                  fit: BoxFit.cover,
-                  cache: true,
-                  printError: false,
-                )
+              if (show.backdropPath.trim().isNotEmpty)
+                ExtendedImage.network(DesktopTvScreen._backdrop(show.backdropPath), fit: BoxFit.cover, cache: true, printError: false)
               else
                 const ColoredBox(color: ZipxUi.surface),
-              // Left-to-right + bottom scrims so text stays readable.
               const DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -143,7 +124,7 @@ class _Hero extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          movie.title,
+                          show.name,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(color: Colors.white, fontSize: 42, fontWeight: FontWeight.w800, height: 1.05),
@@ -153,17 +134,17 @@ class _Hero extends StatelessWidget {
                           children: [
                             const Icon(Icons.star_rounded, color: ZipxUi.red, size: 20),
                             const SizedBox(width: 4),
-                            Text(movie.voteAverage.toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                            Text(show.voteAverage.toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                             if (year.isNotEmpty) ...[
                               const SizedBox(width: 12),
                               Text(year, style: const TextStyle(color: ZipxUi.textMuted)),
                             ],
                           ],
                         ),
-                        if (movie.overview.trim().isNotEmpty) ...[
+                        if (show.overview.trim().isNotEmpty) ...[
                           const SizedBox(height: 14),
                           Text(
-                            movie.overview,
+                            show.overview,
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.4),
@@ -172,19 +153,9 @@ class _Hero extends StatelessWidget {
                         const SizedBox(height: 22),
                         Row(
                           children: [
-                            _HeroButton(
-                              icon: Icons.play_arrow_rounded,
-                              label: 'Play',
-                              filled: true,
-                              onTap: () => _play(context),
-                            ),
+                            _HeroButton(icon: Icons.play_arrow_rounded, label: 'Play', filled: true, onTap: () => _play(context)),
                             const SizedBox(width: 14),
-                            _HeroButton(
-                              icon: Icons.info_outline_rounded,
-                              label: 'More Info',
-                              filled: false,
-                              onTap: () => _moreInfo(context),
-                            ),
+                            _HeroButton(icon: Icons.info_outline_rounded, label: 'More Info', filled: false, onTap: () => _moreInfo(context)),
                           ],
                         ),
                       ],
@@ -234,16 +205,15 @@ class _HeroButton extends StatelessWidget {
   }
 }
 
-/// A titled horizontal poster row built from reused [MovieCard]s.
-class _Row extends StatelessWidget {
-  const _Row({required this.title, required this.movies});
+class _TvRow extends StatelessWidget {
+  const _TvRow({required this.title, required this.shows});
 
   final String title;
-  final List<MovieModel> movies;
+  final List<TvModel> shows;
 
   @override
   Widget build(BuildContext context) {
-    if (movies.isEmpty) return const SizedBox.shrink();
+    if (shows.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -256,10 +226,10 @@ class _Row extends StatelessWidget {
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 44),
-            itemCount: movies.length,
+            itemCount: shows.length,
             itemBuilder: (context, i) => SizedBox(
               width: 215,
-              child: MovieCard(movie: movies[i], isHomePage: true),
+              child: TvCard(show: shows[i]),
             ),
           ),
         ),

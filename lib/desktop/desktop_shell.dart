@@ -8,8 +8,8 @@ import '../features/movies/presentation/blocs/home/home/home_bloc.dart';
 import '../features/movies/presentation/pages/search/search_screen.dart';
 import '../features/personalization/presentation/pages/bookmarks/bookmarks_screen.dart';
 import '../features/personalization/presentation/pages/settings/settings_screen.dart';
-import '../features/tv/presentation/pages/tv_home_screen.dart';
 import 'screens/desktop_home_screen.dart';
+import 'screens/desktop_tv_screen.dart';
 import 'widgets/desktop_sidebar.dart';
 
 /// Root of the dedicated desktop UI. A persistent left sidebar plus a swapping
@@ -32,7 +32,7 @@ class _DesktopShellState extends State<DesktopShell> {
     final screens = <Widget>[
       const DesktopHomeScreen(),
       const SearchScreen(),
-      const TvHomeScreen(),
+      const DesktopTvScreen(),
       const BookmarksScreen(),
       const SettingsScreen(),
     ];
