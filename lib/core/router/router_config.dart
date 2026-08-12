@@ -19,6 +19,7 @@ import '../../core/playback/domain/entities/player_args.dart';
 import '../../core/playback/presentation/pages/native_player_screen.dart';
 import '../../desktop/desktop_shell.dart';
 import '../../desktop/screens/desktop_movie_details.dart';
+import '../../desktop/screens/desktop_tv_details.dart';
 
 class CustomGoRouterConfig {
   final GoRouter config = GoRouter(
@@ -92,7 +93,10 @@ class CustomGoRouterConfig {
       GoRoute(
         path: '/tv/:id',
         builder: (BuildContext context, GoRouterState state) {
-          return TvDetailsScreen(show: state.extra as TvModel);
+          final show = state.extra as TvModel;
+          return Responsive.isDesktop(context)
+              ? DesktopTvDetails(show: show)
+              : TvDetailsScreen(show: show);
         },
       ),
       GoRoute(
