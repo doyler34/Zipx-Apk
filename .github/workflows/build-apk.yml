@@ -22,6 +22,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Mapped up here so the VPS-upload step can be conditionally skipped when the
+    # secrets aren't set (secrets can't be referenced directly in `if:`).
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -116,6 +120,20 @@ jobs:
 
       - name: Rename APK
         run: cp build/app/outputs/flutter-apk/app-release.apk zipx-movies.apk
+
+      # Upload the APK to your VPS so it can be served from your own IP/domain -
+      # no github.com link in the download URL. Skipped until the VPS_* secrets
+      # are configured, so the build stays green in the meantime.
+      - name: Upload APK to VPS
+        if: env.VPS_HOST != ''
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          source: zipx-movies.apk
+          target: ${{ secrets.VPS_DOWNLOAD_DIR }}
 
       # Stable "latest" release, updated in place on every build so the
       # Downloader URL never changes.

@@ -23,6 +23,10 @@ jobs:
     # Pinned to windows-2022 (VS 2022 C++ toolchain). windows-latest dropped the
     # Visual Studio version Flutter 3.22.3 asks CMake for, breaking the build.
     runs-on: windows-2022
+    # Mapped up here so the VPS-upload step can be conditionally skipped when the
+    # secrets aren't set (secrets can't be referenced directly in `if:`).
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -68,6 +72,32 @@ jobs:
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           & "$iscc" "/DMyAppVersion=1.0.${{ github.run_number }}" "/DSourceDir=$src" "/DMyAppIcon=$icon" "/O$($PWD.Path)" "installer\zipx.iss"
           if (!(Test-Path "ZipX-Setup.exe")) { Write-Error "Installer not produced"; exit 1 }
+
+      # Upload the installer to your VPS so it can be served from your own
+      # IP/domain - no github.com link in the download URL. Uses the runner's
+      # native OpenSSH scp (Docker-based upload actions can't run on Windows
+      # runners). Skipped until the VPS_* secrets are configured.
+      - name: Upload installer to VPS
+        if: env.VPS_HOST != ''
+        shell: pwsh
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_DOWNLOAD_DIR: ${{ secrets.VPS_DOWNLOAD_DIR }}
+        run: |
+          $keyPath = Join-Path $env:RUNNER_TEMP "vps_key"
+          $key = $env:VPS_SSH_KEY
+          if (-not $key.EndsWith("`n")) { $key += "`n" }
+          [System.IO.File]::WriteAllText($keyPath, $key)
+          # Lock the key down to just this user, or ssh refuses to use it.
+          icacls $keyPath /inheritance:r | Out-Null
+          icacls $keyPath /grant:r "$($env:USERNAME):(R)" | Out-Null
+          $port = if ($env:VPS_PORT) { $env:VPS_PORT } else { "22" }
+          scp -o StrictHostKeyChecking=no -P $port -i $keyPath "ZipX-Setup.exe" "$($env:VPS_USER)@$($env:VPS_HOST):$($env:VPS_DOWNLOAD_DIR)/"
+          if ($LASTEXITCODE -ne 0) { Write-Error "scp upload failed"; exit 1 }
+          Remove-Item $keyPath -Force
 
       - name: Publish to "latest-windows" release
         uses: softprops/action-gh-release@v2
