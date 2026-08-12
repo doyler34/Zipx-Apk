@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../common/responsive/responsive.dart';
 import '../common/styles/zipx_ui.dart';
+import '../common/widgets/beta/beta_v1_popup.dart';
 import '../core/dependency_injection/di.dart';
 import '../features/movies/presentation/blocs/home/home/home_bloc.dart';
 import 'screens/desktop_home_screen.dart';
@@ -24,6 +25,20 @@ class DesktopShell extends StatefulWidget {
 
 class _DesktopShellState extends State<DesktopShell> {
   int _index = 0;
+
+  // Beta issue reports open the user's email app to this address (same as mobile).
+  static const String _betaReportUrl = 'mailto:garethark@outlook.com?subject=Zipx%20Movies%20Beta%20V1%20Issue';
+
+  @override
+  void initState() {
+    super.initState();
+    // Show the Beta V1 popup once (throttled by BetaPopupService) after the
+    // first frame, same as the phone home screen - it never fired on PC because
+    // desktop uses its own shell, not the mobile home screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) BetaV1Popup.showIfNeeded(context, reportUrl: _betaReportUrl);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
