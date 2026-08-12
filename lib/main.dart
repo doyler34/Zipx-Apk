@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:adaptive_theme/adaptive_theme.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:media_kit/media_kit.dart';
@@ -47,9 +50,27 @@ Future<void> main() async {
   await initDependencyInjection();
   await sl<ProviderPreferencesService>().initialize();
 
-  // Phone/tablet app: portrait-locked at launch (the player itself allows
-  // landscape while a video is open).
-  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  // Desktop (PC): open the window centered on screen at a sensible size,
+  // instead of the OS default top-left placement. No-op on mobile/web.
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    await windowManager.ensureInitialized();
+    const windowOptions = WindowOptions(
+      size: Size(1280, 800),
+      minimumSize: Size(900, 600),
+      center: true,
+      title: 'ZipX Movies',
+      titleBarStyle: TitleBarStyle.normal,
+    );
+    unawaited(windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.center();
+      await windowManager.show();
+      await windowManager.focus();
+    }));
+  } else {
+    // Phone/tablet app: portrait-locked at launch (the player itself allows
+    // landscape while a video is open).
+    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  }
 
   // Used only for testing on different devices
   // FlutterNativeSplash.remove();

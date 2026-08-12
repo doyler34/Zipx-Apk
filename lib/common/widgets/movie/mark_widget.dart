@@ -42,10 +42,10 @@ class MarkWidget extends StatelessWidget {
                 onTap: () {
                   if (isBookmarked) {
                     context.read<BookmarksBloc>().add(RemoveBookmark(movie));
-                    HelperFunctions.showSnackBar(context, 'Removed from bookmarks');
+                    HelperFunctions.showSnackBar(context, 'Removed from Watchlist');
                   } else {
                     context.read<BookmarksBloc>().add(AddBookmark(movie));
-                    HelperFunctions.showSnackBar(context, 'Added to bookmarks');
+                    HelperFunctions.showSnackBar(context, 'Added to Watchlist');
                   }
                 },
                 child: Container(

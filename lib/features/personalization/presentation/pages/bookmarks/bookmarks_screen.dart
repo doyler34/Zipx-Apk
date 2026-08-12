@@ -49,7 +49,7 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
             final tvShows = _tvBookmarks();
 
             if (movies.isEmpty && tvShows.isEmpty) {
-              return const CenteredMessage(message: 'You have no bookmarks yet');
+              return const CenteredMessage(message: 'Your watchlist is empty');
             }
 
             return SafeArea(

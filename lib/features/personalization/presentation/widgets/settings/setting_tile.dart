@@ -27,7 +27,6 @@ class SettingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
     return BlocBuilder(
       bloc: context.read<SettingsBloc>(),
       builder: (context, state) {
@@ -35,7 +34,8 @@ class SettingTile extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             child: Container(
-              height: size.height * 0.09,
+              constraints: const BoxConstraints(minHeight: 64),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: ZipxUi.surface,
                 borderRadius: BorderRadius.circular(14),
@@ -43,33 +43,26 @@ class SettingTile extends StatelessWidget {
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: SizedBox(
-                      width: size.width * 0.5,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          title,
-                          style: Theme.of(context).textTheme.titleSmall!.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                overflow: TextOverflow.fade,
-                              ),
-                        ),
-                      ),
+                  // Title takes the remaining space; the control keeps its
+                  // natural size so switches/toggles are always fully visible
+                  // (a fixed MediaQuery width used to squeeze them to nothing
+                  // inside the constrained desktop settings column).
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall!.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                     ),
                   ),
-                  Expanded(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        child: type == SettingsTileType.switchType
+                  const SizedBox(width: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: type == SettingsTileType.switchType
                             ? Switch(
                                 value: state.showAdultContent,
                                 onChanged: onTapSwitch,
@@ -115,8 +108,6 @@ class SettingTile extends StatelessWidget {
                                         ],
                                       )
                                     : null,
-                      ),
-                    ),
                   ),
                 ],
               ),

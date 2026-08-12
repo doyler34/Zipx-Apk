@@ -18,13 +18,13 @@ class ClearBookmarksTile extends StatelessWidget {
       builder: (context, state) {
         if (state is BookmarksChanged) {
           return SettingTile(
-            title: 'Clear All Bookmarks',
+            title: 'Clear Watchlist',
             type: SettingsTileType.buttonType,
             buttonTitle: 'Clear',
             onTapButton: state.bookmarks.isNotEmpty
                 ? () {
                     context.read<BookmarksBloc>().add(ClearBookmarks());
-                    HelperFunctions.showSnackBar(context, 'All bookmarks have been cleared');
+                    HelperFunctions.showSnackBar(context, 'Watchlist cleared');
                   }
                 : null,
           );

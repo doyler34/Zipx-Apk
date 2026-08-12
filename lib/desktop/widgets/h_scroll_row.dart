@@ -78,6 +78,11 @@ class _HScrollRowState extends State<HScrollRow> {
             ListView.builder(
               controller: _controller,
               scrollDirection: Axis.horizontal,
+              // Don't let the row swallow the vertical mouse wheel - that made
+              // page scrolling feel jumpy (the wheel did nothing over a row,
+              // then lurched over the gaps). Horizontal movement is via the
+              // hover arrows, which drive the controller programmatically.
+              physics: const NeverScrollableScrollPhysics(),
               padding: widget.padding,
               itemCount: widget.itemCount,
               itemBuilder: widget.itemBuilder,

@@ -78,6 +78,9 @@ dependencies:
   media_kit_video: ^1.2.4
   media_kit_libs_video: ^1.0.4
 
+  # Desktop-only: center + size the window on launch (no effect on mobile).
+  window_manager: ^0.3.9
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
