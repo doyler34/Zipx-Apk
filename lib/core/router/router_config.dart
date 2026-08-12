@@ -18,6 +18,7 @@ import '../../core/playback/domain/entities/playback_request.dart';
 import '../../core/playback/domain/entities/player_args.dart';
 import '../../core/playback/presentation/pages/native_player_screen.dart';
 import '../../desktop/desktop_shell.dart';
+import '../../desktop/screens/desktop_movie_details.dart';
 
 class CustomGoRouterConfig {
   final GoRouter config = GoRouter(
@@ -65,7 +66,9 @@ class CustomGoRouterConfig {
         path: '/details/:id',
         builder: (BuildContext context, GoRouterState state) {
           final movie = state.extra as MovieModel;
-          return DetailsScreen(movie: movie, id: state.pathParameters['id']!);
+          return Responsive.isDesktop(context)
+              ? DesktopMovieDetails(movie: movie)
+              : DetailsScreen(movie: movie, id: state.pathParameters['id']!);
         },
       ),
       GoRoute(

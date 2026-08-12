@@ -10,6 +10,7 @@ import '../../core/playback/domain/entities/playback_request.dart';
 import '../../features/tv/data/models/tv_model.dart';
 import '../../features/tv/presentation/blocs/tv_home_cubit.dart';
 import '../../features/tv/presentation/widgets/tv_card.dart';
+import '../widgets/hover_scale.dart';
 
 /// Desktop TV Shows: its own cinematic hero + horizontal rows of shows, wired to
 /// [TvHomeCubit]. Same shape as the desktop movie home but populated with TV
@@ -229,7 +230,7 @@ class _TvRow extends StatelessWidget {
             itemCount: shows.length,
             itemBuilder: (context, i) => SizedBox(
               width: 215,
-              child: TvCard(show: shows[i]),
+              child: HoverScale(child: TvCard(show: shows[i])),
             ),
           ),
         ),

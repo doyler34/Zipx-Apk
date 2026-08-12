@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../common/styles/zipx_ui.dart';
 import '../../common/widgets/movie/movie_card.dart';
+import '../widgets/hover_scale.dart';
 import '../../core/playback/domain/entities/playback_media_type.dart';
 import '../../core/playback/domain/entities/playback_request.dart';
 import '../../features/movies/data/models/movie_model.dart';
@@ -259,7 +260,7 @@ class _Row extends StatelessWidget {
             itemCount: movies.length,
             itemBuilder: (context, i) => SizedBox(
               width: 215,
-              child: MovieCard(movie: movies[i], isHomePage: true),
+              child: HoverScale(child: MovieCard(movie: movies[i], isHomePage: true)),
             ),
           ),
         ),
