@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../../../../common/responsive/responsive.dart';
 import '../../../dependency_injection/di.dart';
 import '../../domain/entities/download_item.dart';
 import '../../domain/entities/playback_request.dart';
@@ -967,6 +968,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
   }
 
   Widget _videoWithControls() {
+    if (Responsive.isDesktop(context)) return _desktopVideoWithControls();
     final theme = MaterialVideoControlsThemeData(
       // Double-tap the left/right of the video to seek back/forward (~10s).
       seekOnDoubleTap: true,
@@ -1014,6 +1016,79 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
       ],
     );
     return MaterialVideoControlsTheme(
+      normal: theme,
+      fullscreen: theme,
+      child: Video(
+        controller: _videoController,
+        fit: _videoFit,
+        subtitleViewConfiguration: SubtitleViewConfiguration(
+          style: TextStyle(
+            fontSize: _subtitleFontSize,
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            backgroundColor: const Color(0x99000000),
+            shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
+          ),
+          padding: const EdgeInsets.all(24),
+        ),
+      ),
+    );
+  }
+
+  /// Desktop/PC controls: a proper mouse-driven control bar (play/pause, volume,
+  /// a draggable seek bar with time, fullscreen) plus our ZipX buttons. The
+  /// touch theme above has no persistent button bar, which is why PC had "no
+  /// buttons".
+  Widget _desktopVideoWithControls() {
+    Widget iconButton(String tooltip, IconData icon, VoidCallback onPressed) =>
+        IconButton(tooltip: tooltip, icon: Icon(icon, color: Colors.white), onPressed: onPressed);
+
+    final theme = MaterialDesktopVideoControlsThemeData(
+      seekBarThumbColor: const Color(0xFFE11D2A),
+      seekBarPositionColor: const Color(0xFFE11D2A),
+      toggleFullscreenOnDoublePress: true,
+      topButtonBarMargin: const EdgeInsets.only(top: 8, left: 8, right: 8),
+      topButtonBar: [
+        const BackButton(color: Colors.white),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(widget.request.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.circle, size: 8, color: Color(0xFF4ADE80)),
+                  SizedBox(width: 6),
+                  Text('ZipX Server',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF4ADE80), fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+      bottomButtonBar: [
+        const MaterialDesktopPlayOrPauseButton(),
+        const MaterialDesktopVolumeButton(),
+        const MaterialDesktopPositionIndicator(),
+        const Spacer(),
+        iconButton(_videoFit == BoxFit.contain ? 'Zoom to fill' : 'Fit',
+            _videoFit == BoxFit.contain ? Icons.fit_screen : Icons.crop_free,
+            () => setState(() => _videoFit = _videoFit == BoxFit.contain ? BoxFit.cover : BoxFit.contain)),
+        iconButton('Subtitles', Icons.subtitles, _openSubtitles),
+        iconButton('Audio', Icons.multitrack_audio, _openAudio),
+        iconButton('Speed', Icons.speed, _openSpeed),
+        if (_sources.length > 1) iconButton('Sources', Icons.playlist_play, _openSourcePicker),
+        const MaterialDesktopFullscreenButton(),
+      ],
+    );
+
+    return MaterialDesktopVideoControlsTheme(
       normal: theme,
       fullscreen: theme,
       child: Video(
