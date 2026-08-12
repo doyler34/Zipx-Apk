@@ -5,11 +5,11 @@ import '../common/responsive/responsive.dart';
 import '../common/styles/zipx_ui.dart';
 import '../core/dependency_injection/di.dart';
 import '../features/movies/presentation/blocs/home/home/home_bloc.dart';
-import '../features/personalization/presentation/pages/settings/settings_screen.dart';
 import 'screens/desktop_home_screen.dart';
 import 'screens/desktop_search_screen.dart';
 import 'screens/desktop_tv_screen.dart';
 import 'screens/desktop_bookmarks_screen.dart';
+import 'screens/desktop_settings_screen.dart';
 import 'widgets/desktop_sidebar.dart';
 
 /// Root of the dedicated desktop UI. A persistent left sidebar plus a swapping
@@ -34,7 +34,7 @@ class _DesktopShellState extends State<DesktopShell> {
       const DesktopSearchScreen(),
       const DesktopTvScreen(),
       const DesktopBookmarksScreen(),
-      const SettingsScreen(),
+      const DesktopSettingsScreen(),
     ];
 
     return BlocProvider(
