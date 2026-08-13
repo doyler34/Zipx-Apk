@@ -1,16 +1,20 @@
 // ZipX preparation service.
 //
-// Submits an uncached release (identified by its torrent infohash) to
-// Real-Debrid, selects the correct file (the requested episode for TV), tracks
-// the download, and exposes a small pollable job API to the app. The RD token
-// stays server-side; the app only ever sees an internal job id + a mapped
-// status. When a job is "ready" the app re-queries AIOStreams for a fresh
-// playback URL - this service never stores/returns a debrid playback URL.
+// Submits an uncached release (identified by its torrent infohash) to TorBox,
+// tracks the download, and exposes a small pollable job API to the app. The
+// TorBox key stays server-side; the app only ever sees an internal job id + a
+// mapped status. When a job is "ready" the app can play it via /play (which
+// resolves the correct file's direct link on demand) or re-query AIOStreams.
+//
+// TorBox is the single debrid provider (via AIOStreams for cached playback, and
+// here for uncached preparation). It downloads the whole torrent, so the file to
+// play is chosen at play time - the app-side guard only ever submits single-file
+// episode releases, never a whole season pack.
 
 import express from 'express';
 import { Store } from './store.js';
-import { RealDebrid } from './rd.js';
-import { selectFiles } from './select.js';
+import { TorBox } from './torbox.js';
+import { selectFile } from './select.js';
 
 const app = express();
 app.use(express.json({ limit: '16kb' }));
@@ -20,9 +24,9 @@ const HASH_RE = /^[a-fA-F0-9]{40}$/;
 // Sanity bound for a torrent file index (season packs are dozens of files, not
 // tens of thousands) - anything beyond this is treated as "no specific file".
 const MAX_FILE_IDX = 10_000;
-// Don't hammer Real-Debrid: a job refreshes from RD at most this often, no
-// matter how frequently the app polls GET /status.
-const RD_REFRESH_MS = 10_000;
+// Don't hammer TorBox: a job refreshes from TorBox at most this often, no matter
+// how frequently the app polls GET /status.
+const DEBRID_REFRESH_MS = 10_000;
 
 // Health check is public; everything else needs the shared app key.
 app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -33,85 +37,63 @@ app.use((req, res, next) => {
   next();
 });
 
-// Real-Debrid status -> app status.
-function mapStatus(rdStatus) {
-  switch (rdStatus) {
-    case 'magnet_conversion':
-    case 'waiting_files_selection':
-    case 'queued':
-      return 'queued';
-    case 'downloading':
-    case 'compressing':
-    case 'uploading':
-      return 'downloading';
-    case 'downloaded':
-      return 'ready';
-    case 'magnet_error':
-    case 'error':
-    case 'virus':
-    case 'dead':
-      return 'failed';
-    default:
-      return 'queued';
+// TorBox download state -> app status. Relies on the download_finished flag for
+// "ready" and keeps genuinely-stalled downloads as "downloading" (not failed),
+// so a slow-but-alive torrent isn't abandoned.
+function mapStatus(t) {
+  if (!t) return 'queued';
+  if (t.download_finished === true) return 'ready';
+  const s = String(t.download_state || '').toLowerCase();
+  if (s === 'completed' || s.includes('cached')) return 'ready';
+  if (s.includes('error') || s.includes('failed') || s.includes('dead') || s.includes('virus') || s.includes('missing')) {
+    return 'failed';
   }
+  if (
+    s.includes('download') || s.includes('upload') || s.includes('meta') ||
+    s.includes('check') || s.includes('stall') ||
+    (typeof t.progress === 'number' && t.progress > 0)
+  ) {
+    return 'downloading';
+  }
+  return 'queued';
 }
 
 // The public shape returned to the app. Only includes progress/speed when
-// Real-Debrid genuinely reported them - never fabricated.
+// TorBox genuinely reported them - never fabricated.
 function publicJob(j) {
   const out = { jobId: j.id, status: j.status };
-  if (j.progress != null) out.progress = j.progress;
-  if (j.speed != null && j.speed > 0) {
-    out.speed = j.speed; // bytes/sec, straight from RD
-    if (j.status === 'downloading') {
-      // ETA is derived from real RD values only (remaining bytes / speed); we
-      // can't compute it without the byte total, so it's omitted when unknown.
-    }
-  }
+  if (j.progress != null) out.progress = j.progress; // 0..100
+  if (j.speed != null && j.speed > 0) out.speed = j.speed; // bytes/sec, from TorBox
   if (j.error) out.error = j.error;
   return out;
 }
 
-// Refresh a job from Real-Debrid (rate-limited) and lazily select the file once
-// RD has listed the torrent's contents.
+// Refresh a job from TorBox (rate-limited). No file selection here - TorBox
+// downloads the whole torrent and the file is chosen at play time.
 async function refresh(job) {
   if (job.status === 'ready' || job.status === 'failed') return job;
   if (!job.rdId) return job;
-  if (Date.now() - (job.rdCheckedAt || 0) < RD_REFRESH_MS) return job;
+  if (Date.now() - (job.rdCheckedAt || 0) < DEBRID_REFRESH_MS) return job;
 
-  let info;
+  let t;
   try {
-    info = await RealDebrid.info(job.rdId);
+    t = await TorBox.info(job.rdId);
   } catch (e) {
     if (e.status === 404) {
       return Store.update(job.id, { status: 'failed', error: 'torrent_removed', rdCheckedAt: Date.now() });
     }
-    return job; // transient RD error - keep last known state
+    return job; // transient TorBox error - keep last known state
+  }
+  if (!t) {
+    return Store.update(job.id, { status: 'failed', error: 'torrent_removed', rdCheckedAt: Date.now() });
   }
 
-  // Lazy file selection: once RD lists the files, pick the right one.
-  if (job.needsSelection && info.status === 'waiting_files_selection' &&
-      Array.isArray(info.files) && info.files.length) {
-    const sel = selectFiles(info.files, job);
-    if (sel.error) {
-      try { await RealDebrid.delete(job.rdId); } catch { /* ignore */ }
-      return Store.update(job.id, { status: 'failed', error: sel.error, needsSelection: 0, rdCheckedAt: Date.now() });
-    }
-    try {
-      await RealDebrid.selectFiles(job.rdId, sel.fileIds);
-      Store.update(job.id, { needsSelection: 0 });
-      info = await RealDebrid.info(job.rdId);
-    } catch {
-      return job; // try again next poll
-    }
-  }
-
-  const status = mapStatus(info.status);
+  const status = mapStatus(t);
   return Store.update(job.id, {
     status,
-    progress: typeof info.progress === 'number' ? Math.round(info.progress) : job.progress,
-    speed: typeof info.speed === 'number' ? info.speed : null,
-    error: status === 'failed' ? (info.status || 'failed') : null,
+    progress: typeof t.progress === 'number' ? Math.round(t.progress * 100) : job.progress,
+    speed: typeof t.download_speed === 'number' ? t.download_speed : null,
+    error: status === 'failed' ? (t.download_state || 'failed') : null,
     rdCheckedAt: Date.now(),
   });
 }
@@ -150,31 +132,23 @@ app.post('/prepare', async (req, res) => {
   };
 
   // Dedup: reuse an existing active job for the same content+release instead of
-  // starting a second Real-Debrid download.
+  // starting a second TorBox download.
   const dup = Store.findActiveDuplicate(norm);
   if (dup) return res.json({ jobId: dup.id, status: dup.status });
 
   let job = Store.create(norm);
   try {
-    const added = await RealDebrid.addMagnet(job.hash);
-    job = Store.update(job.id, { rdId: added.id, status: 'queued' });
-
-    // Best-effort immediate file selection; otherwise it happens on first poll.
-    try {
-      const info = await RealDebrid.info(added.id);
-      if (info.status === 'waiting_files_selection' && Array.isArray(info.files) && info.files.length) {
-        const sel = selectFiles(info.files, job);
-        if (sel.error) {
-          try { await RealDebrid.delete(added.id); } catch { /* ignore */ }
-          job = Store.update(job.id, { status: 'failed', error: sel.error, needsSelection: 0 });
-        } else {
-          await RealDebrid.selectFiles(added.id, sel.fileIds);
-          job = Store.update(job.id, { needsSelection: 0 });
-        }
-      }
-    } catch { /* selection will retry on the first status poll */ }
+    const added = await TorBox.addMagnet(job.hash);
+    const tid = added.torrent_id ?? added.id ?? null;
+    if (tid == null) {
+      // No torrent id (e.g. the item was queued at the concurrency limit); mark
+      // failed with a clear reason so the app can retry an alternate source.
+      job = Store.update(job.id, { status: 'failed', error: 'tb_no_torrent_id' });
+    } else {
+      job = Store.update(job.id, { rdId: String(tid), status: 'queued', needsSelection: 0 });
+    }
   } catch {
-    job = Store.update(job.id, { status: 'failed', error: 'rd_add_failed' });
+    job = Store.update(job.id, { status: 'failed', error: 'tb_add_failed' });
   }
 
   res.status(201).json({ jobId: job.id, status: job.status });
@@ -199,7 +173,7 @@ app.get('/prepare/find', (req, res) => {
   res.json({ jobId: job.id, status: job.status });
 });
 
-// GET /prepare/:jobId/status - poll a job (refreshes from RD, rate-limited).
+// GET /prepare/:jobId/status - poll a job (refreshes from TorBox, rate-limited).
 app.get('/prepare/:jobId/status', async (req, res) => {
   let job = Store.get(req.params.jobId);
   if (!job) return res.status(404).json({ error: 'not_found' });
@@ -208,37 +182,38 @@ app.get('/prepare/:jobId/status', async (req, res) => {
 });
 
 // GET /prepare/:jobId/play - resolve a ready job to a fresh, directly-playable
-// URL. This unrestricts the exact prepared file on demand (never stores the
-// URL), so a downloaded episode plays immediately without waiting for
-// AIOStreams' cached view to catch up. 409 if it isn't downloaded yet.
+// URL. Picks the correct file (the requested episode for TV, the main video for
+// a movie) and requests its TorBox link on demand (never stored). 409 if it
+// isn't downloaded yet.
 app.get('/prepare/:jobId/play', async (req, res) => {
   const job = Store.get(req.params.jobId);
   if (!job) return res.status(404).json({ error: 'not_found' });
   if (!job.rdId) return res.status(409).json({ error: 'not_ready' });
   try {
-    const info = await RealDebrid.info(job.rdId);
-    if (info.status !== 'downloaded') {
-      Store.update(job.id, { status: mapStatus(info.status), rdCheckedAt: Date.now() });
-      return res.status(409).json({ error: 'not_ready', status: mapStatus(info.status) });
+    const t = await TorBox.info(job.rdId);
+    if (!t) return res.status(409).json({ error: 'not_ready' });
+    if (t.download_finished !== true) {
+      Store.update(job.id, { status: mapStatus(t), rdCheckedAt: Date.now() });
+      return res.status(409).json({ error: 'not_ready', status: mapStatus(t) });
     }
-    // We select exactly one file per job, so links[0] is that file.
-    const links = Array.isArray(info.links) ? info.links : [];
-    if (links.length === 0) return res.status(409).json({ error: 'no_link' });
-    const un = await RealDebrid.unrestrict(links[0]);
-    if (!un || !un.download) return res.status(502).json({ error: 'unrestrict_failed' });
+    const files = Array.isArray(t.files) ? t.files : [];
+    const sel = selectFile(files, job);
+    if (sel.error) return res.status(409).json({ error: sel.error });
+    const url = await TorBox.requestDl(job.rdId, sel.fileId);
+    if (!url) return res.status(502).json({ error: 'requestdl_failed' });
     Store.update(job.id, { status: 'ready', rdCheckedAt: Date.now() });
-    return res.json({ url: un.download });
+    return res.json({ url });
   } catch {
     return res.status(502).json({ error: 'play_failed' });
   }
 });
 
-// DELETE /prepare/:jobId - cancel/remove a tracked job (and its RD download).
+// DELETE /prepare/:jobId - cancel/remove a tracked job (and its TorBox download).
 app.delete('/prepare/:jobId', async (req, res) => {
   const job = Store.get(req.params.jobId);
   if (!job) return res.status(404).json({ error: 'not_found' });
   if (job.rdId) {
-    try { await RealDebrid.delete(job.rdId); } catch { /* already gone - fine */ }
+    try { await TorBox.delete(job.rdId); } catch { /* already gone - fine */ }
   }
   Store.remove(job.id);
   res.json({ ok: true });
