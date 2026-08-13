@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -156,8 +157,10 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // No background playback: pause whenever the app leaves the foreground.
-    if (state != AppLifecycleState.resumed) {
+    // Mobile: pause when the app leaves the foreground (no background playback).
+    // Desktop (Windows/Linux/macOS): keep playing when the window is minimised
+    // or unfocused - a PC user expects the movie to carry on in the background.
+    if ((Platform.isAndroid || Platform.isIOS) && state != AppLifecycleState.resumed) {
       _player.pause();
     }
   }
