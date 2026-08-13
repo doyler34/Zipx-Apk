@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ZipX Movies — Install</title>
+<meta name="description" content="Download ZipX Movies for Android and Windows." />
+<style>
+  :root {
+    --bg: #0a0a0c;
+    --surface: #16161b;
+    --surface-high: #23232b;
+    --red: #e11d2a;
+    --text: #ffffff;
+    --muted: #9a9aa5;
+    --line: rgba(255,255,255,.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: radial-gradient(1200px 600px at 50% -10%, #1a0b0e 0%, var(--bg) 55%) fixed;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px 60px;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
+  }
+  .logo .mark {
+    width: 46px; height: 46px; border-radius: 12px;
+    background: var(--red);
+    display: grid; place-items: center;
+    box-shadow: 0 8px 24px rgba(225,29,42,.35);
+  }
+  .logo .mark svg { width: 24px; height: 24px; fill: #fff; }
+  .logo .word { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; }
+  .logo .word span { color: var(--red); }
+  .tagline { color: var(--muted); font-size: 15px; margin: 4px 0 34px; text-align: center; }
+  .cards { display: grid; gap: 18px; width: 100%; max-width: 760px; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 620px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 26px 24px;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    transition: border-color .2s, transform .2s;
+  }
+  .card.rec { border-color: rgba(225,29,42,.55); box-shadow: 0 0 0 1px rgba(225,29,42,.25); }
+  .card .ic { width: 54px; height: 54px; margin-bottom: 14px; opacity: .95; }
+  .card .ic svg { width: 100%; height: 100%; fill: #fff; }
+  .card h2 { margin: 0 0 4px; font-size: 20px; font-weight: 700; }
+  .card .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; min-height: 34px; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%;
+    background: var(--red); color: #fff; text-decoration: none;
+    font-size: 16px; font-weight: 700;
+    padding: 14px 18px; border-radius: 12px;
+    transition: filter .15s, transform .1s;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:active { transform: translateY(1px); }
+  .btn svg { width: 18px; height: 18px; fill: #fff; }
+  .rectag {
+    display: none;
+    margin-bottom: 14px; font-size: 11px; letter-spacing: .5px; text-transform: uppercase;
+    color: var(--red); font-weight: 700;
+  }
+  .card.rec .rectag { display: block; }
+  .notes { max-width: 760px; width: 100%; margin-top: 30px; }
+  .note {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px 18px; margin-bottom: 12px; color: var(--muted); font-size: 13.5px; line-height: 1.55;
+  }
+  .note b { color: var(--text); }
+  .foot { color: var(--muted); font-size: 12px; margin-top: 34px; text-align: center; }
+  .foot .pill { display: inline-block; background: var(--surface-high); border-radius: 999px; padding: 4px 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="logo">
+    <div class="mark">
+      <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+    </div>
+    <div class="word">ZIP<span>X</span></div>
+  </div>
+  <div class="tagline">Movies &amp; TV, streamed in one app. Pick your platform below.</div>
+
+  <div class="cards">
+    <div class="card" id="card-android">
+      <div class="rectag">Recommended for you</div>
+      <div class="ic">
+        <svg viewBox="0 0 24 24"><path d="M17.6 9.48l1.84-3.18a.4.4 0 10-.7-.4l-1.86 3.23a11.4 11.4 0 00-9.76 0L5.26 5.9a.4.4 0 10-.7.4L6.4 9.48A10.8 10.8 0 001 18h22a10.8 10.8 0 00-5.4-8.52zM7 15.25a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5zm10 0a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5z"/></svg>
+      </div>
+      <h2>Android</h2>
+      <p class="sub">Phones &amp; tablets. Installs as an app (APK).</p>
+      <a class="btn" href="zipx-movies.apk" download>
+        <svg viewBox="0 0 24 24"><path d="M12 3v10.6l3.3-3.3 1.4 1.4L12 17l-4.7-5.3 1.4-1.4L12 13.6V3h0zM5 19h14v2H5z"/></svg>
+        Download for Android
+      </a>
+    </div>
+
+    <div class="card" id="card-windows">
+      <div class="rectag">Recommended for you</div>
+      <div class="ic">
+        <svg viewBox="0 0 24 24"><path d="M3 5.6l7.5-1v7.3H3V5.6zm0 12.8l7.5 1v-7.2H3v6.2zM11.3 4.5L21 3.2v8.7h-9.7V4.5zm0 15l9.7 1.3v-8.6h-9.7v7.3z"/></svg>
+      </div>
+      <h2>Windows</h2>
+      <p class="sub">PC installer — Start-menu shortcut &amp; uninstaller.</p>
+      <a class="btn" href="ZipX-Setup.exe" download>
+        <svg viewBox="0 0 24 24"><path d="M12 3v10.6l3.3-3.3 1.4 1.4L12 17l-4.7-5.3 1.4-1.4L12 13.6V3h0zM5 19h14v2H5z"/></svg>
+        Download for Windows
+      </a>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note" id="note-android">
+      <b>Installing on Android:</b> after the download finishes, tap the file to install. If prompted, allow
+      <b>“Install unknown apps”</b> for your browser — that's normal for apps not from the Play Store. Updates install
+      straight over the top.
+    </div>
+    <div class="note" id="note-windows">
+      <b>Installing on Windows:</b> run <b>ZipX-Setup.exe</b>. Windows SmartScreen may show
+      <b>“Windows protected your PC”</b> the first time — click <b>More info → Run anyway</b>. That's expected for a new
+      app and is safe.
+    </div>
+  </div>
+
+  <div class="foot">
+    <span class="pill">Beta</span>
+  </div>
+
+  <script>
+    // Highlight the button matching the visitor's OS, and float it first.
+    (function () {
+      var ua = navigator.userAgent || "";
+      var isAndroid = /Android/i.test(ua);
+      var isWindows = /Windows/i.test(ua);
+      var a = document.getElementById("card-android");
+      var w = document.getElementById("card-windows");
+      if (isAndroid) { a.classList.add("rec"); a.parentNode.prepend(a); }
+      else if (isWindows) { w.classList.add("rec"); w.parentNode.prepend(w); }
+    })();
+  </script>
+</body>
+</html>
