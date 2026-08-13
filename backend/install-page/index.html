@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ZipX Movies — Install</title>
 <meta name="description" content="Download ZipX Movies for Android and Windows." />
+<link rel="icon" href="app_icon.png" />
 <style>
   :root {
     --bg: #0a0a0c;
@@ -22,25 +23,20 @@
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 40px 20px 60px;
+    padding: 18px 20px 60px;
   }
-  .logo {
-    display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
-  }
-  .logo .mark {
-    width: 46px; height: 46px; border-radius: 12px;
-    background: var(--red);
-    display: grid; place-items: center;
-    box-shadow: 0 8px 24px rgba(225,29,42,.35);
-  }
-  .logo .mark svg { width: 24px; height: 24px; fill: #fff; }
-  .logo .word { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; }
-  .logo .word span { color: var(--red); }
-  .tagline { color: var(--muted); font-size: 15px; margin: 4px 0 34px; text-align: center; }
-  .cards { display: grid; gap: 18px; width: 100%; max-width: 760px; grid-template-columns: 1fr 1fr; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+
+  /* Top-left brand: the real app icon + name. */
+  .top { display: flex; align-items: center; gap: 12px; padding: 6px 0 30px; }
+  .top img { width: 44px; height: 44px; border-radius: 11px; display: block; }
+  .top .name { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; }
+
+  .hero { text-align: center; margin: 12px 0 34px; }
+  .hero h1 { font-size: 28px; font-weight: 800; margin: 0 0 8px; letter-spacing: -0.5px; }
+  .hero p { color: var(--muted); font-size: 15px; margin: 0; }
+
+  .cards { display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }
   @media (max-width: 620px) { .cards { grid-template-columns: 1fr; } }
   .card {
     background: var(--surface);
@@ -48,11 +44,10 @@
     border-radius: 18px;
     padding: 26px 24px;
     display: flex; flex-direction: column; align-items: center; text-align: center;
-    transition: border-color .2s, transform .2s;
   }
   .card.rec { border-color: rgba(225,29,42,.55); box-shadow: 0 0 0 1px rgba(225,29,42,.25); }
-  .card .ic { width: 54px; height: 54px; margin-bottom: 14px; opacity: .95; }
-  .card .ic svg { width: 100%; height: 100%; fill: #fff; }
+  .card .ic { width: 52px; height: 52px; margin-bottom: 14px; opacity: .95; }
+  .card .ic svg { width: 100%; height: 100%; fill: #cfcfd6; }
   .card h2 { margin: 0 0 4px; font-size: 20px; font-weight: 700; }
   .card .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; min-height: 34px; }
   .btn {
@@ -66,30 +61,35 @@
   .btn:hover { filter: brightness(1.08); }
   .btn:active { transform: translateY(1px); }
   .btn svg { width: 18px; height: 18px; fill: #fff; }
-  .rectag {
-    display: none;
-    margin-bottom: 14px; font-size: 11px; letter-spacing: .5px; text-transform: uppercase;
-    color: var(--red); font-weight: 700;
-  }
+  .rectag { display: none; margin-bottom: 14px; font-size: 11px; letter-spacing: .5px; text-transform: uppercase; color: var(--red); font-weight: 700; }
   .card.rec .rectag { display: block; }
-  .notes { max-width: 760px; width: 100%; margin-top: 30px; }
+
+  .notes { margin-top: 30px; }
   .note {
     background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
-    padding: 16px 18px; margin-bottom: 12px; color: var(--muted); font-size: 13.5px; line-height: 1.55;
+    padding: 18px 20px; margin-bottom: 12px;
   }
+  .note h3 { margin: 0 0 10px; font-size: 15px; font-weight: 700; color: var(--text); }
+  .note ol { margin: 0; padding-left: 20px; color: var(--muted); font-size: 13.5px; line-height: 1.7; }
+  .note ol li { margin-bottom: 6px; }
   .note b { color: var(--text); }
+  .note .tip { margin: 12px 0 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+
   .foot { color: var(--muted); font-size: 12px; margin-top: 34px; text-align: center; }
   .foot .pill { display: inline-block; background: var(--surface-high); border-radius: 999px; padding: 4px 12px; color: var(--muted); }
 </style>
 </head>
 <body>
-  <div class="logo">
-    <div class="mark">
-      <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-    </div>
-    <div class="word">ZIP<span>X</span></div>
+<div class="wrap">
+  <div class="top">
+    <img src="app_icon.png" alt="ZipX Movies" />
+    <div class="name">ZipX Movies</div>
   </div>
-  <div class="tagline">Movies &amp; TV, streamed in one app. Pick your platform below.</div>
+
+  <div class="hero">
+    <h1>Install ZipX Movies</h1>
+    <p>Movies &amp; TV, streamed in one app. Pick your platform below.</p>
+  </div>
 
   <div class="cards">
     <div class="card" id="card-android">
@@ -121,32 +121,40 @@
 
   <div class="notes">
     <div class="note" id="note-android">
-      <b>Installing on Android:</b> after the download finishes, tap the file to install. If prompted, allow
-      <b>“Install unknown apps”</b> for your browser — that's normal for apps not from the Play Store. Updates install
-      straight over the top.
+      <h3>Installing on Android</h3>
+      <ol>
+        <li>Tap <b>Download for Android</b> above. The APK saves to your phone's <b>Downloads</b>.</li>
+        <li>When it finishes, tap the download notification — or open your <b>Files</b> / <b>My Files</b> app, go to <b>Downloads</b>, and tap <b>zipx-movies.apk</b>.</li>
+        <li>The first time only, your phone will say installs from this source are blocked. Tap <b>Settings</b>, turn on <b>Allow from this source</b> (this is normal for apps not on the Play Store), then press <b>Back</b>.</li>
+        <li>Tap <b>Install</b>, wait a few seconds, then tap <b>Open</b>.</li>
+        <li>If your phone shows a Play Protect / "unsafe app" warning, choose <b>Install anyway</b> — it flags anything installed outside the Play Store.</li>
+      </ol>
+      <p class="tip"><b>Updating later:</b> just download the newest APK from this page and install it over the top — your watchlist and settings are kept, no need to uninstall.</p>
     </div>
+
     <div class="note" id="note-windows">
-      <b>Installing on Windows:</b> run <b>ZipX-Setup.exe</b>. Windows SmartScreen may show
-      <b>“Windows protected your PC”</b> the first time — click <b>More info → Run anyway</b>. That's expected for a new
-      app and is safe.
+      <h3>Installing on Windows</h3>
+      <ol>
+        <li>Tap <b>Download for Windows</b> and run <b>ZipX-Setup.exe</b> when it finishes.</li>
+        <li>If SmartScreen shows <b>“Windows protected your PC”</b>, click <b>More info → Run anyway</b> — that's expected for a new app and is safe.</li>
+        <li>Follow the installer. It adds a Start-menu shortcut (and a desktop icon if you tick the box).</li>
+      </ol>
+      <p class="tip"><b>Updating later:</b> download and run the newest installer — it installs over the previous version.</p>
     </div>
   </div>
 
-  <div class="foot">
-    <span class="pill">Beta</span>
-  </div>
+  <div class="foot"><span class="pill">Beta</span></div>
+</div>
 
-  <script>
-    // Highlight the button matching the visitor's OS, and float it first.
-    (function () {
-      var ua = navigator.userAgent || "";
-      var isAndroid = /Android/i.test(ua);
-      var isWindows = /Windows/i.test(ua);
-      var a = document.getElementById("card-android");
-      var w = document.getElementById("card-windows");
-      if (isAndroid) { a.classList.add("rec"); a.parentNode.prepend(a); }
-      else if (isWindows) { w.classList.add("rec"); w.parentNode.prepend(w); }
-    })();
-  </script>
+<script>
+  // Highlight and float the card matching the visitor's OS.
+  (function () {
+    var ua = navigator.userAgent || "";
+    var a = document.getElementById("card-android");
+    var w = document.getElementById("card-windows");
+    if (/Android/i.test(ua)) { a.classList.add("rec"); a.parentNode.prepend(a); }
+    else if (/Windows/i.test(ua)) { w.classList.add("rec"); w.parentNode.prepend(w); }
+  })();
+</script>
 </body>
 </html>
