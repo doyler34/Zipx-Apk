@@ -81,6 +81,9 @@ dependencies:
   # Desktop-only: center + size the window on launch (no effect on mobile).
   window_manager: ^0.3.9
 
+  # Detect Fire TV / Android TV (leanback) so the app runs landscape there.
+  device_info_plus: ^10.1.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

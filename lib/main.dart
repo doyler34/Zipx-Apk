@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:adaptive_theme/adaptive_theme.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -66,6 +67,12 @@ Future<void> main() async {
       await windowManager.show();
       await windowManager.focus();
     }));
+  } else if (await _isAndroidTv()) {
+    // Fire TV / Android TV: run landscape (a TV is never held in portrait).
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
   } else {
     // Phone/tablet app: portrait-locked at launch (the player itself allows
     // landscape while a video is open).
@@ -83,6 +90,21 @@ Future<void> main() async {
 
   FlutterNativeSplash.remove();
   runApp(const MyApp());
+}
+
+/// Whether we're running on Fire TV / Android TV (leanback). Used to pick a
+/// landscape orientation instead of the phone's portrait lock.
+Future<bool> _isAndroidTv() async {
+  if (kIsWeb || !Platform.isAndroid) return false;
+  try {
+    final info = await DeviceInfoPlugin().androidInfo;
+    final f = info.systemFeatures;
+    return f.contains('android.software.leanback') ||
+        f.contains('android.software.leanback_only') ||
+        f.contains('android.hardware.type.television');
+  } catch (_) {
+    return false;
+  }
 }
 
 class MyApp extends StatelessWidget {
