@@ -17,6 +17,7 @@ import '../../features/movies/data/models/reviews_result_model.dart';
 import '../../features/movies/presentation/blocs/details/details/details_bloc.dart';
 import '../widgets/hover_scale.dart';
 import '../widgets/h_scroll_row.dart';
+import '../../common/widgets/tv/tv_focusable.dart';
 
 /// Desktop movie details: a full-width backdrop banner, then the poster beside
 /// the title/meta/overview and actions, then the full detail set - facts, cast,
@@ -506,24 +507,23 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 14),
-          decoration: BoxDecoration(
-            color: filled ? ZipxUi.red : Colors.white10,
-            borderRadius: BorderRadius.circular(12),
-            border: filled ? null : Border.all(color: Colors.white24),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: Colors.white, size: 22),
-              const SizedBox(width: 8),
-              Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-            ],
-          ),
+    return TvFocusable(
+      onPressed: onTap,
+      borderRadius: 12,
+      focusScale: 1.05,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 14),
+        decoration: BoxDecoration(
+          color: filled ? ZipxUi.red : Colors.white10,
+          borderRadius: BorderRadius.circular(12),
+          border: filled ? null : Border.all(color: Colors.white24),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 22),
+            const SizedBox(width: 8),
+            Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+          ],
         ),
       ),
     );

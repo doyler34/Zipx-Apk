@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../common/styles/zipx_ui.dart';
+import '../../common/widgets/tv/tv_focusable.dart';
 
 /// A desktop navigation destination.
 class DesktopNavItem {
@@ -90,22 +91,21 @@ class _ProfileButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Tooltip(
-          message: 'Profile',
-          child: Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: selected ? ZipxUi.red : ZipxUi.surfaceHigh,
-              border: Border.all(color: selected ? ZipxUi.red : Colors.white24, width: 1.5),
-            ),
-            child: const Icon(Icons.person_rounded, color: Colors.white, size: 24),
+    return TvFocusable(
+      onPressed: onTap,
+      borderRadius: 23,
+      focusScale: 1.1,
+      child: Tooltip(
+        message: 'Profile',
+        child: Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: selected ? ZipxUi.red : ZipxUi.surfaceHigh,
+            border: Border.all(color: selected ? ZipxUi.red : Colors.white24, width: 1.5),
           ),
+          child: const Icon(Icons.person_rounded, color: Colors.white, size: 24),
         ),
       ),
     );
@@ -145,12 +145,11 @@ class _NavTile extends StatelessWidget {
       ),
     );
 
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        child: expanded ? tile : Tooltip(message: item.label, child: tile),
-      ),
+    return TvFocusable(
+      onPressed: onTap,
+      borderRadius: 12,
+      focusScale: 1.03,
+      child: expanded ? tile : Tooltip(message: item.label, child: tile),
     );
   }
 }

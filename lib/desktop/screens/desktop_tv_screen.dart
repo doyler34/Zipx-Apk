@@ -12,6 +12,7 @@ import '../../features/tv/presentation/blocs/tv_home_cubit.dart';
 import '../../features/tv/presentation/widgets/tv_card.dart';
 import '../widgets/hover_scale.dart';
 import '../widgets/h_scroll_row.dart';
+import '../../common/widgets/tv/tv_focusable.dart';
 
 /// Desktop TV Shows: its own cinematic hero + horizontal rows of shows, wired to
 /// [TvHomeCubit]. Same shape as the desktop movie home but populated with TV
@@ -183,24 +184,23 @@ class _HeroButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 14),
-          decoration: BoxDecoration(
-            color: filled ? ZipxUi.red : Colors.white10,
-            borderRadius: BorderRadius.circular(12),
-            border: filled ? null : Border.all(color: Colors.white24),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: Colors.white, size: 22),
-              const SizedBox(width: 8),
-              Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-            ],
-          ),
+    return TvFocusable(
+      onPressed: onTap,
+      borderRadius: 12,
+      focusScale: 1.05,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 14),
+        decoration: BoxDecoration(
+          color: filled ? ZipxUi.red : Colors.white10,
+          borderRadius: BorderRadius.circular(12),
+          border: filled ? null : Border.all(color: Colors.white24),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 22),
+            const SizedBox(width: 8),
+            Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+          ],
         ),
       ),
     );

@@ -14,6 +14,7 @@ import '../../features/tv/data/models/tv_model.dart';
 import '../../features/tv/presentation/blocs/tv_details_cubit.dart';
 import '../../features/tv/presentation/widgets/episode_tile.dart';
 import '../../common/widgets/youtube_player/trailer_preview.dart';
+import '../../common/widgets/tv/tv_focusable.dart';
 
 /// Desktop TV details: a cinematic backdrop banner, the poster beside
 /// title/meta/overview and actions, then the trailer and a season selector with
@@ -259,22 +260,21 @@ class _SeasonChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
-          decoration: BoxDecoration(
-            color: selected ? ZipxUi.red : ZipxUi.surface,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(label,
-              style: TextStyle(
-                  color: selected ? Colors.white : ZipxUi.textMuted,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13)),
+    return TvFocusable(
+      onPressed: onTap,
+      borderRadius: 10,
+      focusScale: 1.06,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? ZipxUi.red : ZipxUi.surface,
+          borderRadius: BorderRadius.circular(10),
         ),
+        child: Text(label,
+            style: TextStyle(
+                color: selected ? Colors.white : ZipxUi.textMuted,
+                fontWeight: FontWeight.w600,
+                fontSize: 13)),
       ),
     );
   }
@@ -294,36 +294,35 @@ class _BookmarkToggleState extends State<_BookmarkToggle> {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: () async {
-          await sl<FavouriteService>().toggleFavourite(
-            FavouriteEntry(
-              tmdbId: widget.show.id,
-              mediaType: PlaybackMediaType.tv,
-              title: widget.show.name,
-              posterPath: widget.show.posterPath,
-            ),
-          );
-          setState(() => _isBookmarked = !_isBookmarked);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-          decoration: BoxDecoration(
-            color: Colors.white10,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white24),
+    return TvFocusable(
+      onPressed: () async {
+        await sl<FavouriteService>().toggleFavourite(
+          FavouriteEntry(
+            tmdbId: widget.show.id,
+            mediaType: PlaybackMediaType.tv,
+            title: widget.show.name,
+            posterPath: widget.show.posterPath,
           ),
-          child: Row(
-            children: [
-              Icon(_isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                  color: _isBookmarked ? ZipxUi.red : Colors.white, size: 22),
-              const SizedBox(width: 8),
-              Text(_isBookmarked ? 'Saved' : 'Watchlist',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-            ],
-          ),
+        );
+        setState(() => _isBookmarked = !_isBookmarked);
+      },
+      borderRadius: 12,
+      focusScale: 1.05,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white10,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Row(
+          children: [
+            Icon(_isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                color: _isBookmarked ? ZipxUi.red : Colors.white, size: 22),
+            const SizedBox(width: 8),
+            Text(_isBookmarked ? 'Saved' : 'Watchlist',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+          ],
         ),
       ),
     );
@@ -389,24 +388,23 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 14),
-          decoration: BoxDecoration(
-            color: filled ? ZipxUi.red : Colors.white10,
-            borderRadius: BorderRadius.circular(12),
-            border: filled ? null : Border.all(color: Colors.white24),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: Colors.white, size: 22),
-              const SizedBox(width: 8),
-              Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-            ],
-          ),
+    return TvFocusable(
+      onPressed: onTap,
+      borderRadius: 12,
+      focusScale: 1.05,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 14),
+        decoration: BoxDecoration(
+          color: filled ? ZipxUi.red : Colors.white10,
+          borderRadius: BorderRadius.circular(12),
+          border: filled ? null : Border.all(color: Colors.white24),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 22),
+            const SizedBox(width: 8),
+            Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+          ],
         ),
       ),
     );
