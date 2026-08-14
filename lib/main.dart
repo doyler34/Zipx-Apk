@@ -21,6 +21,7 @@ import 'package:movie_bloc_app/features/personalization/presentation/blocs/setti
 import 'common/blocs/bloc/nav_bar_bloc.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
+import 'core/platform/tv.dart';
 import 'core/playback/services/provider_preferences_service.dart';
 import 'core/settings/user_settings.dart';
 import 'features/personalization/data/models/bookmarked_movie_hive.dart';
@@ -67,7 +68,7 @@ Future<void> main() async {
       await windowManager.show();
       await windowManager.focus();
     }));
-  } else if (await _isAndroidTv()) {
+  } else if (isAndroidTv = await _isAndroidTv()) {
     // Fire TV / Android TV: run landscape (a TV is never held in portrait).
     await SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,

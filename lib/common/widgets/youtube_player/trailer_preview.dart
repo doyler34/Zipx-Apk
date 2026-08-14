@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatf
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/platform/tv.dart';
 import '../../styles/zipx_ui.dart';
 import '../tv/tv_focusable.dart';
 import 'trailer_player_page.dart';
@@ -20,9 +21,11 @@ class TrailerPreview extends StatelessWidget {
 
   void _open(BuildContext context) {
     // Desktop (Windows/Linux/macOS) has no webview_flutter, so open the trailer
-    // in the system browser there; play in-app on mobile.
+    // in the system browser there. Fire TV / Android TV WebView is crash-prone
+    // ("Webpage crashed"), so send trailers to the external YouTube app there
+    // too. Play in-app only on phones/tablets.
     const desktop = {TargetPlatform.windows, TargetPlatform.linux, TargetPlatform.macOS};
-    if (desktop.contains(defaultTargetPlatform)) {
+    if (isAndroidTv || desktop.contains(defaultTargetPlatform)) {
       launchUrl(Uri.https('www.youtube.com', '/watch', {'v': videoId}), mode: LaunchMode.externalApplication);
       return;
     }
