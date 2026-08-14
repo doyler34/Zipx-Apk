@@ -8,6 +8,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../../common/responsive/responsive.dart';
+import '../../../platform/tv.dart';
 import '../../../dependency_injection/di.dart';
 import '../../domain/entities/download_item.dart';
 import '../../domain/entities/playback_request.dart';
@@ -970,8 +971,49 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     );
   }
 
+  /// Seek relative to the current position, clamped to [0, duration].
+  void _seekBy(Duration delta) {
+    var target = _player.state.position + delta;
+    final dur = _player.state.duration;
+    if (target < Duration.zero) target = Duration.zero;
+    if (dur > Duration.zero && target > dur) target = dur;
+    _player.seek(target);
+  }
+
+  /// On Fire TV / Android TV the built-in (desktop/touch) controls don't respond
+  /// to the remote, so drive playback directly from the D-pad: OK = play/pause,
+  /// left/right = seek 10s. No-op on phone/desktop (returns the child as-is).
+  Widget _tvKeys(Widget child) {
+    if (!isAndroidTv) return child;
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
+        final k = event.logicalKey;
+        if (k == LogicalKeyboardKey.select ||
+            k == LogicalKeyboardKey.enter ||
+            k == LogicalKeyboardKey.space ||
+            k == LogicalKeyboardKey.mediaPlayPause ||
+            k == LogicalKeyboardKey.gameButtonA) {
+          _player.playOrPause();
+          return KeyEventResult.handled;
+        }
+        if (k == LogicalKeyboardKey.arrowLeft || k == LogicalKeyboardKey.mediaRewind) {
+          _seekBy(const Duration(seconds: -10));
+          return KeyEventResult.handled;
+        }
+        if (k == LogicalKeyboardKey.arrowRight || k == LogicalKeyboardKey.mediaFastForward) {
+          _seekBy(const Duration(seconds: 10));
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: child,
+    );
+  }
+
   Widget _videoWithControls() {
-    if (Responsive.isDesktop(context)) return _desktopVideoWithControls();
+    if (Responsive.isDesktop(context)) return _tvKeys(_desktopVideoWithControls());
     final theme = MaterialVideoControlsThemeData(
       // Double-tap the left/right of the video to seek back/forward (~10s).
       seekOnDoubleTap: true,
@@ -1018,7 +1060,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
           IconButton(tooltip: 'Sources', icon: const Icon(Icons.playlist_play, color: Colors.white), onPressed: _openSourcePicker),
       ],
     );
-    return MaterialVideoControlsTheme(
+    return _tvKeys(MaterialVideoControlsTheme(
       normal: theme,
       fullscreen: theme,
       child: Video(
@@ -1035,7 +1077,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
           padding: const EdgeInsets.all(24),
         ),
       ),
-    );
+    ));
   }
 
   /// Desktop/PC controls: a proper mouse-driven control bar (play/pause, volume,
