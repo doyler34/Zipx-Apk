@@ -151,7 +151,14 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     _tracksSub?.cancel();
     _completedSub?.cancel();
     _player.dispose(); // stops playback + releases mpv
-    SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
+    // Restore the app's default orientation. On Fire TV / Android TV that's
+    // landscape - forcing portrait here collapsed the TV back to the phone
+    // layout on exit.
+    SystemChrome.setPreferredOrientations(
+      isAndroidTv
+          ? const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+          : const [DeviceOrientation.portraitUp],
+    );
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }

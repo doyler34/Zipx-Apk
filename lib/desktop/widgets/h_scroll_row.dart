@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/platform/tv.dart';
+
 /// A horizontal poster row with hover-revealed left/right arrow overlays that
 /// scroll it a page at a time - so a mouse user (no swipe / trackpad fling) can
 /// page through a catalogue column. The arrows only appear on hover and only on
@@ -78,11 +80,11 @@ class _HScrollRowState extends State<HScrollRow> {
             ListView.builder(
               controller: _controller,
               scrollDirection: Axis.horizontal,
-              // Don't let the row swallow the vertical mouse wheel - that made
-              // page scrolling feel jumpy (the wheel did nothing over a row,
-              // then lurched over the gaps). Horizontal movement is via the
-              // hover arrows, which drive the controller programmatically.
-              physics: const NeverScrollableScrollPhysics(),
+              // On PC, don't let the row swallow the vertical mouse wheel (it
+              // made page scrolling jumpy); horizontal movement is via the hover
+              // arrows. On Fire TV it MUST stay scrollable so D-pad focus can
+              // scroll a card into view - otherwise you can't move between cards.
+              physics: isAndroidTv ? null : const NeverScrollableScrollPhysics(),
               padding: widget.padding,
               itemCount: widget.itemCount,
               itemBuilder: widget.itemBuilder,
