@@ -13,6 +13,8 @@ import '../../features/tv/presentation/widgets/tv_card.dart';
 import '../widgets/hover_scale.dart';
 import '../widgets/h_scroll_row.dart';
 import '../../common/widgets/tv/tv_focusable.dart';
+import '../../core/platform/tv.dart';
+import '../../common/widgets/tv/tv_focusable.dart';
 
 /// Desktop TV Shows: its own cinematic hero + horizontal rows of shows, wired to
 /// [TvHomeCubit]. Same shape as the desktop movie home but populated with TV
@@ -156,7 +158,7 @@ class _TvHero extends StatelessWidget {
                         const SizedBox(height: 22),
                         Row(
                           children: [
-                            _HeroButton(icon: Icons.play_arrow_rounded, label: 'Play', filled: true, onTap: () => _play(context)),
+                            _HeroButton(icon: Icons.play_arrow_rounded, label: 'Play', filled: true, autofocus: isAndroidTv, onTap: () => _play(context)),
                             const SizedBox(width: 14),
                             _HeroButton(icon: Icons.info_outline_rounded, label: 'More Info', filled: false, onTap: () => _moreInfo(context)),
                           ],
@@ -175,17 +177,19 @@ class _TvHero extends StatelessWidget {
 }
 
 class _HeroButton extends StatelessWidget {
-  const _HeroButton({required this.icon, required this.label, required this.filled, required this.onTap});
+  const _HeroButton({required this.icon, required this.label, required this.filled, required this.onTap, this.autofocus = false});
 
   final IconData icon;
   final String label;
   final bool filled;
   final VoidCallback onTap;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
     return TvFocusable(
       onPressed: onTap,
+      autofocus: autofocus,
       borderRadius: 12,
       focusScale: 1.05,
       child: Container(

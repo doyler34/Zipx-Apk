@@ -42,6 +42,22 @@ class _TvFocusableState extends State<TvFocusable> {
       onShowFocusHighlight: (value) {
         if (mounted) setState(() => _focused = value);
       },
+      // Scroll the focused item into view within every enclosing scrollable, so
+      // D-pad focus moving to an off-screen card/row brings it on-screen (both
+      // the horizontal row and the vertical page). Runs after layout settles.
+      onFocusChange: (focused) {
+        if (!focused || !mounted) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+          );
+        });
+      },
       shortcuts: const <ShortcutActivator, Intent>{
         SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
         SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),

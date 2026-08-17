@@ -8,6 +8,7 @@ import '../../common/widgets/movie/movie_card.dart';
 import '../widgets/hover_scale.dart';
 import '../widgets/h_scroll_row.dart';
 import '../../common/widgets/tv/tv_focusable.dart';
+import '../../core/platform/tv.dart';
 import '../../core/playback/domain/entities/playback_media_type.dart';
 import '../../core/playback/domain/entities/playback_request.dart';
 import '../../features/movies/data/models/movie_model.dart';
@@ -179,6 +180,7 @@ class _Hero extends StatelessWidget {
                               icon: Icons.play_arrow_rounded,
                               label: 'Play',
                               filled: true,
+                              autofocus: isAndroidTv, // land the remote here on open
                               onTap: () => _play(context),
                             ),
                             const SizedBox(width: 14),
@@ -204,17 +206,19 @@ class _Hero extends StatelessWidget {
 }
 
 class _HeroButton extends StatelessWidget {
-  const _HeroButton({required this.icon, required this.label, required this.filled, required this.onTap});
+  const _HeroButton({required this.icon, required this.label, required this.filled, required this.onTap, this.autofocus = false});
 
   final IconData icon;
   final String label;
   final bool filled;
   final VoidCallback onTap;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
     return TvFocusable(
       onPressed: onTap,
+      autofocus: autofocus,
       borderRadius: 12,
       focusScale: 1.05,
       child: Container(

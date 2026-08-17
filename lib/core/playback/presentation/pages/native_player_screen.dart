@@ -995,14 +995,27 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     return Focus(
       autofocus: true,
       onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
+        final down = event is KeyDownEvent;
+        final repeat = event is KeyRepeatEvent;
+        if (!down && !repeat) return KeyEventResult.ignored; // ignore key-up (no double-fire)
         final k = event.logicalKey;
-        if (k == LogicalKeyboardKey.select ||
-            k == LogicalKeyboardKey.enter ||
-            k == LogicalKeyboardKey.space ||
-            k == LogicalKeyboardKey.mediaPlayPause ||
-            k == LogicalKeyboardKey.gameButtonA) {
+        // Play/pause acts once per press (key-down only) so holding OK doesn't
+        // toggle repeatedly. Seek may repeat while the D-pad is held (scrub).
+        if (down &&
+            (k == LogicalKeyboardKey.select ||
+                k == LogicalKeyboardKey.enter ||
+                k == LogicalKeyboardKey.space ||
+                k == LogicalKeyboardKey.mediaPlayPause ||
+                k == LogicalKeyboardKey.gameButtonA)) {
           _player.playOrPause();
+          return KeyEventResult.handled;
+        }
+        if (k == LogicalKeyboardKey.mediaPlay) {
+          if (down) _player.play();
+          return KeyEventResult.handled;
+        }
+        if (k == LogicalKeyboardKey.mediaPause) {
+          if (down) _player.pause();
           return KeyEventResult.handled;
         }
         if (k == LogicalKeyboardKey.arrowLeft || k == LogicalKeyboardKey.mediaRewind) {
