@@ -200,38 +200,50 @@ class TvHomeCubit extends Cubit<TvHomeState> {
       ));
 
       // Background availability fill (option B): rows are shown above; probe each
-      // show (as S1E1) via AIOStreams, then re-emit with the unstreamable ones
-      // removed. Fail-open.
-      final all = <TvModel>[...trending, ...popular, ...topRated, ...onTheAir, ...airingToday];
-      for (final s in genreRows) {
-        all.addAll(s.$2);
-      }
-      final requests = all
-          .map((s) => PlaybackRequest(
-                tmdbId: s.id,
-                mediaType: PlaybackMediaType.tv,
-                title: s.name,
-                seasonNumber: 1,
-                episodeNumber: 1,
-                posterPath: s.posterPath,
-              ))
-          .toList();
+      // show via AIOStreams (S1E1 then a recent episode), top up the main rows to
+      // target across a few pages, and re-emit with unstreamable shows removed.
+      final prober = sl<AvailabilityProber>();
+      PlaybackRequest req(TvModel s) => PlaybackRequest(
+            tmdbId: s.id,
+            mediaType: PlaybackMediaType.tv,
+            title: s.name,
+            seasonNumber: 1,
+            episodeNumber: 1,
+            posterPath: s.posterPath,
+          );
+      Future<List<TvModel>> fill(List<TvModel> first, Future<List<TvModel>> Function(int) fetch) =>
+          prober.fillAvailable<TvModel>(
+            mediaType: PlaybackMediaType.tv,
+            firstPage: first,
+            fetchPage: fetch,
+            idOf: (s) => s.id,
+            toRequest: req,
+          );
+      final List<TvModel> trendingF, popularF, topRatedF, onTheAirF, airingTodayF;
+      final List<TvSection> genreSectionsF;
       try {
-        await sl<AvailabilityProber>().probe(PlaybackMediaType.tv, requests);
+        trendingF = await fill(trending, (p) => _datasource.getTrendingTv(page: p).then((r) => r.shows));
+        popularF = await fill(popular, (p) => _datasource.getPopularTv(page: p).then((r) => r.shows));
+        topRatedF = await fill(topRated, (p) => _datasource.getTopRatedTv(page: p).then((r) => r.shows));
+        onTheAirF = await fill(onTheAir, (p) => _datasource.getOnTheAirTv(page: p).then((r) => r.shows));
+        airingTodayF = await fill(airingToday, (p) => _datasource.getAiringTodayTv(page: p).then((r) => r.shows));
+        // Genre sections: probe + re-filter only (no extra pages, to bound cost).
+        await prober.probe(PlaybackMediaType.tv, [for (final s in genreRows) ...s.$2].map(req).toList());
+        final avail = sl<StreamAvailabilityService>();
+        List<TvModel> keep(List<TvModel> xs) =>
+            xs.where((s) => !avail.isKnownUnavailable(PlaybackMediaType.tv, s.id)).toList();
+        genreSectionsF = [for (final s in genreRows) (s.$1, keep(s.$2))];
       } catch (_) {
         return; // fail-open
       }
       if (isClosed) return;
-      final avail = sl<StreamAvailabilityService>();
-      List<TvModel> keep(List<TvModel> xs) =>
-          xs.where((s) => !avail.isKnownUnavailable(PlaybackMediaType.tv, s.id)).toList();
       emit(state.copyWith(
-        trending: keep(trending),
-        popular: keep(popular),
-        topRated: keep(topRated),
-        onTheAir: keep(onTheAir),
-        airingToday: keep(airingToday),
-        genreSections: [for (final s in genreRows) (s.$1, keep(s.$2))],
+        trending: trendingF,
+        popular: popularF,
+        topRated: topRatedF,
+        onTheAir: onTheAirF,
+        airingToday: airingTodayF,
+        genreSections: genreSectionsF,
       ));
     } catch (_) {
       emit(state.copyWith(isLoading: false, errorMessage: 'Failed to load TV shows.'));

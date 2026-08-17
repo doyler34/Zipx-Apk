@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 
 import '../../dependency_injection/di.dart';
+import '../domain/entities/playback_media_type.dart';
 import '../domain/entities/playback_request.dart';
 import '../domain/entities/stream_source.dart';
 import 'stream_availability_service.dart';
@@ -222,6 +223,48 @@ class StreamSourcesService {
       if (data is Map && data['episodes'] is List) return (data['episodes'] as List).length;
     } catch (_) {
       // no such season / unreachable
+    }
+    return null;
+  }
+
+  /// Availability probe for a whole TV **show** (for catalog filtering). Tries
+  /// S1E1 first; if that has no playable stream, falls back to the most recent
+  /// aired episode before giving up - older shows often have early seasons
+  /// missing while recent seasons are cached, so S1E1 alone gives false
+  /// negatives. Returns true if either has at least one stream.
+  Future<bool> tvShowHasStreams({required int tmdbId, required String title, String? posterPath}) async {
+    PlaybackRequest req(int s, int e) => PlaybackRequest(
+          tmdbId: tmdbId,
+          mediaType: PlaybackMediaType.tv,
+          title: title,
+          seasonNumber: s,
+          episodeNumber: e,
+          posterPath: posterPath,
+        );
+    if ((await fetchQuiet(req(1, 1))).isNotEmpty) return true;
+    final recent = await _lastAiredEpisode(tmdbId);
+    if (recent == null || (recent.$1 == 1 && recent.$2 == 1)) return false; // nothing new to try
+    return (await fetchQuiet(req(recent.$1, recent.$2))).isNotEmpty;
+  }
+
+  /// The most recent aired (season, episode) for a show from TMDB's
+  /// `last_episode_to_air`, or null if unavailable.
+  Future<(int, int)?> _lastAiredEpisode(int tmdbId) async {
+    try {
+      final r = await _dio.get(
+        'https://api.themoviedb.org/3/tv/$tmdbId',
+        queryParameters: {'api_key': _tmdbKey},
+        options: Options(receiveTimeout: const Duration(seconds: 10)),
+      );
+      final data = r.data is String ? jsonDecode(r.data as String) : r.data;
+      final le = data is Map ? data['last_episode_to_air'] : null;
+      if (le is Map && le['season_number'] is int && le['episode_number'] is int) {
+        final s = le['season_number'] as int;
+        final e = le['episode_number'] as int;
+        if (s >= 1 && e >= 1) return (s, e);
+      }
+    } catch (_) {
+      // unreachable / no data
     }
     return null;
   }

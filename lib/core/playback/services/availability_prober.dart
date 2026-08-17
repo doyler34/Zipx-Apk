@@ -9,25 +9,32 @@ import 'stream_sources_service.dart';
 ///
 /// It reuses the exact same lookup the player uses ([StreamSourcesService.
 /// fetchQuiet]) - a non-empty result means AIOStreams returned at least one
-/// playable stream. Checks run concurrently with a small pool (not sequentially,
-/// not all-at-once), only for titles that actually need a (re)check, and are
-/// **fail-open**: a lookup error never records a negative, so a hiccup can never
-/// hide a title that might be fine.
+/// playable stream. For TV it uses [StreamSourcesService.tvShowHasStreams], which
+/// tries S1E1 then a recent episode (avoids false negatives on older shows).
+/// Checks run concurrently with a small pool (not sequentially, not
+/// all-at-once), only for titles that actually need a (re)check, and are
+/// **fail-open**: a lookup error never records a negative.
 class AvailabilityProber {
   AvailabilityProber(this._sources, this._availability);
 
   final StreamSourcesService _sources;
   final StreamAvailabilityService _availability;
 
-  /// Probes [requests] (each already a full [PlaybackRequest]) for [mediaType].
-  /// Skips titles whose cached verdict is still fresh. Returns once every needed
-  /// check has completed and been recorded.
+  Future<bool> _hasStreams(PlaybackMediaType mediaType, PlaybackRequest r) {
+    if (mediaType == PlaybackMediaType.tv) {
+      return _sources.tvShowHasStreams(tmdbId: r.tmdbId, title: r.title, posterPath: r.posterPath);
+    }
+    return _sources.fetchQuiet(r).then((s) => s.isNotEmpty);
+  }
+
+  /// Probes [requests] (each a full [PlaybackRequest]) for [mediaType]. Skips
+  /// titles whose cached verdict is still fresh. Returns once every needed check
+  /// has completed and been recorded.
   Future<void> probe(
     PlaybackMediaType mediaType,
     List<PlaybackRequest> requests, {
     int concurrency = 6,
   }) async {
-    // De-dupe by tmdbId and keep only the ones due for a (re)check.
     final seen = <int>{};
     final pending = <PlaybackRequest>[];
     for (final r in requests) {
@@ -41,12 +48,8 @@ class AvailabilityProber {
       while (next < pending.length) {
         final r = pending[next++]; // sync read+increment: no race on the event loop
         try {
-          final sources = await _sources.fetchQuiet(r);
-          await _availability.record(
-            mediaType: mediaType,
-            tmdbId: r.tmdbId,
-            hasStreams: sources.isNotEmpty,
-          );
+          final ok = await _hasStreams(mediaType, r);
+          await _availability.record(mediaType: mediaType, tmdbId: r.tmdbId, hasStreams: ok);
         } catch (_) {
           // Fail-open: never record a negative because a lookup errored.
         }
@@ -55,5 +58,42 @@ class AvailabilityProber {
 
     final workers = concurrency.clamp(1, pending.length);
     await Future.wait(List.generate(workers, (_) => worker()));
+  }
+
+  /// Bounded page top-up: walks successive TMDB pages, probes each, and returns
+  /// up to [target] titles that have a playable stream - stopping at [maxPages],
+  /// when a page returns empty, or once the target is met. So a row of 20 that
+  /// filters down to 8 fetches the next page(s) to refill it instead of looking
+  /// broken. [firstPage] lets the caller pass an already-loaded page 1 to avoid
+  /// re-fetching it.
+  Future<List<T>> fillAvailable<T>({
+    required PlaybackMediaType mediaType,
+    required Future<List<T>> Function(int page) fetchPage,
+    required int Function(T) idOf,
+    required PlaybackRequest Function(T) toRequest,
+    int target = 20,
+    int maxPages = 3,
+    int concurrency = 6,
+    List<T>? firstPage,
+  }) async {
+    final kept = <T>[];
+    final seen = <int>{};
+    for (var page = 1; page <= maxPages && kept.length < target; page++) {
+      List<T> items;
+      try {
+        items = (page == 1 && firstPage != null) ? firstPage : await fetchPage(page);
+      } catch (_) {
+        break; // page fetch failed - stop topping up, keep what we have
+      }
+      if (items.isEmpty) break;
+      await probe(mediaType, items.map(toRequest).toList(), concurrency: concurrency);
+      for (final it in items) {
+        final id = idOf(it);
+        if (!seen.add(id)) continue;
+        if (!_availability.isKnownUnavailable(mediaType, id)) kept.add(it);
+        if (kept.length >= target) break;
+      }
+    }
+    return kept;
   }
 }

@@ -120,12 +120,17 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
             trendingMovies: trendingResult,
           ));
           // Background availability fill (option B): the rows are already shown
-          // above; now probe each title via AIOStreams and re-emit with the
-          // titles that have no playable stream removed.
+          // above; now probe each title via AIOStreams, top up the pageable rows
+          // to their target across a few pages, and re-emit with the titles that
+          // have no playable stream removed.
           await _fillAvailability(
             emit,
             genres: genresResult,
-            rows: [popularResult, upcomingResult, nowPlayingResult, topRatedResult, trendingResult],
+            popular: popularResult,
+            upcoming: upcomingResult,
+            nowPlaying: nowPlayingResult,
+            topRated: topRatedResult,
+            trending: trendingResult,
           );
         }
       } catch (e) {
@@ -134,46 +139,62 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     });
   }
 
-  /// Probes every movie in the loaded rows for a playable stream (concurrently,
-  /// cache-first) and re-emits [HomeLoaded] with the dead-ends filtered out.
-  /// Fail-open: any error just leaves the rows as first shown.
+  /// Probes each row's titles for a playable stream (concurrently, cache-first),
+  /// tops the pageable rows up to their target across a few TMDB pages, and
+  /// re-emits [HomeLoaded] with the dead-ends filtered out. Fail-open: any error
+  /// just leaves the rows as first shown.
   Future<void> _fillAvailability(
     Emitter<HomeState> emit, {
     required List<GenreModel> genres,
-    required List<MoviesResultModel> rows,
+    required MoviesResultModel popular,
+    required MoviesResultModel upcoming,
+    required MoviesResultModel nowPlaying,
+    required MoviesResultModel topRated,
+    required MoviesResultModel trending,
   }) async {
-    final requests = <PlaybackRequest>[];
-    for (final r in rows) {
-      for (final m in r.movies ?? const <MovieModel>[]) {
-        requests.add(PlaybackRequest(
+    final prober = sl<AvailabilityProber>();
+    PlaybackRequest req(MovieModel m) => PlaybackRequest(
           tmdbId: m.id,
           mediaType: PlaybackMediaType.movie,
           title: m.title,
           posterPath: m.posterPath,
-        ));
-      }
-    }
-    if (requests.isEmpty) return;
+        );
+
+    // A pageable row: probe + top up to target across up to 3 pages.
+    Future<List<MovieModel>> fill(MoviesResultModel first, Future<MoviesResultModel> Function(int) fetch) =>
+        prober.fillAvailable<MovieModel>(
+          mediaType: PlaybackMediaType.movie,
+          firstPage: first.movies,
+          fetchPage: (p) => fetch(p).then((r) => r.movies ?? const <MovieModel>[]),
+          idOf: (m) => m.id,
+          toRequest: req,
+        );
+
+    final List<MovieModel> popularF, upcomingF, nowPlayingF, topRatedF, trendingF;
     try {
-      await sl<AvailabilityProber>().probe(PlaybackMediaType.movie, requests);
+      popularF = await fill(popular, (p) => getPopular(Params(page: p)));
+      upcomingF = await fill(upcoming, (p) => getUpcoming(Params(page: p)));
+      nowPlayingF = await fill(nowPlaying, (p) => getNowPlaying(Params(page: p)));
+      topRatedF = await fill(topRated, (p) => getTopRated(Params(page: p)));
+      // Trending isn't pageable (NoParams) - just probe this page + filter it.
+      await prober.probe(PlaybackMediaType.movie, (trending.movies ?? const <MovieModel>[]).map(req).toList());
+      final avail = sl<StreamAvailabilityService>();
+      trendingF = (trending.movies ?? const <MovieModel>[])
+          .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
+          .toList();
     } catch (_) {
       return; // fail-open
     }
     if (emit.isDone) return;
-    final avail = sl<StreamAvailabilityService>();
-    MoviesResultModel keep(MoviesResultModel r) => MoviesResultModel(
-          movies: (r.movies ?? const <MovieModel>[])
-              .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
-              .toList(),
-          totalPages: r.totalPages,
-        );
+    MoviesResultModel wrap(List<MovieModel> ms, MoviesResultModel src) =>
+        MoviesResultModel(movies: ms, totalPages: src.totalPages);
     emit(HomeLoaded(
-      popularMovies: keep(rows[0]),
-      upcomingMovies: keep(rows[1]),
+      popularMovies: wrap(popularF, popular),
+      upcomingMovies: wrap(upcomingF, upcoming),
       genres: genres,
-      nowPlayingMovies: keep(rows[2]),
-      topRatedMovies: keep(rows[3]),
-      trendingMovies: keep(rows[4]),
+      nowPlayingMovies: wrap(nowPlayingF, nowPlaying),
+      topRatedMovies: wrap(topRatedF, topRated),
+      trendingMovies: wrap(trendingF, trending),
     ));
   }
 }
