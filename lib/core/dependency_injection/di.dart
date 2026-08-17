@@ -11,6 +11,7 @@ import 'package:movie_bloc_app/core/playback/services/favourite_service.dart';
 import 'package:movie_bloc_app/core/playback/services/playback_history_service.dart';
 import 'package:movie_bloc_app/core/playback/services/playback_provider_service.dart';
 import 'package:movie_bloc_app/core/playback/services/provider_preferences_service.dart';
+import 'package:movie_bloc_app/core/playback/services/availability_prober.dart';
 import 'package:movie_bloc_app/core/playback/services/stream_availability_service.dart';
 import 'package:movie_bloc_app/core/playback/services/stream_sources_service.dart';
 import 'package:movie_bloc_app/core/playback/services/subtitle_service.dart';
@@ -74,6 +75,7 @@ Future initDependencyInjection() async {
   sl.registerLazySingleton<PlaybackHistoryService>(() => PlaybackHistoryService());
   sl.registerLazySingleton<StreamAvailabilityService>(() => StreamAvailabilityService());
   sl.registerLazySingleton<StreamSourcesService>(() => StreamSourcesService(sl<Dio>()));
+  sl.registerLazySingleton<AvailabilityProber>(() => AvailabilityProber(sl<StreamSourcesService>(), sl<StreamAvailabilityService>()));
   sl.registerLazySingleton<DownloadsService>(() => DownloadsService());
   sl.registerLazySingleton<SubtitleService>(() => SubtitleService(sl<Dio>()));
   sl.registerLazySingleton<FavouriteService>(() => FavouriteService());

@@ -9,6 +9,11 @@ import 'package:movie_bloc_app/features/movies/domain/usecases/get_toprated.dart
 import 'package:movie_bloc_app/features/movies/domain/usecases/get_trending.dart';
 import 'package:movie_bloc_app/features/movies/domain/usecases/get_upcoming.dart';
 
+import '../../../../../../core/dependency_injection/di.dart';
+import '../../../../../../core/playback/domain/entities/playback_media_type.dart';
+import '../../../../../../core/playback/domain/entities/playback_request.dart';
+import '../../../../../../core/playback/services/availability_prober.dart';
+import '../../../../../../core/playback/services/stream_availability_service.dart';
 import '../../../../../../core/utils/helpers/helper_functions.dart';
 import '../../../../data/models/genre_model.dart';
 import '../../../../data/models/movie_model.dart';
@@ -114,10 +119,61 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
             topRatedMovies: topRatedResult,
             trendingMovies: trendingResult,
           ));
+          // Background availability fill (option B): the rows are already shown
+          // above; now probe each title via AIOStreams and re-emit with the
+          // titles that have no playable stream removed.
+          await _fillAvailability(
+            emit,
+            genres: genresResult,
+            rows: [popularResult, upcomingResult, nowPlayingResult, topRatedResult, trendingResult],
+          );
         }
       } catch (e) {
         emit(const HomeError('Error while fetching data'));
       }
     });
+  }
+
+  /// Probes every movie in the loaded rows for a playable stream (concurrently,
+  /// cache-first) and re-emits [HomeLoaded] with the dead-ends filtered out.
+  /// Fail-open: any error just leaves the rows as first shown.
+  Future<void> _fillAvailability(
+    Emitter<HomeState> emit, {
+    required List<GenreModel> genres,
+    required List<MoviesResultModel> rows,
+  }) async {
+    final requests = <PlaybackRequest>[];
+    for (final r in rows) {
+      for (final m in r.movies ?? const <MovieModel>[]) {
+        requests.add(PlaybackRequest(
+          tmdbId: m.id,
+          mediaType: PlaybackMediaType.movie,
+          title: m.title,
+          posterPath: m.posterPath,
+        ));
+      }
+    }
+    if (requests.isEmpty) return;
+    try {
+      await sl<AvailabilityProber>().probe(PlaybackMediaType.movie, requests);
+    } catch (_) {
+      return; // fail-open
+    }
+    if (emit.isDone) return;
+    final avail = sl<StreamAvailabilityService>();
+    MoviesResultModel keep(MoviesResultModel r) => MoviesResultModel(
+          movies: (r.movies ?? const <MovieModel>[])
+              .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
+              .toList(),
+          totalPages: r.totalPages,
+        );
+    emit(HomeLoaded(
+      popularMovies: keep(rows[0]),
+      upcomingMovies: keep(rows[1]),
+      genres: genres,
+      nowPlayingMovies: keep(rows[2]),
+      topRatedMovies: keep(rows[3]),
+      trendingMovies: keep(rows[4]),
+    ));
   }
 }

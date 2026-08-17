@@ -1,6 +1,11 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/dependency_injection/di.dart';
+import '../../../../core/playback/domain/entities/playback_media_type.dart';
+import '../../../../core/playback/domain/entities/playback_request.dart';
+import '../../../../core/playback/services/availability_prober.dart';
+import '../../../../core/playback/services/stream_availability_service.dart';
 import '../../../movies/data/models/genre_model.dart';
 import '../../data/datasources/remote/tmdb_tv_datasource.dart';
 import '../../data/models/tv_model.dart';
@@ -178,15 +183,55 @@ class TvHomeCubit extends Cubit<TvHomeState> {
       final genreRows = (await genreRowsFuture).where((s) => s.$2.isNotEmpty).toList();
       final genres = await genresListFuture;
 
+      final trending = results[0].shows;
+      final popular = results[1].shows;
+      final topRated = results[2].shows;
+      final onTheAir = results[3].shows;
+      final airingToday = results[4].shows;
       emit(state.copyWith(
-        trending: results[0].shows,
-        popular: results[1].shows,
-        topRated: results[2].shows,
-        onTheAir: results[3].shows,
-        airingToday: results[4].shows,
+        trending: trending,
+        popular: popular,
+        topRated: topRated,
+        onTheAir: onTheAir,
+        airingToday: airingToday,
         genreSections: genreRows,
         genres: genres,
         isLoading: false,
+      ));
+
+      // Background availability fill (option B): rows are shown above; probe each
+      // show (as S1E1) via AIOStreams, then re-emit with the unstreamable ones
+      // removed. Fail-open.
+      final all = <TvModel>[...trending, ...popular, ...topRated, ...onTheAir, ...airingToday];
+      for (final s in genreRows) {
+        all.addAll(s.$2);
+      }
+      final requests = all
+          .map((s) => PlaybackRequest(
+                tmdbId: s.id,
+                mediaType: PlaybackMediaType.tv,
+                title: s.name,
+                seasonNumber: 1,
+                episodeNumber: 1,
+                posterPath: s.posterPath,
+              ))
+          .toList();
+      try {
+        await sl<AvailabilityProber>().probe(PlaybackMediaType.tv, requests);
+      } catch (_) {
+        return; // fail-open
+      }
+      if (isClosed) return;
+      final avail = sl<StreamAvailabilityService>();
+      List<TvModel> keep(List<TvModel> xs) =>
+          xs.where((s) => !avail.isKnownUnavailable(PlaybackMediaType.tv, s.id)).toList();
+      emit(state.copyWith(
+        trending: keep(trending),
+        popular: keep(popular),
+        topRated: keep(topRated),
+        onTheAir: keep(onTheAir),
+        airingToday: keep(airingToday),
+        genreSections: [for (final s in genreRows) (s.$1, keep(s.$2))],
       ));
     } catch (_) {
       emit(state.copyWith(isLoading: false, errorMessage: 'Failed to load TV shows.'));
