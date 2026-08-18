@@ -315,21 +315,42 @@ class StreamSourcesService {
   /// in a single attempt before giving up (retried later on the next look-ahead).
   static const int _maxPrepareCandidates = 3;
 
-  /// Ensures one upcoming episode is (being) prepared, trying alternate sources
-  /// if one turns out to be a dead/unusable torrent. Highest-ranked first, in
-  /// the existing order. Stops early - and never submits another candidate - the
-  /// moment AIOStreams reports it cached or the shared backend has a ready/active
-  /// job. Tries at most [_maxPrepareCandidates] UNIQUE infohashes; never the same
-  /// hash or a duplicate-infohash release twice. Background only.
-  Future<void> _ensurePrepared(PlaybackRequest r) async {
+  /// Ensures one upcoming episode is (being) prepared - fire-and-forget
+  /// wrapper around [prepareBestCandidate] for the background look-ahead
+  /// buffer, which doesn't need the result.
+  Future<void> _ensurePrepared(PlaybackRequest r) => prepareBestCandidate(r);
+
+  /// Submits the best available uncached candidate for [r], trying alternate
+  /// sources if one turns out to be a dead/unusable torrent instead of just
+  /// submitting the single top-ranked candidate and hoping it isn't dead - a
+  /// candidate with zero seeders never reports back "failed" on its own (see
+  /// [_reachedTerminalFailure]), so without this a manual "Download" press or
+  /// a background buffer attempt could silently stall forever on a torrent
+  /// nobody else could have finished either. Highest-ranked first, in the
+  /// existing order. Stops early - and never submits another candidate - the
+  /// moment AIOStreams reports it cached or the shared backend has a
+  /// ready/active job (returns null in that case; the caller should just play
+  /// it / let the existing job be found). Tries at most
+  /// [_maxPrepareCandidates] UNIQUE infohashes; never the same hash or a
+  /// duplicate-infohash release twice. Returns the jobId now in progress
+  /// (ready/downloading/queued) plus the [StreamSource] that was actually
+  /// submitted (null when the jobId came from an existing shared job, since
+  /// no fresh candidate was picked this call) - the caller needs the source's
+  /// hash/fileIndex to let a later Retry resubmit it. Returns null if every
+  /// candidate tried failed immediately (or none was found). Used by both the
+  /// background episode buffer and the manual "Download" button.
+  Future<({String jobId, StreamSource? source})?> prepareBestCandidate(PlaybackRequest r) async {
     final triedHashes = <String>{};
     for (var attempt = 0; attempt < _maxPrepareCandidates; attempt++) {
       // Re-check each round: bail if it resolved (cached, or someone/the backend
       // already has it ready/active) while we were working.
       final all = await fetchQuiet(r);
-      if (all.any((s) => s.cached)) return; // AIOStreams now cached
+      if (all.any((s) => s.cached)) return null; // AIOStreams now cached - caller should just play it
       final existing = await findPreparedJob(r);
-      if (existing != null && existing['status'] != 'failed') return; // ready/active
+      if (existing != null && existing['status'] != 'failed') {
+        final id = existing['jobId'];
+        if (id is String) return (jobId: id, source: null); // ready/active
+      }
 
       // Highest-ranked uncached candidate whose infohash we haven't tried yet
       // (dedups duplicate releases that resolve to the same infohash), and which
@@ -343,7 +364,7 @@ class StreamSourcesService {
         pick = s;
         break;
       }
-      if (pick == null) return; // no new candidate to try
+      if (pick == null) return null; // no new candidate to try
       triedHashes.add(pick.infohash!);
 
       final jobId = await submitForPreparation(r, pick);
@@ -353,13 +374,12 @@ class StreamSourcesService {
       // episode_not_identified / bad selection). If it's progressing or ready,
       // we're done; if it failed, clean it up and try the next-ranked candidate.
       if (await _reachedTerminalFailure(jobId)) {
-        await cancelPreparation(jobId); // free the dead torrent's RD slot
+        await cancelPreparation(jobId); // free the dead torrent's TorBox slot
         continue;
       }
-      return; // ready / downloading / queued (in progress) - success
+      return (jobId: jobId, source: pick); // ready / downloading / queued (in progress) - success
     }
-    // All candidates exhausted for this attempt. No continuous looping - the
-    // next look-ahead pass (or the user reaching the episode) retries fresh.
+    return null; // all candidates exhausted this attempt
   }
 
   /// A candidate is safe to auto-prepare for a TV episode only if it's a
@@ -621,13 +641,20 @@ class StreamSourcesService {
   ///   4. Release type          - REMUX > BluRay > WEB-DL > WEBRip > HDRip >
   ///                             HDTV > DVD
   ///   5. Resolution            - 1080p > 720p
-  ///   6. English subtitle hint - minor tiebreak
+  ///   6. Original audio        - for a home-audio title, a release explicitly
+  ///                             tagged as an English dub ranks below one
+  ///                             that isn't (original JA/KO/ZH audio + English
+  ///                             subs preferred); the dub is still a fully
+  ///                             valid, never-excluded fallback (unlike a
+  ///                             foreign dub on a normal English title, tier 1)
+  ///   7. English subtitle hint - minor tiebreak
   /// (A soft SUBBED tag is a tiny extra nudge - soft subs are fine/disableable.)
   ///
-  /// The cached bonus (5000) exceeds the whole release-type + resolution + hint
-  /// range (max 3620), so cached always outranks uncached (e.g. a cached 1080p
-  /// WEB-DL beats an uncached 1080p BluRay/REMUX); it stays below the hardcoded
-  /// (10000) and foreign-audio (100000) penalties, so those tiers never cross.
+  /// The cached bonus (5000) exceeds the whole release-type + resolution +
+  /// dub-tier + hint range (max 4020), so cached always outranks uncached
+  /// (e.g. a cached 1080p WEB-DL beats an uncached 1080p BluRay/REMUX); it
+  /// stays below the hardcoded (10000) and foreign-audio (100000) penalties,
+  /// so those tiers never cross.
   int _scoreStream(String releaseName, {required int res, required bool cached, required bool homeAudio}) {
     final n = releaseName.toLowerCase();
     var score = 0;
@@ -653,7 +680,14 @@ class StreamSourcesService {
     // (5) Resolution.
     score += res == 1080 ? 100 : (res == 720 ? 50 : 0);
 
-    // (6) English subtitle hint (minor).
+    // (6) Original audio preferred over an explicit English dub, for a
+    //     home-audio title only. Not a disqualifier (dub stays a valid
+    //     fallback, unlike tier 1) - just enough to win a tie against an
+    //     equally-cached, equal-quality dub, without ever flipping a
+    //     cached-vs-uncached or big release-type/resolution decision.
+    if (homeAudio && (_hasTag(n, 'dub') || _hasTag(n, 'dubbed'))) score -= 400;
+
+    // (7) English subtitle hint (minor).
     if (_hasTag(n, 'english') || _hasTag(n, 'eng')) score += 20;
 
     return score;
