@@ -56,10 +56,6 @@ class AllMoviesScreen extends StatelessWidget {
                     return const CenteredMessage(
                       message: 'Please wait...',
                     );
-                  } else if (state is AllMoviesLoading) {
-                    return const CenteredMessage(
-                      message: 'Loading...',
-                    );
                   } else if (state is AllMoviesLoaded) {
                     return FadeIn(
                         child: AllMoviesSection(
@@ -70,6 +66,22 @@ class AllMoviesScreen extends StatelessWidget {
                   } else {
                     return const SizedBox.shrink();
                   }
+                },
+              ),
+              // Overlay loading spinner while fetching more (AllMoviesLoading state).
+              // Kept separate from main BlocBuilder so AllMoviesSection persists in the
+              // tree (keeping its ScrollController) during load-more cycles.
+              BlocBuilder<AllMoviesBloc, AllMoviesState>(
+                builder: (context, state) {
+                  if (state is AllMoviesLoading) {
+                    return Center(
+                      child: LoadingAnimationWidget.beat(
+                        color: Theme.of(context).primaryColor,
+                        size: 50,
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
                 },
               ),
             ],

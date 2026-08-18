@@ -1,6 +1,7 @@
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:movie_bloc_app/common/widgets/texts/centered_message.dart';
 import 'package:movie_bloc_app/core/dependency_injection/di.dart';
 import 'package:movie_bloc_app/features/movies/presentation/blocs/home/genre_movies/genre_movies_bloc.dart';
@@ -57,10 +58,6 @@ class GenreMoviesScreen extends StatelessWidget {
                     return const CenteredMessage(
                       message: 'Please wait...',
                     );
-                  } else if (state is GenreMoviesLoading) {
-                    return const CenteredMessage(
-                      message: 'Loading...',
-                    );
                   } else if (state is GenreMoviesLoaded) {
                     return FadeIn(
                         child: GenreMovies(
@@ -72,6 +69,22 @@ class GenreMoviesScreen extends StatelessWidget {
                   } else {
                     return const SizedBox.shrink();
                   }
+                },
+              ),
+              // Overlay loading spinner while fetching more (GenreMoviesLoading state).
+              // Kept separate from main BlocBuilder so GenreMovies persists in the
+              // tree (keeping its ScrollController) during load-more cycles.
+              BlocBuilder<GenreMoviesBloc, GenreMoviesState>(
+                builder: (context, state) {
+                  if (state is GenreMoviesLoading) {
+                    return Center(
+                      child: LoadingAnimationWidget.beat(
+                        color: Theme.of(context).primaryColor,
+                        size: 50,
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
                 },
               ),
             ],
