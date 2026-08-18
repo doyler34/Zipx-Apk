@@ -155,6 +155,35 @@ class _TvDetailsBody extends StatelessWidget {
                 const SizedBox(height: 8),
                 if (state.isLoadingEpisodes)
                   const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+                else if (state.errorMessage != null && state.episodes.isEmpty)
+                  // A failed episode fetch (network hiccup, timeout) used to
+                  // render nothing here - identical to a season that genuinely
+                  // has no episodes, so a transient failure looked like "this
+                  // show has no episodes" with no way to tell the two apart or
+                  // retry without leaving the page.
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                    child: Column(
+                      children: [
+                        Text(state.errorMessage!, style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center),
+                        const SizedBox(height: 12),
+                        ElevatedButton(
+                          onPressed: () => context.read<TvDetailsCubit>().loadSeason(
+                                show.id,
+                                state.selectedSeason ?? details.seasons.first.seasonNumber,
+                              ),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (state.episodes.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                    child: Center(
+                      child: Text('No episodes found for this season.', style: TextStyle(color: Colors.white54)),
+                    ),
+                  )
                 else
                   for (final episode in state.episodes)
                     EpisodeTile(

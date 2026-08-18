@@ -63,7 +63,12 @@ class TvDetailsCubit extends Cubit<TvDetailsState> {
   }
 
   Future<void> loadSeason(int tvId, int seasonNumber) async {
-    emit(state.copyWith(selectedSeason: seasonNumber, isLoadingEpisodes: true, errorMessage: null));
+    // Clear episodes up front (not just on success): otherwise switching
+    // season - or retrying after a failure - keeps showing the PREVIOUS
+    // season's episodes while loading/if it fails, with no indication
+    // anything went wrong (the error banner only shows when episodes is
+    // empty; stale data would silently hide it).
+    emit(state.copyWith(selectedSeason: seasonNumber, episodes: const [], isLoadingEpisodes: true, errorMessage: null));
     try {
       final season = await _datasource.getSeasonDetails(tvId: tvId, seasonNumber: seasonNumber);
       emit(state.copyWith(episodes: season.episodes, isLoadingEpisodes: false));
