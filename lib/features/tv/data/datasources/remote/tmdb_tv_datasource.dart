@@ -88,6 +88,23 @@ class TmdbTvDatasource {
     return TvResultModel.fromJson(response.data);
   }
 
+  /// Anime series, via TMDB's standard heuristic for it: Animation genre (16)
+  /// + Japanese origin. TMDB has no dedicated "anime" flag.
+  Future<TvResultModel> discoverAnimeTv({int page = 1}) async {
+    Map<String, dynamic> settings = sl<UserSettings>().getSettings();
+    settings['page'] = page;
+    settings['sort_by'] = 'popularity.desc';
+    settings['with_genres'] = 16;
+    settings['with_origin_country'] = 'JP';
+
+    final response = await dio.get(
+      '${UrlStrings.baseUrl}discover/tv',
+      queryParameters: settings,
+    );
+
+    return TvResultModel.fromJson(response.data);
+  }
+
   Future<TvResultModel> searchTv({required String query, int page = 1}) async {
     Map<String, dynamic> settings = sl<UserSettings>().getSettings();
     settings['query'] = query;

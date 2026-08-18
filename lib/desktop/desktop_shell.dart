@@ -6,6 +6,7 @@ import '../common/styles/zipx_ui.dart';
 import '../common/widgets/beta/beta_v1_popup.dart';
 import '../core/dependency_injection/di.dart';
 import '../features/movies/presentation/blocs/home/home/home_bloc.dart';
+import 'screens/desktop_anime_screen.dart';
 import 'screens/desktop_home_screen.dart';
 import 'screens/desktop_search_screen.dart';
 import 'screens/desktop_tv_screen.dart';
@@ -48,6 +49,7 @@ class _DesktopShellState extends State<DesktopShell> {
       const DesktopHomeScreen(),
       const DesktopSearchScreen(),
       const DesktopTvScreen(),
+      const DesktopAnimeScreen(),
       const DesktopBookmarksScreen(),
       const DesktopSettingsScreen(),
     ];

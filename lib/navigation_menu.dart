@@ -9,6 +9,7 @@ import 'package:movie_bloc_app/features/movies/presentation/pages/search/search_
 import 'package:movie_bloc_app/features/personalization/presentation/pages/settings/settings_screen.dart';
 
 import 'common/widgets/appbars_navbars/custom_bottom_navbar.dart';
+import 'features/anime/presentation/pages/anime_home_screen.dart';
 import 'features/movies/presentation/pages/home/home_screen.dart';
 import 'features/personalization/presentation/pages/bookmarks/bookmarks_screen.dart';
 import 'features/tv/presentation/pages/tv_home_screen.dart';
@@ -26,8 +27,10 @@ class NavigationMenu extends StatelessWidget {
       case 2:
         return const TvHomeScreen();
       case 3:
-        return const BookmarksScreen();
+        return const AnimeHomeScreen();
       case 4:
+        return const BookmarksScreen();
+      case 5:
         return const SettingsScreen();
       case 0:
       default:

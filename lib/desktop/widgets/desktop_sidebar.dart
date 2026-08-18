@@ -14,12 +14,13 @@ const List<DesktopNavItem> kDesktopNavItems = [
   DesktopNavItem(Icons.home_rounded, 'Home'),
   DesktopNavItem(Icons.search_rounded, 'Search'),
   DesktopNavItem(Icons.tv_rounded, 'TV Shows'),
+  DesktopNavItem(Icons.animation_rounded, 'Anime'),
   DesktopNavItem(Icons.bookmark_rounded, 'Watchlist'),
 ];
 
 /// Profile lives at the very bottom of the rail (its content index follows the
 /// main destinations).
-const int kDesktopProfileIndex = 4;
+const int kDesktopProfileIndex = 5;
 
 /// The persistent left navigation rail for the desktop UI: the ZIPX wordmark on
 /// top, the destinations below with a red pill behind the active one. Collapses

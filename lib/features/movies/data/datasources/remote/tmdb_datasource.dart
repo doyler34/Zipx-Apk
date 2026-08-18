@@ -150,6 +150,24 @@ class TmdbDatasource {
     return MoviesResultModel.fromJson(response.data);
   }
 
+  /// Anime movies, via TMDB's standard heuristic for it: Animation genre (16)
+  /// + Japanese origin. TMDB has no dedicated "anime" flag.
+  Future<MoviesResultModel> discoverAnimeMovies({int page = 1}) async {
+    Map<String, dynamic> settings = sl<UserSettings>().getSettings();
+
+    settings['page'] = page;
+    settings['sort_by'] = 'popularity.desc';
+    settings['with_genres'] = 16;
+    settings['with_origin_country'] = 'JP';
+
+    final response = await dio.get(
+      '${UrlStrings.baseUrl}discover/movie',
+      queryParameters: settings,
+    );
+
+    return MoviesResultModel.fromJson(response.data);
+  }
+
   Future<MoviesResultModel> getSimilarMovies({required int movieId, int page = 1}) async {
     Map<String, dynamic> settings = sl<UserSettings>().getSettings();
 

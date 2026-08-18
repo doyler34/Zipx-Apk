@@ -14,6 +14,7 @@ class MovieModel extends MovieEntity with EquatableMixin {
     required super.releaseDate,
     required super.video,
     required super.adult,
+    super.genreIds,
   });
 
   factory MovieModel.fromJson(Map<String, dynamic> json) {
@@ -27,6 +28,7 @@ class MovieModel extends MovieEntity with EquatableMixin {
       voteAverage: json['vote_average'].toDouble(),
       adult: json['adult'] ?? false,
       video: json['video'] ?? false,
+      genreIds: (json['genre_ids'] as List?)?.whereType<int>().toList() ?? const [],
     );
   }
 

@@ -16,6 +16,7 @@ import 'package:movie_bloc_app/core/playback/services/stream_availability_servic
 import 'package:movie_bloc_app/core/playback/services/stream_sources_service.dart';
 import 'package:movie_bloc_app/core/playback/services/subtitle_service.dart';
 import 'package:movie_bloc_app/core/settings/user_settings.dart';
+import 'package:movie_bloc_app/features/anime/presentation/blocs/anime_home_cubit.dart';
 import 'package:movie_bloc_app/features/movies/data/datasources/remote/tmdb_datasource.dart';
 import 'package:movie_bloc_app/features/movies/data/models/movie_model.dart';
 import 'package:movie_bloc_app/features/movies/data/repositories/movie_repo_impl.dart';
@@ -150,4 +151,6 @@ Future initDependencyInjection() async {
 
   sl.registerFactory(() => TvHomeCubit(sl()));
   sl.registerFactory(() => TvDetailsCubit(sl()));
+
+  sl.registerFactory(() => AnimeHomeCubit(sl(), sl()));
 }

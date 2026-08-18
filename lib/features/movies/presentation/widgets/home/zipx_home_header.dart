@@ -37,7 +37,7 @@ class ZipxHomeHeader extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(right: 16, left: 4),
           child: GestureDetector(
-            onTap: () => context.read<NavBarBloc>().add(const NavBarTapEvent(4)),
+            onTap: () => context.read<NavBarBloc>().add(const NavBarTapEvent(5)),
             child: const CircleAvatar(
               radius: 18,
               backgroundColor: ZipxUi.surfaceHigh,

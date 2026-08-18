@@ -15,6 +15,7 @@ class ZipxSideNav extends StatelessWidget {
     _NavItem(Icons.home_rounded, 'Home'),
     _NavItem(Icons.search_rounded, 'Search'),
     _NavItem(Icons.tv_rounded, 'TV Shows'),
+    _NavItem(Icons.animation_rounded, 'Anime'),
     _NavItem(Icons.bookmark_rounded, 'Watchlist'),
     _NavItem(Icons.person_rounded, 'Profile'),
   ];
