@@ -129,11 +129,10 @@ Future initDependencyInjection() async {
   sl.registerFactory(
     () => HomeBloc(
       getGenres: sl(),
-      getUpcoming: sl(),
       getPopular: sl(),
-      getNowPlaying: sl(),
       getTopRated: sl(),
       getTrending: sl(),
+      tmdbDatasource: sl(),
     ),
   );
 

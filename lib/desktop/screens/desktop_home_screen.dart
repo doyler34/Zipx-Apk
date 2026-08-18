@@ -59,10 +59,16 @@ class DesktopHomeScreen extends StatelessWidget {
                     if (trending.isNotEmpty) _Hero(movie: trending.first),
                     const SizedBox(height: 12),
                     _Row(title: 'Trending Now', movies: trending),
-                    _Row(title: 'Upcoming Movies', movies: _filter(state.upcomingMovies, showAdult)),
-                    _Row(title: 'Now Playing', movies: _filter(state.nowPlayingMovies, showAdult)),
                     _Row(title: 'Top Rated', movies: _filter(state.topRatedMovies, showAdult)),
                     _Row(title: 'Popular', movies: _filter(state.popularMovies, showAdult)),
+                    // Broad, well-established genres - deep catalogues, much
+                    // better availability than the new-release rows (Upcoming/
+                    // Now Playing) that used to be here.
+                    for (final section in state.genreSections)
+                      _Row(
+                        title: '${section.$1} Movies',
+                        movies: _filter(MoviesResultModel(movies: section.$2, totalPages: 1), showAdult),
+                      ),
                     const SizedBox(height: 32),
                   ],
                 ),

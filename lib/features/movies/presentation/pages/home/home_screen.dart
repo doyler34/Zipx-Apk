@@ -17,6 +17,7 @@ import '../../../../../common/widgets/movie/movies_section.dart';
 import '../../../../../core/dependency_injection/di.dart';
 import '../../../../../core/playback/presentation/widgets/continue_watching_section.dart';
 import '../../../../../core/playback/services/playback_history_service.dart';
+import '../../../data/models/movie_model.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -98,10 +99,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               } else if (state is HomeLoaded) {
                 final trending = state2.showAdultContent ? state.trendingMovies.movies! : state.trendingMovies.movies!.where((movie) => !movie.adult).toList();
-                final upcoming = state2.showAdultContent ? state.upcomingMovies.movies! : state.upcomingMovies.movies!.where((movie) => !movie.adult).toList();
-                final nowPlaying = state2.showAdultContent ? state.nowPlayingMovies.movies! : state.nowPlayingMovies.movies!.where((movie) => !movie.adult).toList();
                 final topRated = state2.showAdultContent ? state.topRatedMovies.movies! : state.topRatedMovies.movies!.where((movie) => !movie.adult).toList();
                 final popular = state2.showAdultContent ? state.popularMovies.movies! : state.popularMovies.movies!.where((movie) => !movie.adult).toList();
+                List<MovieModel> cleanGenre(List<MovieModel> movies) =>
+                    state2.showAdultContent ? movies : movies.where((movie) => !movie.adult).toList();
                 return FadeIn(
                   child: CustomMaterialIndicator(
                     indicatorBuilder: (context, _) {
@@ -123,27 +124,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             // Each row (header + section) only renders when it
                             // actually has titles - an availability fill that
                             // couldn't refill a row to any titles hides it
-                            // instead of showing an empty header.
-                            if (upcoming.isNotEmpty) ...[
-                              Header(
-                                title: 'Upcoming Movies',
-                                onTap: () {
-                                  context.push('/all/upcoming', extra: 'Upcoming Movies');
-                                },
-                              ),
-                              MoviesSection(movies: upcoming, isHomePage: true),
-                            ],
+                            // instead of showing an empty header. Upcoming/Now
+                            // Playing were dropped entirely (not just topped up
+                            // deeper) - brand-new releases are genuinely thin on
+                            // torrent availability once CAM/TS/SCR are excluded,
+                            // so they were frequently just empty rows.
                             const Header(title: 'Movie Genres'),
                             MovieGenres(genres: state.genres),
-                            if (nowPlaying.isNotEmpty) ...[
-                              Header(
-                                title: 'Now Playing Movies',
-                                onTap: () {
-                                  context.push('/all/now_playing', extra: 'Now Playing Movies');
-                                },
-                              ),
-                              MoviesSection(movies: nowPlaying, isHomePage: true),
-                            ],
                             if (topRated.isNotEmpty) ...[
                               Header(
                                 title: 'Top Rated Movies',
@@ -162,6 +149,14 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               MoviesSection(movies: popular, isHomePage: true),
                             ],
+                            // Broad, well-established genres - deep catalogues,
+                            // much better availability than the new-release rows
+                            // that used to be here.
+                            for (final section in state.genreSections)
+                              if (cleanGenre(section.$2).isNotEmpty) ...[
+                                Header(title: '${section.$1} Movies'),
+                                MoviesSection(movies: cleanGenre(section.$2), isHomePage: true),
+                              ],
                             const SizedBox(height: 24),
                           ],
                         ),

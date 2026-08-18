@@ -1,5 +1,9 @@
 part of 'home_bloc.dart';
 
+/// A titled home row built from a genre (e.g. "Action" -> its movies) -
+/// mirrors TvHomeCubit's TvSection for the same purpose.
+typedef MovieSection = (String title, List<MovieModel> movies);
+
 sealed class HomeState extends Equatable {
   const HomeState();
 
@@ -13,29 +17,26 @@ final class HomeLoading extends HomeState {}
 
 final class HomeLoaded extends HomeState {
   final MoviesResultModel popularMovies;
-  final MoviesResultModel upcomingMovies;
   final List<GenreModel> genres;
-  final MoviesResultModel nowPlayingMovies;
   final MoviesResultModel topRatedMovies;
   final MoviesResultModel trendingMovies;
+  final List<MovieSection> genreSections;
 
   const HomeLoaded({
-    required this.upcomingMovies,
     required this.genres,
     required this.popularMovies,
-    required this.nowPlayingMovies,
     required this.topRatedMovies,
     required this.trendingMovies,
+    this.genreSections = const [],
   });
 
   @override
   List<Object> get props => [
-        upcomingMovies,
         genres,
         popularMovies,
-        nowPlayingMovies,
         topRatedMovies,
         trendingMovies,
+        genreSections,
       ];
 }
 

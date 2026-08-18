@@ -18,8 +18,6 @@ class TvHomeState extends Equatable {
     this.trending = const [],
     this.popular = const [],
     this.topRated = const [],
-    this.onTheAir = const [],
-    this.airingToday = const [],
     this.genreSections = const [],
     this.genres = const [],
     this.searchResults = const [],
@@ -35,8 +33,6 @@ class TvHomeState extends Equatable {
   final List<TvModel> trending;
   final List<TvModel> popular;
   final List<TvModel> topRated;
-  final List<TvModel> onTheAir;
-  final List<TvModel> airingToday;
   final List<TvSection> genreSections;
   final List<GenreModel> genres;
   final List<TvModel> searchResults;
@@ -55,8 +51,6 @@ class TvHomeState extends Equatable {
     List<TvModel>? trending,
     List<TvModel>? popular,
     List<TvModel>? topRated,
-    List<TvModel>? onTheAir,
-    List<TvModel>? airingToday,
     List<TvSection>? genreSections,
     List<GenreModel>? genres,
     List<TvModel>? searchResults,
@@ -70,8 +64,6 @@ class TvHomeState extends Equatable {
       trending: trending ?? this.trending,
       popular: popular ?? this.popular,
       topRated: topRated ?? this.topRated,
-      onTheAir: onTheAir ?? this.onTheAir,
-      airingToday: airingToday ?? this.airingToday,
       genreSections: genreSections ?? this.genreSections,
       genres: genres ?? this.genres,
       searchResults: searchResults ?? this.searchResults,
@@ -99,8 +91,6 @@ class TvHomeState extends Equatable {
       trending: trending,
       popular: popular,
       topRated: topRated,
-      onTheAir: onTheAir,
-      airingToday: airingToday,
       genreSections: genreSections,
       genres: genres,
       searchResults: searchResults,
@@ -119,8 +109,6 @@ class TvHomeState extends Equatable {
         trending,
         popular,
         topRated,
-        onTheAir,
-        airingToday,
         genreSections,
         genres,
         searchResults,
@@ -163,7 +151,12 @@ class TvHomeCubit extends Cubit<TvHomeState> {
   ];
 
   /// Loads every home row (categories + genre rows + the genre list) in
-  /// parallel so the screen fills in one pass.
+  /// parallel so the screen fills in one pass. On The Air / Airing Today were
+  /// dropped entirely (not just topped up deeper) - currently-airing episodes
+  /// are genuinely thin on torrent availability right after broadcast once
+  /// CAM/TS/SCR are excluded, so they were frequently just empty rows; the
+  /// genre rows below (deep, well-established catalogues) fill that space
+  /// with content that's actually there.
   Future<void> loadHome() async {
     // This load's generation: if another loadHome() is dispatched (e.g.
     // pull-to-refresh) before this one finishes, `_generation` moves past
@@ -180,8 +173,6 @@ class TvHomeCubit extends Cubit<TvHomeState> {
         _datasource.getTrendingTv(),
         _datasource.getPopularTv(),
         _datasource.getTopRatedTv(),
-        _datasource.getOnTheAirTv(),
-        _datasource.getAiringTodayTv(),
       ]);
       // Keep genreId alongside each row (needed to top up that genre from
       // later pages below); dropped once genre sections reach the state.
@@ -203,8 +194,6 @@ class TvHomeCubit extends Cubit<TvHomeState> {
       final trending = results[0].shows;
       final popular = results[1].shows;
       final topRated = results[2].shows;
-      final onTheAir = results[3].shows;
-      final airingToday = results[4].shows;
 
       // Pre-filter using cache (known unavailable shows hidden even on first
       // render) so subsequent loads don't show unfiltered TMDB while waiting
@@ -213,16 +202,12 @@ class TvHomeCubit extends Cubit<TvHomeState> {
       final trendingPre = trending.where((s) => !avail.isKnownUnavailable(PlaybackMediaType.tv, s.id)).toList();
       final popularPre = popular.where((s) => !avail.isKnownUnavailable(PlaybackMediaType.tv, s.id)).toList();
       final topRatedPre = topRated.where((s) => !avail.isKnownUnavailable(PlaybackMediaType.tv, s.id)).toList();
-      final onTheAirPre = onTheAir.where((s) => !avail.isKnownUnavailable(PlaybackMediaType.tv, s.id)).toList();
-      final airingTodayPre = airingToday.where((s) => !avail.isKnownUnavailable(PlaybackMediaType.tv, s.id)).toList();
       final genresSectionsPre = genreRowsRaw.map((s) => (s.$2, s.$3.where((show) => !avail.isKnownUnavailable(PlaybackMediaType.tv, show.id)).toList())).toList();
 
       safeEmit(state.copyWith(
         trending: trendingPre,
         popular: popularPre,
         topRated: topRatedPre,
-        onTheAir: onTheAirPre,
-        airingToday: airingTodayPre,
         genreSections: genresSectionsPre,
         genres: genres,
         isLoading: false,
@@ -250,17 +235,12 @@ class TvHomeCubit extends Cubit<TvHomeState> {
             toRequest: req,
             maxPages: maxPages,
           );
-      final List<TvModel> trendingF, popularF, topRatedF, onTheAirF, airingTodayF;
+      final List<TvModel> trendingF, popularF, topRatedF;
       final List<TvSection> genreSectionsF;
       try {
         trendingF = await fill(trending, (p) => _datasource.getTrendingTv(page: p).then((r) => r.shows));
         popularF = await fill(popular, (p) => _datasource.getPopularTv(page: p).then((r) => r.shows));
         topRatedF = await fill(topRated, (p) => _datasource.getTopRatedTv(page: p).then((r) => r.shows));
-        // On The Air / Airing Today are currently-airing episodes - thinner
-        // torrent availability right after broadcast than an established
-        // catalogue show, so give them a deeper search (still bounded).
-        onTheAirF = await fill(onTheAir, (p) => _datasource.getOnTheAirTv(page: p).then((r) => r.shows), maxPages: 6);
-        airingTodayF = await fill(airingToday, (p) => _datasource.getAiringTodayTv(page: p).then((r) => r.shows), maxPages: 6);
         // Genre rows top up too (each capped at the prober's default 3 pages) -
         // without this, a genre whose page-1 picks skew unavailable (e.g.
         // Crime/Mystery) ends up nearly empty instead of refilled.
@@ -282,8 +262,6 @@ class TvHomeCubit extends Cubit<TvHomeState> {
         trending: trendingF,
         popular: popularF,
         topRated: topRatedF,
-        onTheAir: onTheAirF,
-        airingToday: airingTodayF,
         genreSections: genreSectionsF,
       ));
     } catch (_) {

@@ -1,13 +1,12 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:movie_bloc_app/features/movies/data/datasources/remote/tmdb_datasource.dart';
 import 'package:movie_bloc_app/features/movies/data/models/movies_result_model.dart';
 import 'package:movie_bloc_app/features/movies/domain/entities/params/params.dart';
 import 'package:movie_bloc_app/features/movies/domain/usecases/get_genres.dart';
-import 'package:movie_bloc_app/features/movies/domain/usecases/get_nowplaying.dart';
 import 'package:movie_bloc_app/features/movies/domain/usecases/get_popular.dart';
 import 'package:movie_bloc_app/features/movies/domain/usecases/get_toprated.dart';
 import 'package:movie_bloc_app/features/movies/domain/usecases/get_trending.dart';
-import 'package:movie_bloc_app/features/movies/domain/usecases/get_upcoming.dart';
 
 import '../../../../../../core/dependency_injection/di.dart';
 import '../../../../../../core/playback/domain/entities/playback_media_type.dart';
@@ -24,23 +23,34 @@ part 'home_state.dart';
 
 class HomeBloc extends Bloc<HomeEvent, HomeState> {
   final GetGenres getGenres;
-  final GetUpcoming getUpcoming;
   final GetPopular getPopular;
-  final GetNowplaying getNowPlaying;
   final GetToprated getTopRated;
   final GetTrending getTrending;
+  final TmdbDatasource tmdbDatasource;
+
+  /// Extra genre rows so Home has plenty to browse. Upcoming/Now Playing were
+  /// dropped entirely (not just supplemented) - those skew toward brand-new
+  /// releases, which are genuinely thin on torrent availability once
+  /// CAM/TS/SCR are excluded, so they were frequently just empty. These are
+  /// broad, well-established genres with deep catalogues instead. Animation
+  /// (16) is deliberately excluded - it lives in the dedicated Anime section
+  /// instead of duplicating that content here.
+  static const List<(int, String)> _homeGenres = [
+    (28, 'Action'),
+    (35, 'Comedy'),
+    (27, 'Horror'),
+    (53, 'Thriller'),
+    (878, 'Science Fiction'),
+    (18, 'Drama'),
+    (80, 'Crime'),
+    (10749, 'Romance'),
+  ];
 
   //Popular
   List<MovieModel> popularMovies = [];
 
-  //Upcoming
-  List<MovieModel> upcomingMovies = [];
-
   //Genres
   List<GenreModel> genres = [];
-
-  //Now Playing
-  List<MovieModel> nowPlayingMovies = [];
 
   //Top Rated
   List<MovieModel> topRatedMovies = [];
@@ -56,10 +66,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   HomeBloc({
     required this.getGenres,
     required this.getPopular,
-    required this.getUpcoming,
-    required this.getNowPlaying,
     required this.getTopRated,
     required this.getTrending,
+    required this.tmdbDatasource,
   }) : super(HomeInitial()) {
     on<LoadHome>((event, emit) async {
       // This load's generation: if another LoadHome is dispatched (e.g.
@@ -80,20 +89,24 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       safeEmit(HomeLoading());
 
       try {
+        // Started early (not awaited yet) so it runs alongside the sequential
+        // fetches below instead of adding its own wait on top. Each genre is
+        // independent - one genre failing shouldn't blank the rest.
+        final genreRowsFuture = Future.wait(_homeGenres.map((g) async {
+          try {
+            final r = await tmdbDatasource.discoverMoviesByGenre(genreId: g.$1);
+            return (g.$1, g.$2, r.movies ?? const <MovieModel>[]);
+          } catch (_) {
+            return (g.$1, g.$2, const <MovieModel>[]);
+          }
+        }));
+
         final popularResult = await getPopular(Params());
 
         if (popularResult.movies!.isEmpty) {
           safeEmit(const HomeError('Error while fetching data'));
         } else {
           popularMovies = popularResult.movies!;
-        }
-
-        final upcomingResult = await getUpcoming(Params());
-
-        if (upcomingResult.movies!.isEmpty) {
-          safeEmit(const HomeError('Error while fetching data'));
-        } else {
-          upcomingMovies = upcomingResult.movies!;
         }
 
         final genresResult = await getGenres(NoParams());
@@ -104,14 +117,6 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           genres = genresResult;
         }
 
-        final nowPlayingResult = await getNowPlaying(Params());
-
-        if (nowPlayingResult.movies!.isEmpty) {
-          safeEmit(const HomeError('Error while fetching data'));
-        } else {
-          nowPlayingMovies = nowPlayingResult.movies!;
-        }
-
         final topRatedResult = await getTopRated(Params());
         if (topRatedResult.movies!.isEmpty) {
           safeEmit(const HomeError('Error while fetching data'));
@@ -120,6 +125,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         }
 
         final trendingResult = await getTrending(NoParams());
+        final genreRowsRaw = (await genreRowsFuture).where((g) => g.$3.isNotEmpty).toList();
 
         if (trendingResult.movies!.isEmpty) {
           safeEmit(const HomeError('Error while fetching data'));
@@ -133,26 +139,22 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           final popularPre = (popularResult.movies ?? const <MovieModel>[])
               .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
               .toList();
-          final upcomingPre = (upcomingResult.movies ?? const <MovieModel>[])
-              .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
-              .toList();
-          final nowPlayingPre = (nowPlayingResult.movies ?? const <MovieModel>[])
-              .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
-              .toList();
           final topRatedPre = (topRatedResult.movies ?? const <MovieModel>[])
               .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
               .toList();
           final trendingPre = (trendingResult.movies ?? const <MovieModel>[])
               .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
               .toList();
+          final genreSectionsPre = genreRowsRaw
+              .map((g) => (g.$2, g.$3.where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id)).toList()))
+              .toList();
 
           safeEmit(HomeLoaded(
             popularMovies: MoviesResultModel(movies: popularPre, totalPages: popularResult.totalPages),
-            upcomingMovies: MoviesResultModel(movies: upcomingPre, totalPages: upcomingResult.totalPages),
             genres: genresResult,
-            nowPlayingMovies: MoviesResultModel(movies: nowPlayingPre, totalPages: nowPlayingResult.totalPages),
             topRatedMovies: MoviesResultModel(movies: topRatedPre, totalPages: topRatedResult.totalPages),
             trendingMovies: MoviesResultModel(movies: trendingPre, totalPages: trendingResult.totalPages),
+            genreSections: genreSectionsPre,
           ));
           // Background availability fill (option B): rows are shown above with
           // cache-known-unavailable titles already hidden; now probe each title
@@ -165,10 +167,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
             gen: gen,
             genres: genresResult,
             popular: popularResult,
-            upcoming: upcomingResult,
-            nowPlaying: nowPlayingResult,
             topRated: topRatedResult,
             trending: trendingResult,
+            genreRows: genreRowsRaw,
           );
         }
       } catch (e) {
@@ -186,10 +187,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     required int gen,
     required List<GenreModel> genres,
     required MoviesResultModel popular,
-    required MoviesResultModel upcoming,
-    required MoviesResultModel nowPlaying,
     required MoviesResultModel topRated,
     required MoviesResultModel trending,
+    required List<(int, String, List<MovieModel>)> genreRows,
   }) async {
     final prober = sl<AvailabilityProber>();
     PlaybackRequest req(MovieModel m) => PlaybackRequest(
@@ -214,15 +214,10 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           maxPages: maxPages,
         );
 
-    final List<MovieModel> popularF, upcomingF, nowPlayingF, topRatedF, trendingF;
+    final List<MovieModel> popularF, topRatedF, trendingF;
+    final List<MovieSection> genreSectionsF;
     try {
       popularF = await fill(popular, (p) => getPopular(Params(page: p)));
-      // Upcoming/Now Playing are brand-new theatrical releases - genuinely
-      // thin on torrent availability for weeks after release once CAM/TS/SCR
-      // are excluded, so give them a deeper search before settling for
-      // whatever page 1-3 turned up (still bounded, never unbounded).
-      upcomingF = await fill(upcoming, (p) => getUpcoming(Params(page: p)), maxPages: 6);
-      nowPlayingF = await fill(nowPlaying, (p) => getNowPlaying(Params(page: p)), maxPages: 6);
       topRatedF = await fill(topRated, (p) => getTopRated(Params(page: p)));
       // Trending isn't pageable (NoParams) - just probe this page + filter it.
       await prober.probe(PlaybackMediaType.movie, (trending.movies ?? const <MovieModel>[]).map(req).toList());
@@ -230,6 +225,19 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       trendingF = (trending.movies ?? const <MovieModel>[])
           .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
           .toList();
+      // Genre rows top up too - without this, a genre whose page-1 picks skew
+      // unavailable ends up sparser than it needs to be instead of refilled.
+      genreSectionsF = await Future.wait(genreRows.map((g) async {
+        try {
+          final filled = await fill(
+            MoviesResultModel(movies: g.$3, totalPages: 1),
+            (p) => tmdbDatasource.discoverMoviesByGenre(genreId: g.$1, page: p),
+          );
+          return (g.$2, filled);
+        } catch (_) {
+          return (g.$2, g.$3); // fail-open: keep this genre row as first shown
+        }
+      }));
     } catch (_) {
       return; // fail-open
     }
@@ -240,11 +248,10 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         MoviesResultModel(movies: ms, totalPages: src.totalPages);
     emit(HomeLoaded(
       popularMovies: wrap(popularF, popular),
-      upcomingMovies: wrap(upcomingF, upcoming),
       genres: genres,
-      nowPlayingMovies: wrap(nowPlayingF, nowPlaying),
       topRatedMovies: wrap(topRatedF, topRated),
       trendingMovies: wrap(trendingF, trending),
+      genreSections: genreSectionsF,
     ));
   }
 }

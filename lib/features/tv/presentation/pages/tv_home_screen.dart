@@ -164,8 +164,6 @@ class _TvSections extends StatelessWidget {
         _row('Trending', state.trending),
         _row('Popular', state.popular),
         _row('Top Rated', state.topRated),
-        _row('On The Air', state.onTheAir),
-        _row('Airing Today', state.airingToday),
         // Extra genre rows so there's plenty more to browse.
         for (final section in state.genreSections) _row(section.$1, section.$2),
         const SizedBox(height: 24),

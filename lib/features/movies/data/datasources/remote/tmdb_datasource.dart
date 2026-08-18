@@ -131,6 +131,23 @@ class TmdbDatasource {
     return MoviesResultModel.fromJson(response.data);
   }
 
+  /// All-time popular movies for a single genre - no year restriction (unlike
+  /// [getMoviesByGenre], which is for the genre+year browse screen). Used for
+  /// home-screen genre rows, mirroring [TmdbTvDatasource.discoverTvByGenre].
+  Future<MoviesResultModel> discoverMoviesByGenre({required int genreId, int page = 1}) async {
+    Map<String, dynamic> settings = sl<UserSettings>().getSettings();
+    settings['page'] = page;
+    settings['with_genres'] = genreId;
+    settings['sort_by'] = 'popularity.desc';
+
+    final response = await dio.get(
+      '${UrlStrings.baseUrl}discover/movie',
+      queryParameters: settings,
+    );
+
+    return MoviesResultModel.fromJson(response.data);
+  }
+
   Future<MoviesResultModel> getMoviesByGenre({required int genreId, int page = 1, int? year}) async {
     Map<String, dynamic> settings = sl<UserSettings>().getSettings();
 

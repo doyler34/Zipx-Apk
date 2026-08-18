@@ -49,8 +49,6 @@ class DesktopTvScreen extends StatelessWidget {
                 _TvRow(title: 'Trending Now', shows: trending),
                 _TvRow(title: 'Popular', shows: _clean(state.popular)),
                 _TvRow(title: 'Top Rated', shows: _clean(state.topRated)),
-                _TvRow(title: 'On The Air', shows: _clean(state.onTheAir)),
-                _TvRow(title: 'Airing Today', shows: _clean(state.airingToday)),
                 for (final section in state.genreSections)
                   _TvRow(title: section.$1, shows: _clean(section.$2)),
                 const SizedBox(height: 32),
