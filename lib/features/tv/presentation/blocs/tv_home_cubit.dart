@@ -149,7 +149,9 @@ class TvHomeCubit extends Cubit<TvHomeState> {
   int _generation = 0;
 
   /// Extra genre rows shown on the home screen (TMDB TV genre id -> title), so
-  /// there's plenty to browse beyond the main category rows.
+  /// there's plenty to browse beyond the main category rows. Animation (16) is
+  /// deliberately excluded - it lives in the dedicated Anime section instead
+  /// of duplicating that content here.
   static const List<(int, String)> _homeGenres = [
     (10759, 'Action & Adventure'),
     (35, 'Comedy'),
@@ -157,7 +159,6 @@ class TvHomeCubit extends Cubit<TvHomeState> {
     (80, 'Crime'),
     (9648, 'Mystery'),
     (10765, 'Sci-Fi & Fantasy'),
-    (16, 'Animation'),
     (10768, 'War & Politics'),
   ];
 
@@ -240,13 +241,14 @@ class TvHomeCubit extends Cubit<TvHomeState> {
             episodeNumber: 1,
             posterPath: s.posterPath,
           );
-      Future<List<TvModel>> fill(List<TvModel> first, Future<List<TvModel>> Function(int) fetch) =>
+      Future<List<TvModel>> fill(List<TvModel> first, Future<List<TvModel>> Function(int) fetch, {int maxPages = 3}) =>
           prober.fillAvailable<TvModel>(
             mediaType: PlaybackMediaType.tv,
             firstPage: first,
             fetchPage: fetch,
             idOf: (s) => s.id,
             toRequest: req,
+            maxPages: maxPages,
           );
       final List<TvModel> trendingF, popularF, topRatedF, onTheAirF, airingTodayF;
       final List<TvSection> genreSectionsF;
@@ -254,8 +256,11 @@ class TvHomeCubit extends Cubit<TvHomeState> {
         trendingF = await fill(trending, (p) => _datasource.getTrendingTv(page: p).then((r) => r.shows));
         popularF = await fill(popular, (p) => _datasource.getPopularTv(page: p).then((r) => r.shows));
         topRatedF = await fill(topRated, (p) => _datasource.getTopRatedTv(page: p).then((r) => r.shows));
-        onTheAirF = await fill(onTheAir, (p) => _datasource.getOnTheAirTv(page: p).then((r) => r.shows));
-        airingTodayF = await fill(airingToday, (p) => _datasource.getAiringTodayTv(page: p).then((r) => r.shows));
+        // On The Air / Airing Today are currently-airing episodes - thinner
+        // torrent availability right after broadcast than an established
+        // catalogue show, so give them a deeper search (still bounded).
+        onTheAirF = await fill(onTheAir, (p) => _datasource.getOnTheAirTv(page: p).then((r) => r.shows), maxPages: 6);
+        airingTodayF = await fill(airingToday, (p) => _datasource.getAiringTodayTv(page: p).then((r) => r.shows), maxPages: 6);
         // Genre rows top up too (each capped at the prober's default 3 pages) -
         // without this, a genre whose page-1 picks skew unavailable (e.g.
         // Crime/Mystery) ends up nearly empty instead of refilled.

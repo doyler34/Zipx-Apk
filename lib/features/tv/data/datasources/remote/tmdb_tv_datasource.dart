@@ -70,6 +70,9 @@ class TmdbTvDatasource {
         // Hide the genres whose shows never have streams (soap/talk/news/reality)
         // so users don't open an empty category.
         .where((g) => !TvModel.unstreamableGenreIds.contains(g.id))
+        // Animation (16) lives in the dedicated Anime section instead - keeping
+        // it here too would just duplicate that content under TV Shows.
+        .where((g) => g.id != 16)
         .toList();
   }
 

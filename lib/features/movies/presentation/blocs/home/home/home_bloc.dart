@@ -199,21 +199,30 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           posterPath: m.posterPath,
         );
 
-    // A pageable row: probe + top up to target across up to 3 pages.
-    Future<List<MovieModel>> fill(MoviesResultModel first, Future<MoviesResultModel> Function(int) fetch) =>
+    // A pageable row: probe + top up to target across up to [maxPages] pages.
+    Future<List<MovieModel>> fill(
+      MoviesResultModel first,
+      Future<MoviesResultModel> Function(int) fetch, {
+      int maxPages = 3,
+    }) =>
         prober.fillAvailable<MovieModel>(
           mediaType: PlaybackMediaType.movie,
           firstPage: first.movies,
           fetchPage: (p) => fetch(p).then((r) => r.movies ?? const <MovieModel>[]),
           idOf: (m) => m.id,
           toRequest: req,
+          maxPages: maxPages,
         );
 
     final List<MovieModel> popularF, upcomingF, nowPlayingF, topRatedF, trendingF;
     try {
       popularF = await fill(popular, (p) => getPopular(Params(page: p)));
-      upcomingF = await fill(upcoming, (p) => getUpcoming(Params(page: p)));
-      nowPlayingF = await fill(nowPlaying, (p) => getNowPlaying(Params(page: p)));
+      // Upcoming/Now Playing are brand-new theatrical releases - genuinely
+      // thin on torrent availability for weeks after release once CAM/TS/SCR
+      // are excluded, so give them a deeper search before settling for
+      // whatever page 1-3 turned up (still bounded, never unbounded).
+      upcomingF = await fill(upcoming, (p) => getUpcoming(Params(page: p)), maxPages: 6);
+      nowPlayingF = await fill(nowPlaying, (p) => getNowPlaying(Params(page: p)), maxPages: 6);
       topRatedF = await fill(topRated, (p) => getTopRated(Params(page: p)));
       // Trending isn't pageable (NoParams) - just probe this page + filter it.
       await prober.probe(PlaybackMediaType.movie, (trending.movies ?? const <MovieModel>[]).map(req).toList());
