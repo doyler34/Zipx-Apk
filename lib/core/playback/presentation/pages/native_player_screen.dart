@@ -887,11 +887,11 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     ]);
   }
 
-  /// Anime = a Japanese- or Korean-original title. For these we restrict tracks
-  /// to the main language (Japanese/Korean) + English only.
+  /// A Japanese/Korean/Chinese-original title (anime + Asian dramas). For
+  /// these we restrict tracks to the main language + English only.
   bool get _isAnime {
     final l = (_originalLang ?? '').toLowerCase();
-    return l == 'ja' || l == 'ko';
+    return l == 'ja' || l == 'ko' || l == 'zh';
   }
 
   /// "S01E06" for the current episode, else "this title".

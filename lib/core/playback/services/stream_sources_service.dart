@@ -242,7 +242,7 @@ class StreamSourcesService {
   /// Uses strict lookups, so a genuine backend/network error propagates
   /// instead of being read as "no streams" - the caller ([AvailabilityProber])
   /// fails open on any thrown error. Also returns whether this looks like
-  /// anime/JA-KO content (original_language ja/ko) - see [fetch]'s matching
+  /// anime/JA-KO-ZH content (original_language ja/ko/zh) - see [fetch]'s matching
   /// isAnime guard: the caller should not record a negative for anime just
   /// because AIOStreams came back empty (often an uncached/ID-mapping gap,
   /// not genuinely dead), or it gets wrongly hidden from browsing.
@@ -397,7 +397,7 @@ class StreamSourcesService {
 
   /// Availability probe for a single movie/episode request (for catalog
   /// filtering) - like [fetchQuiet] but also returns whether this looks like
-  /// anime/JA-KO content, so the caller ([AvailabilityProber]) can apply the
+  /// anime/JA-KO-ZH content, so the caller ([AvailabilityProber]) can apply the
   /// same "don't hide anime over an empty result" guard [fetch] uses for the
   /// player path.
   Future<(bool hasStreams, bool isAnime)> probeHasStreams(PlaybackRequest request, {bool strict = true}) async {
@@ -437,7 +437,10 @@ class StreamSourcesService {
     final imdb = meta[0];
     final origLang = meta[1];
     final l = (origLang ?? '').toLowerCase();
-    final isAnime = l == 'ja' || l == 'ko';
+    // "isAnime" covers anime + Japanese/Korean/Chinese-original dramas -
+    // content whose original audio isn't English and shouldn't be penalised
+    // for it (see _hasForeignAudio/homeAudioTitle below).
+    final isAnime = l == 'ja' || l == 'ko' || l == 'zh';
 
     // AIOStreams: one aggregated endpoint that wraps every source + debrid and
     // does the anime id mapping, dedup, cached-filtering and ranking
@@ -526,10 +529,10 @@ class StreamSourcesService {
     final entries = <(int, int, StreamSource)>[];
     final seenUrls = <String>{};
     final l = (originalLang ?? '').toLowerCase();
-    // "Home audio" title: original language is Japanese/Korean, so that audio is
-    // allowed (anime + JA/KO live-action). Everything else is treated as a
-    // normal English-required title.
-    final homeAudioTitle = l == 'ja' || l == 'ko';
+    // "Home audio" title: original language is Japanese/Korean/Chinese, so
+    // that audio is allowed (anime + JA/KO/ZH live-action, incl. Asian
+    // dramas). Everything else is treated as a normal English-required title.
+    final homeAudioTitle = l == 'ja' || l == 'ko' || l == 'zh';
     var index = 0;
 
     for (final raw in decoded['streams'] as List) {
@@ -610,8 +613,8 @@ class StreamSourcesService {
   /// Weights are tiered so a higher priority always dominates every lower one,
   /// matching the requested order:
   ///   1. English audio        - foreign/dubbed audio is near-disqualifying
-  ///                             (for a JA/KO-original title that audio is "home"
-  ///                             and allowed - anime + JA/KO live-action)
+  ///                             (for a JA/KO/ZH-original title that audio is
+  ///                             "home" and allowed - anime + JA/KO/ZH live-action)
   ///   2. No hardcoded subs     - HC / HCSUB / KORSUB / CHS / CHT / HARDCODED…
   ///   3. Cached on Real-Debrid - instant, reliable playback beats a marginal
   ///                             release-quality gain, so it outranks release type
@@ -637,7 +640,7 @@ class StreamSourcesService {
     if (_hasHardcodedSubs(n)) score -= 10000;
 
     // Soft "subbed" tag - soft subs are fine (disableable), so only a gentle
-    // tiebreak, and never for a home-audio (anime/JA/KO) title.
+    // tiebreak, and never for a home-audio (anime/JA/KO/ZH) title.
     if (!homeAudio && _hasTag(n, 'subbed')) score -= 200;
 
     // (3) Cached on Real-Debrid - instant, reliable playback outranks release
@@ -657,10 +660,11 @@ class StreamSourcesService {
   }
 
   /// Foreign-language AUDIO indicators (whole-word). For a home-audio title
-  /// (JA/KO original) Japanese/Korean are allowed and "dubbed" is not penalised
-  /// (an English dub is welcome). Uses language *words*, not the "*SUB" tags, so
-  /// a KORSUB / "KOR SUB" release (English audio, baked Korean subs) is caught by
-  /// [_hasHardcodedSubs] instead and stays above truly foreign-audio releases.
+  /// (JA/KO/ZH original) Japanese/Korean/Chinese are allowed and "dubbed" is
+  /// not penalised (an English dub is welcome). Uses language *words*, not the
+  /// "*SUB" tags, so a KORSUB / "KOR SUB" release (English audio, baked Korean
+  /// subs) is caught by [_hasHardcodedSubs] instead and stays above truly
+  /// foreign-audio releases.
   bool _hasForeignAudio(String n, bool homeAudio) {
     const words = [
       'italian', 'italiano', 'german', 'deutsch', 'french', 'francais',
@@ -669,8 +673,9 @@ class StreamSourcesService {
       'portugues', 'português', 'dublado', 'turkish', 'arabic', 'chinese',
       'mandarin', 'cantonese', 'korean', 'japanese',
     ];
+    const homeWords = {'korean', 'japanese', 'chinese', 'mandarin', 'cantonese'};
     for (final w in words) {
-      if (homeAudio && (w == 'korean' || w == 'japanese')) continue;
+      if (homeAudio && homeWords.contains(w)) continue;
       if (_hasTag(n, w)) return true;
     }
     // A foreign dub when English is expected (not for a home-audio title).

@@ -15,10 +15,10 @@ import 'stream_sources_service.dart';
 /// Checks run concurrently with a small pool (not sequentially, not
 /// all-at-once), only for titles that actually need a (re)check, and are
 /// **fail-open**: a lookup error never records a negative. An empty result for
-/// anime/JA-KO content also never records a negative (see [probe]) - AIOStreams
-/// coming back empty for that content is often an uncached/ID-mapping gap, not
-/// genuinely dead, mirroring the same guard [StreamSourcesService.fetch] uses
-/// on the player path.
+/// anime/JA-KO-ZH content also never records a negative (see [probe]) -
+/// AIOStreams coming back empty for that content is often an uncached/ID-mapping
+/// gap, not genuinely dead, mirroring the same guard [StreamSourcesService.fetch]
+/// uses on the player path.
 class AvailabilityProber {
   AvailabilityProber(this._sources, this._availability);
 
@@ -56,7 +56,7 @@ class AvailabilityProber {
         final r = pending[next++]; // sync read+increment: no race on the event loop
         try {
           final (ok, isAnime) = await _hasStreams(mediaType, r);
-          // Never record a negative for anime/JA-KO content purely from an
+          // Never record a negative for anime/JA-KO-ZH content purely from an
           // empty result: that's often just an uncached-only title or an
           // ID-mapping gap, not genuinely dead (see fetch()'s matching
           // guard for the player path). Leaving it unrecorded keeps it
