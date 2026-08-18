@@ -68,7 +68,10 @@ class TvDetailsCubit extends Cubit<TvDetailsState> {
         return;
       } catch (_) {
         if (attempt == _maxAttempts) {
-          emit(state.copyWith(isLoadingDetails: false, errorMessage: 'Failed to load show details.'));
+          emit(state.copyWith(
+            isLoadingDetails: false,
+            errorMessage: "Having trouble reaching the server. It's probably just a blip - try again in a minute.",
+          ));
           return;
         }
         await Future.delayed(Duration(milliseconds: 500 * attempt));
@@ -90,7 +93,10 @@ class TvDetailsCubit extends Cubit<TvDetailsState> {
         return;
       } catch (_) {
         if (attempt == _maxAttempts) {
-          emit(state.copyWith(isLoadingEpisodes: false, errorMessage: 'Failed to load episodes.'));
+          emit(state.copyWith(
+            isLoadingEpisodes: false,
+            errorMessage: "Having trouble reaching the server. It's probably just a blip - try again in a minute.",
+          ));
           return;
         }
         await Future.delayed(Duration(milliseconds: 500 * attempt));
