@@ -97,6 +97,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 );
               } else if (state is HomeLoaded) {
+                final trending = state2.showAdultContent ? state.trendingMovies.movies! : state.trendingMovies.movies!.where((movie) => !movie.adult).toList();
+                final upcoming = state2.showAdultContent ? state.upcomingMovies.movies! : state.upcomingMovies.movies!.where((movie) => !movie.adult).toList();
+                final nowPlaying = state2.showAdultContent ? state.nowPlayingMovies.movies! : state.nowPlayingMovies.movies!.where((movie) => !movie.adult).toList();
+                final topRated = state2.showAdultContent ? state.topRatedMovies.movies! : state.topRatedMovies.movies!.where((movie) => !movie.adult).toList();
+                final popular = state2.showAdultContent ? state.popularMovies.movies! : state.popularMovies.movies!.where((movie) => !movie.adult).toList();
                 return FadeIn(
                   child: CustomMaterialIndicator(
                     indicatorBuilder: (context, _) {
@@ -113,50 +118,50 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: SingleChildScrollView(
                         child: Column(
                           children: [
-                            HeroCarousel(movies: state2.showAdultContent ? state.trendingMovies.movies! : state.trendingMovies.movies!.where((movie) => !movie.adult).toList()),
+                            HeroCarousel(movies: trending),
                             ContinueWatchingSection(historyService: sl<PlaybackHistoryService>()),
-                            Header(
-                              title: 'Upcoming Movies',
-                              onTap: () {
-                                context.push('/all/upcoming', extra: 'Upcoming Movies');
-                              },
-                            ),
-                            MoviesSection(
-                              movies: state2.showAdultContent ? state.upcomingMovies.movies! : state.upcomingMovies.movies!.where((movie) => !movie.adult).toList(),
-                              isHomePage: true,
-                            ),
+                            // Each row (header + section) only renders when it
+                            // actually has titles - an availability fill that
+                            // couldn't refill a row to any titles hides it
+                            // instead of showing an empty header.
+                            if (upcoming.isNotEmpty) ...[
+                              Header(
+                                title: 'Upcoming Movies',
+                                onTap: () {
+                                  context.push('/all/upcoming', extra: 'Upcoming Movies');
+                                },
+                              ),
+                              MoviesSection(movies: upcoming, isHomePage: true),
+                            ],
                             const Header(title: 'Movie Genres'),
                             MovieGenres(genres: state.genres),
-                            Header(
-                              title: 'Now Playing Movies',
-                              onTap: () {
-                                context.push('/all/now_playing', extra: 'Now Playing Movies');
-                              },
-                            ),
-                            MoviesSection(
-                              movies: state2.showAdultContent ? state.nowPlayingMovies.movies! : state.nowPlayingMovies.movies!.where((movie) => !movie.adult).toList(),
-                              isHomePage: true,
-                            ),
-                            Header(
-                              title: 'Top Rated Movies',
-                              onTap: () {
-                                context.push('/all/top_rated', extra: 'Top Rated Movies');
-                              },
-                            ),
-                            MoviesSection(
-                              movies: state2.showAdultContent ? state.topRatedMovies.movies! : state.topRatedMovies.movies!.where((movie) => !movie.adult).toList(),
-                              isHomePage: true,
-                            ),
-                            Header(
-                              title: 'Popular Movies',
-                              onTap: () {
-                                context.push('/all/popular', extra: 'Popular Movies');
-                              },
-                            ),
-                            MoviesSection(
-                              movies: state2.showAdultContent ? state.popularMovies.movies! : state.popularMovies.movies!.where((movie) => !movie.adult).toList(),
-                              isHomePage: true,
-                            ),
+                            if (nowPlaying.isNotEmpty) ...[
+                              Header(
+                                title: 'Now Playing Movies',
+                                onTap: () {
+                                  context.push('/all/now_playing', extra: 'Now Playing Movies');
+                                },
+                              ),
+                              MoviesSection(movies: nowPlaying, isHomePage: true),
+                            ],
+                            if (topRated.isNotEmpty) ...[
+                              Header(
+                                title: 'Top Rated Movies',
+                                onTap: () {
+                                  context.push('/all/top_rated', extra: 'Top Rated Movies');
+                                },
+                              ),
+                              MoviesSection(movies: topRated, isHomePage: true),
+                            ],
+                            if (popular.isNotEmpty) ...[
+                              Header(
+                                title: 'Popular Movies',
+                                onTap: () {
+                                  context.push('/all/popular', extra: 'Popular Movies');
+                                },
+                              ),
+                              MoviesSection(movies: popular, isHomePage: true),
+                            ],
                             const SizedBox(height: 24),
                           ],
                         ),

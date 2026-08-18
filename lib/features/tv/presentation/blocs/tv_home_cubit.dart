@@ -5,7 +5,6 @@ import '../../../../core/dependency_injection/di.dart';
 import '../../../../core/playback/domain/entities/playback_media_type.dart';
 import '../../../../core/playback/domain/entities/playback_request.dart';
 import '../../../../core/playback/services/availability_prober.dart';
-import '../../../../core/playback/services/stream_availability_service.dart';
 import '../../../movies/data/models/genre_model.dart';
 import '../../data/datasources/remote/tmdb_tv_datasource.dart';
 import '../../data/models/tv_model.dart';
@@ -143,6 +142,11 @@ class TvHomeCubit extends Cubit<TvHomeState> {
 
   final TmdbTvDatasource _datasource;
 
+  // Bumped on every loadHome() call (e.g. pull-to-refresh while a previous
+  // call's background availability fill is still running) so a superseded
+  // in-flight load's emits are dropped instead of overwriting fresher rows.
+  int _generation = 0;
+
   /// Extra genre rows shown on the home screen (TMDB TV genre id -> title), so
   /// there's plenty to browse beyond the main category rows.
   static const List<(int, String)> _homeGenres = [
@@ -159,7 +163,16 @@ class TvHomeCubit extends Cubit<TvHomeState> {
   /// Loads every home row (categories + genre rows + the genre list) in
   /// parallel so the screen fills in one pass.
   Future<void> loadHome() async {
-    emit(state.copyWith(isLoading: true, errorMessage: null));
+    // This load's generation: if another loadHome() is dispatched (e.g.
+    // pull-to-refresh) before this one finishes, `_generation` moves past
+    // `gen` and every emit below becomes a no-op - the newer load wins and
+    // this one's (possibly stale) results never overwrite it.
+    final gen = ++_generation;
+    void safeEmit(TvHomeState s) {
+      if (gen == _generation && !isClosed) emit(s);
+    }
+
+    safeEmit(state.copyWith(isLoading: true, errorMessage: null));
     try {
       final mainFuture = Future.wait([
         _datasource.getTrendingTv(),
@@ -168,19 +181,21 @@ class TvHomeCubit extends Cubit<TvHomeState> {
         _datasource.getOnTheAirTv(),
         _datasource.getAiringTodayTv(),
       ]);
+      // Keep genreId alongside each row (needed to top up that genre from
+      // later pages below); dropped once genre sections reach the state.
       final genreRowsFuture = Future.wait(_homeGenres.map((g) async {
         try {
           final r = await _datasource.discoverTvByGenre(genreId: g.$1);
-          return (g.$2, r.shows);
+          return (g.$1, g.$2, r.shows);
         } catch (_) {
-          return (g.$2, const <TvModel>[]);
+          return (g.$1, g.$2, const <TvModel>[]);
         }
       }));
       // Genres are non-critical: a failure here shouldn't blank the rows.
       final genresListFuture = _datasource.getTvGenres().catchError((_) => const <GenreModel>[]);
 
       final results = await mainFuture;
-      final genreRows = (await genreRowsFuture).where((s) => s.$2.isNotEmpty).toList();
+      final genreRowsRaw = (await genreRowsFuture).where((s) => s.$3.isNotEmpty).toList();
       final genres = await genresListFuture;
 
       final trending = results[0].shows;
@@ -188,20 +203,21 @@ class TvHomeCubit extends Cubit<TvHomeState> {
       final topRated = results[2].shows;
       final onTheAir = results[3].shows;
       final airingToday = results[4].shows;
-      emit(state.copyWith(
+      safeEmit(state.copyWith(
         trending: trending,
         popular: popular,
         topRated: topRated,
         onTheAir: onTheAir,
         airingToday: airingToday,
-        genreSections: genreRows,
+        genreSections: [for (final s in genreRowsRaw) (s.$2, s.$3)],
         genres: genres,
         isLoading: false,
       ));
 
       // Background availability fill (option B): rows are shown above; probe each
-      // show via AIOStreams (S1E1 then a recent episode), top up the main rows to
-      // target across a few pages, and re-emit with unstreamable shows removed.
+      // show via AIOStreams (a recent episode then S1E1), top up every pageable
+      // row - including each genre row - to target across a few pages, and
+      // re-emit with unstreamable shows removed.
       final prober = sl<AvailabilityProber>();
       PlaybackRequest req(TvModel s) => PlaybackRequest(
             tmdbId: s.id,
@@ -227,16 +243,23 @@ class TvHomeCubit extends Cubit<TvHomeState> {
         topRatedF = await fill(topRated, (p) => _datasource.getTopRatedTv(page: p).then((r) => r.shows));
         onTheAirF = await fill(onTheAir, (p) => _datasource.getOnTheAirTv(page: p).then((r) => r.shows));
         airingTodayF = await fill(airingToday, (p) => _datasource.getAiringTodayTv(page: p).then((r) => r.shows));
-        // Genre sections: probe + re-filter only (no extra pages, to bound cost).
-        await prober.probe(PlaybackMediaType.tv, [for (final s in genreRows) ...s.$2].map(req).toList());
-        final avail = sl<StreamAvailabilityService>();
-        List<TvModel> keep(List<TvModel> xs) =>
-            xs.where((s) => !avail.isKnownUnavailable(PlaybackMediaType.tv, s.id)).toList();
-        genreSectionsF = [for (final s in genreRows) (s.$1, keep(s.$2))];
+        // Genre rows top up too (each capped at the prober's default 3 pages) -
+        // without this, a genre whose page-1 picks skew unavailable (e.g.
+        // Crime/Mystery) ends up nearly empty instead of refilled.
+        genreSectionsF = await Future.wait(genreRowsRaw.map((s) async {
+          try {
+            final filled = await fill(s.$3, (p) => _datasource.discoverTvByGenre(genreId: s.$1, page: p).then((r) => r.shows));
+            return (s.$2, filled);
+          } catch (_) {
+            return (s.$2, s.$3); // fail-open: keep this genre row as first shown
+          }
+        }));
       } catch (_) {
         return; // fail-open
       }
-      if (isClosed) return;
+      // Superseded by a newer loadHome() (e.g. pull-to-refresh) while probing
+      // ran - drop this result rather than overwrite the fresher one.
+      if (gen != _generation || isClosed) return;
       emit(state.copyWith(
         trending: trendingF,
         popular: popularF,
@@ -246,7 +269,7 @@ class TvHomeCubit extends Cubit<TvHomeState> {
         genreSections: genreSectionsF,
       ));
     } catch (_) {
-      emit(state.copyWith(isLoading: false, errorMessage: 'Failed to load TV shows.'));
+      safeEmit(state.copyWith(isLoading: false, errorMessage: 'Failed to load TV shows.'));
     }
   }
 

@@ -227,11 +227,21 @@ class StreamSourcesService {
     return null;
   }
 
-  /// Availability probe for a whole TV **show** (for catalog filtering). Tries
-  /// S1E1 first; if that has no playable stream, falls back to the most recent
-  /// aired episode before giving up - older shows often have early seasons
-  /// missing while recent seasons are cached, so S1E1 alone gives false
-  /// negatives. Returns true if either has at least one stream.
+  /// Availability probe for a whole TV **show** (for catalog filtering).
+  /// Probes a *representative* episode rather than trusting S1E1 alone: older
+  /// / long-running shows often have their pilot fall out of the debrid cache
+  /// while current seasons stay well-seeded, so S1E1-only checks produce false
+  /// negatives (e.g. Crime/Mystery catalog shows). Order:
+  ///   1. the most recently aired episode (from TMDB metadata) - if it has a
+  ///      playable stream, the show is available;
+  ///   2. else fall back to S1E1 (skipped if it *is* the recent episode);
+  ///   3. only when BOTH representative probes come back genuinely empty is
+  ///      the show marked unavailable.
+  /// Never probes season 0/specials (`_lastAiredEpisode` only returns season
+  /// >= 1) or an unaired episode (`last_episode_to_air` is always aired).
+  /// Uses strict lookups, so a genuine backend/network error propagates
+  /// instead of being read as "no streams" - the caller ([AvailabilityProber])
+  /// fails open on any thrown error.
   Future<bool> tvShowHasStreams({required int tmdbId, required String title, String? posterPath}) async {
     PlaybackRequest req(int s, int e) => PlaybackRequest(
           tmdbId: tmdbId,
@@ -241,32 +251,36 @@ class StreamSourcesService {
           episodeNumber: e,
           posterPath: posterPath,
         );
-    if ((await fetchQuiet(req(1, 1))).isNotEmpty) return true;
+
     final recent = await _lastAiredEpisode(tmdbId);
-    if (recent == null || (recent.$1 == 1 && recent.$2 == 1)) return false; // nothing new to try
-    return (await fetchQuiet(req(recent.$1, recent.$2))).isNotEmpty;
+    final hasDistinctRecent = recent != null && !(recent.$1 == 1 && recent.$2 == 1);
+
+    if (hasDistinctRecent && (await fetchQuiet(req(recent!.$1, recent.$2), strict: true)).isNotEmpty) {
+      return true;
+    }
+    if ((await fetchQuiet(req(1, 1), strict: true)).isNotEmpty) return true;
+    return false; // both representative probes came back genuinely empty
   }
 
   /// The most recent aired (season, episode) for a show from TMDB's
-  /// `last_episode_to_air`, or null if unavailable.
+  /// `last_episode_to_air`, or null when the show genuinely has no such data.
+  /// Deliberately does NOT swallow request errors - a TMDB lookup failure
+  /// propagates so [tvShowHasStreams] fails open instead of misreading it as
+  /// "no recent episode to try".
   Future<(int, int)?> _lastAiredEpisode(int tmdbId) async {
-    try {
-      final r = await _dio.get(
-        'https://api.themoviedb.org/3/tv/$tmdbId',
-        queryParameters: {'api_key': _tmdbKey},
-        options: Options(receiveTimeout: const Duration(seconds: 10)),
-      );
-      final data = r.data is String ? jsonDecode(r.data as String) : r.data;
-      final le = data is Map ? data['last_episode_to_air'] : null;
-      if (le is Map && le['season_number'] is int && le['episode_number'] is int) {
-        final s = le['season_number'] as int;
-        final e = le['episode_number'] as int;
-        if (s >= 1 && e >= 1) return (s, e);
-      }
-    } catch (_) {
-      // unreachable / no data
+    final r = await _dio.get(
+      'https://api.themoviedb.org/3/tv/$tmdbId',
+      queryParameters: {'api_key': _tmdbKey},
+      options: Options(receiveTimeout: const Duration(seconds: 10)),
+    );
+    final data = r.data is String ? jsonDecode(r.data as String) : r.data;
+    final le = data is Map ? data['last_episode_to_air'] : null;
+    if (le is Map && le['season_number'] is int && le['episode_number'] is int) {
+      final s = le['season_number'] as int;
+      final e = le['episode_number'] as int;
+      if (s >= 1 && e >= 1) return (s, e); // s >= 1 excludes specials/season 0
     }
-    return null;
+    return null; // no last-aired episode recorded - not an error
   }
 
   /// Rolling-buffer preparation: keeps roughly the next [count] episodes ahead
@@ -367,9 +381,10 @@ class StreamSourcesService {
   }
 
   /// Like [fetch] but without recording stream-availability (used for
-  /// background look-ahead so probing future episodes has no browsing side effects).
-  Future<List<StreamSource>> fetchQuiet(PlaybackRequest request) async {
-    final (sources, _) = await _fetchSources(request);
+  /// background look-ahead so probing future episodes has no browsing side
+  /// effects). [strict]: see [_fetchSources].
+  Future<List<StreamSource>> fetchQuiet(PlaybackRequest request, {bool strict = false}) async {
+    final (sources, _) = await _fetchSources(request, strict: strict);
     return sources;
   }
 
@@ -389,12 +404,18 @@ class StreamSourcesService {
 
   String _prepareBase() => _prepareUrl.replaceAll(RegExp(r'/+$'), '');
 
-  Future<(List<StreamSource>, bool)> _fetchSources(PlaybackRequest request) async {
+  /// [strict] is for background availability probing only (never the player
+  /// path): when true, a genuine lookup failure (IMDb-id resolution or the
+  /// AIOStreams request itself throwing) is rethrown instead of being read as
+  /// "no streams", so callers like [AvailabilityProber] can fail open on a
+  /// real error rather than recording a false negative. Normal playback
+  /// (`fetch`) always calls this with `strict: false`, unchanged.
+  Future<(List<StreamSource>, bool)> _fetchSources(PlaybackRequest request, {bool strict = false}) async {
     // Resolve the IMDb id (AIOStreams needs it) and the original language
     // (drives anime detection + audio ranking) up front, in parallel.
     final meta = await Future.wait([
-      _imdbId(request).catchError((_) => null),
-      originalLanguage(request).catchError((_) => null),
+      strict ? _imdbId(request) : _imdbId(request).catchError((_) => null),
+      originalLanguage(request).catchError((_) => null), // ranking-only, never worth failing a probe over
     ]);
     final imdb = meta[0];
     final origLang = meta[1];
@@ -409,6 +430,7 @@ class StreamSourcesService {
         final aio = await _fetchAio(request, imdb, origLang);
         if (aio.isNotEmpty) return (aio, isAnime);
       } catch (_) {
+        if (strict) rethrow;
         // ignore - the caller shows a "no source" screen
       }
     }

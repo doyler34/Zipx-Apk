@@ -48,6 +48,11 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   //Trending
   List<MovieModel> trendingMovies = [];
 
+  // Bumped on every LoadHome dispatch (e.g. pull-to-refresh while a previous
+  // load's background availability fill is still running) so a stale
+  // in-flight load's emits are dropped instead of overwriting fresher rows.
+  int _generation = 0;
+
   HomeBloc({
     required this.getGenres,
     required this.getPopular,
@@ -57,19 +62,28 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     required this.getTrending,
   }) : super(HomeInitial()) {
     on<LoadHome>((event, emit) async {
+      // This load's generation: if another LoadHome is dispatched (e.g.
+      // pull-to-refresh) before this one finishes, `_generation` moves past
+      // `gen` and every emit below becomes a no-op - the newer load wins and
+      // this one's (possibly stale) results never overwrite it.
+      final gen = ++_generation;
+      void safeEmit(HomeState s) {
+        if (gen == _generation && !emit.isDone) emit(s);
+      }
+
       final hasConnection = await HelperFunctions.hasConnection();
       if (!hasConnection) {
-        emit(const HomeError('No internet connection'));
+        safeEmit(const HomeError('No internet connection'));
         return;
       }
 
-      emit(HomeLoading());
+      safeEmit(HomeLoading());
 
       try {
         final popularResult = await getPopular(Params());
 
         if (popularResult.movies!.isEmpty) {
-          emit(const HomeError('Error while fetching data'));
+          safeEmit(const HomeError('Error while fetching data'));
         } else {
           popularMovies = popularResult.movies!;
         }
@@ -77,7 +91,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         final upcomingResult = await getUpcoming(Params());
 
         if (upcomingResult.movies!.isEmpty) {
-          emit(const HomeError('Error while fetching data'));
+          safeEmit(const HomeError('Error while fetching data'));
         } else {
           upcomingMovies = upcomingResult.movies!;
         }
@@ -85,7 +99,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         final genresResult = await getGenres(NoParams());
 
         if (genresResult.isEmpty) {
-          emit(const HomeError('Error while fetching data'));
+          safeEmit(const HomeError('Error while fetching data'));
         } else {
           genres = genresResult;
         }
@@ -93,14 +107,14 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         final nowPlayingResult = await getNowPlaying(Params());
 
         if (nowPlayingResult.movies!.isEmpty) {
-          emit(const HomeError('Error while fetching data'));
+          safeEmit(const HomeError('Error while fetching data'));
         } else {
           nowPlayingMovies = nowPlayingResult.movies!;
         }
 
         final topRatedResult = await getTopRated(Params());
         if (topRatedResult.movies!.isEmpty) {
-          emit(const HomeError('Error while fetching data'));
+          safeEmit(const HomeError('Error while fetching data'));
         } else {
           topRatedMovies = topRatedResult.movies!;
         }
@@ -108,10 +122,10 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         final trendingResult = await getTrending(NoParams());
 
         if (trendingResult.movies!.isEmpty) {
-          emit(const HomeError('Error while fetching data'));
+          safeEmit(const HomeError('Error while fetching data'));
         } else {
           trendingMovies = trendingResult.movies!;
-          emit(HomeLoaded(
+          safeEmit(HomeLoaded(
             popularMovies: popularResult,
             upcomingMovies: upcomingResult,
             genres: genresResult,
@@ -122,9 +136,11 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           // Background availability fill (option B): the rows are already shown
           // above; now probe each title via AIOStreams, top up the pageable rows
           // to their target across a few pages, and re-emit with the titles that
-          // have no playable stream removed.
+          // have no playable stream removed. Guarded by `gen` so a superseded
+          // load's fill can never land after a fresher one.
           await _fillAvailability(
             emit,
+            gen: gen,
             genres: genresResult,
             popular: popularResult,
             upcoming: upcomingResult,
@@ -134,7 +150,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           );
         }
       } catch (e) {
-        emit(const HomeError('Error while fetching data'));
+        safeEmit(const HomeError('Error while fetching data'));
       }
     });
   }
@@ -145,6 +161,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   /// just leaves the rows as first shown.
   Future<void> _fillAvailability(
     Emitter<HomeState> emit, {
+    required int gen,
     required List<GenreModel> genres,
     required MoviesResultModel popular,
     required MoviesResultModel upcoming,
@@ -185,7 +202,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     } catch (_) {
       return; // fail-open
     }
-    if (emit.isDone) return;
+    // Superseded by a newer LoadHome (e.g. pull-to-refresh) while probing ran -
+    // drop this result rather than overwrite the fresher one.
+    if (gen != _generation || emit.isDone) return;
     MoviesResultModel wrap(List<MovieModel> ms, MoviesResultModel src) =>
         MoviesResultModel(movies: ms, totalPages: src.totalPages);
     emit(HomeLoaded(

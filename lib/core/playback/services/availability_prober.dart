@@ -9,8 +9,9 @@ import 'stream_sources_service.dart';
 ///
 /// It reuses the exact same lookup the player uses ([StreamSourcesService.
 /// fetchQuiet]) - a non-empty result means AIOStreams returned at least one
-/// playable stream. For TV it uses [StreamSourcesService.tvShowHasStreams], which
-/// tries S1E1 then a recent episode (avoids false negatives on older shows).
+/// playable stream. For TV it uses [StreamSourcesService.tvShowHasStreams],
+/// which probes a recent aired episode then falls back to S1E1 (avoids false
+/// negatives from using S1E1 alone as a proxy for the whole show).
 /// Checks run concurrently with a small pool (not sequentially, not
 /// all-at-once), only for titles that actually need a (re)check, and are
 /// **fail-open**: a lookup error never records a negative.
@@ -24,7 +25,9 @@ class AvailabilityProber {
     if (mediaType == PlaybackMediaType.tv) {
       return _sources.tvShowHasStreams(tmdbId: r.tmdbId, title: r.title, posterPath: r.posterPath);
     }
-    return _sources.fetchQuiet(r).then((s) => s.isNotEmpty);
+    // strict: true - a genuine backend/network failure throws instead of
+    // reading as "no streams", so the catch below fails open on it.
+    return _sources.fetchQuiet(r, strict: true).then((s) => s.isNotEmpty);
   }
 
   /// Probes [requests] (each a full [PlaybackRequest]) for [mediaType]. Skips
