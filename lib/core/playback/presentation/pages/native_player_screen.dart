@@ -513,38 +513,35 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
 
   /// Submits the best uncached result for server-side preparation, then records
   /// it under Profile → Downloads so it's tracked (not fire-and-forget).
+  ///
+  /// Uses [StreamSourcesService.prepareBestCandidate], which tries alternate
+  /// candidates if the top-ranked one turns out to be a dead/unseeded torrent,
+  /// instead of blindly submitting `_uncached.first` and hoping it isn't dead -
+  /// a dead torrent never reports "failed" on its own, so a single-candidate
+  /// submit could silently stall forever with no way to know it needed a retry.
   Future<void> _downloadUncached() async {
     if (_preparing || _uncached.isEmpty) return;
     setState(() {
       _preparing = true;
       _prepareError = null;
     });
-    // For a TV episode, prefer a single-file release (fileIndex -1/absent) so a
-    // manual prepare never pulls a whole season/complete pack either; fall back
-    // to the top candidate if only packs exist.
-    final src = widget.request.isTvEpisode
-        ? _uncached.firstWhere(
-            (s) => s.fileIndex == null || s.fileIndex! < 0,
-            orElse: () => _uncached.first,
-          )
-        : _uncached.first;
-    final jobId = await _service.submitForPreparation(widget.request, src);
+    final result = await _service.prepareBestCandidate(widget.request);
     if (!mounted) return;
-    if (jobId != null) {
+    if (result != null) {
       final downloads = sl<DownloadsService>();
       // Dedup: only create a card if the backend job isn't already tracked.
-      if (downloads.get(jobId) == null) {
+      if (downloads.get(result.jobId) == null) {
         final now = DateTime.now().millisecondsSinceEpoch;
         unawaited(downloads.upsert(DownloadItem(
-          jobId: jobId,
+          jobId: result.jobId,
           tmdbId: widget.request.tmdbId,
           mediaType: widget.request.isTvEpisode ? 'tv' : 'movie',
           title: widget.request.title,
           poster: widget.request.posterPath,
           season: widget.request.seasonNumber,
           episode: widget.request.episodeNumber,
-          hash: src.infohash,
-          fileIdx: src.fileIndex,
+          hash: result.source?.infohash,
+          fileIdx: result.source?.fileIndex,
           status: DownloadStatus.queued,
           createdAt: now,
           updatedAt: now,
@@ -553,7 +550,7 @@ class _NativePlayerScreenState extends State<NativePlayerScreen> with WidgetsBin
     }
     setState(() {
       _preparing = false;
-      if (jobId != null) {
+      if (result != null) {
         _prepareSubmitted = true;
       } else {
         _prepareError = 'Couldn\'t start preparing this title. Please try again.';

@@ -24,6 +24,7 @@ db.exec(`
     error          TEXT,
     needsSelection INTEGER NOT NULL DEFAULT 1,
     rdCheckedAt    INTEGER NOT NULL DEFAULT 0,
+    progressUpdatedAt INTEGER NOT NULL DEFAULT 0,
     createdAt      INTEGER NOT NULL,
     updatedAt      INTEGER NOT NULL
   );
@@ -31,9 +32,16 @@ db.exec(`
     ON jobs (tmdbId, season, episode, hash, status);
 `);
 
-// Lightweight migration for a DB created before fileIdx existed.
+// Lightweight migrations for a DB created before these columns existed.
 const cols = db.prepare('PRAGMA table_info(jobs)').all().map((c) => c.name);
 if (!cols.includes('fileIdx')) db.exec('ALTER TABLE jobs ADD COLUMN fileIdx INTEGER');
+if (!cols.includes('progressUpdatedAt')) {
+  db.exec('ALTER TABLE jobs ADD COLUMN progressUpdatedAt INTEGER NOT NULL DEFAULT 0');
+  // Backfill from createdAt (not "now") so a job that's genuinely been
+  // stalled since long before this migration is correctly recognised as
+  // stalled on its very next refresh, rather than getting a fresh clock.
+  db.exec(`UPDATE jobs SET progressUpdatedAt = createdAt WHERE progressUpdatedAt = 0`);
+}
 
 const now = () => Date.now();
 
@@ -69,9 +77,9 @@ export const Store = {
     const ts = now();
     db.prepare(
       `INSERT INTO jobs
-        (id,tmdbId,mediaType,title,season,episode,hash,fileIdx,rdId,status,progress,speed,error,needsSelection,rdCheckedAt,createdAt,updatedAt)
+        (id,tmdbId,mediaType,title,season,episode,hash,fileIdx,rdId,status,progress,speed,error,needsSelection,rdCheckedAt,progressUpdatedAt,createdAt,updatedAt)
        VALUES
-        (@id,@tmdbId,@mediaType,@title,@season,@episode,@hash,@fileIdx,@rdId,@status,@progress,@speed,@error,@needsSelection,0,@createdAt,@updatedAt)`,
+        (@id,@tmdbId,@mediaType,@title,@season,@episode,@hash,@fileIdx,@rdId,@status,@progress,@speed,@error,@needsSelection,0,@progressUpdatedAt,@createdAt,@updatedAt)`,
     ).run({
       id,
       fileIdx: null,
@@ -81,6 +89,7 @@ export const Store = {
       speed: null,
       error: null,
       needsSelection: 1,
+      progressUpdatedAt: ts,
       createdAt: ts,
       updatedAt: ts,
       ...job,
@@ -99,7 +108,8 @@ export const Store = {
     db.prepare(
       `UPDATE jobs SET
          rdId=@rdId, status=@status, progress=@progress, speed=@speed, error=@error,
-         needsSelection=@needsSelection, rdCheckedAt=@rdCheckedAt, updatedAt=@updatedAt
+         needsSelection=@needsSelection, rdCheckedAt=@rdCheckedAt, progressUpdatedAt=@progressUpdatedAt,
+         updatedAt=@updatedAt
        WHERE id=@id`,
     ).run(merged);
     return this.get(id);

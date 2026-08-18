@@ -27,6 +27,14 @@ const MAX_FILE_IDX = 10_000;
 // Don't hammer TorBox: a job refreshes from TorBox at most this often, no matter
 // how frequently the app polls GET /status.
 const DEBRID_REFRESH_MS = 10_000;
+// A torrent with too few/no seeders never reports back an explicit
+// failed/dead state from TorBox on its own - it just sits at "stalled" (or
+// even "queued", if it can't fetch metadata) indefinitely. Without a timeout
+// here, a job like that would never surface as failed, so neither a user (via
+// the Downloads screen's Retry) nor the background prepare buffer (which
+// tries the next candidate on a terminal failure) would ever know to move on
+// - it would just look like it's downloading forever.
+const STALL_TIMEOUT_MS = 20 * 60 * 1000; // 20 min without any progress increase
 
 // Health check is public; everything else needs the shared app key.
 app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -88,12 +96,29 @@ async function refresh(job) {
     return Store.update(job.id, { status: 'failed', error: 'torrent_removed', rdCheckedAt: Date.now() });
   }
 
-  const status = mapStatus(t);
+  let status = mapStatus(t);
+  const newProgress = typeof t.progress === 'number' ? Math.round(t.progress * 100) : job.progress;
+  // Track when progress last genuinely advanced (or default to createdAt for
+  // a job that's never reported one), so a torrent stuck at the same
+  // percentage for too long can be recognised as stalled.
+  const progressAdvanced = typeof newProgress === 'number' && newProgress > (job.progress ?? -1);
+  const progressUpdatedAt = progressAdvanced ? Date.now() : (job.progressUpdatedAt || job.createdAt);
+  let error = status === 'failed' ? (t.download_state || 'failed') : null;
+
+  if (status !== 'ready' && status !== 'failed' && Date.now() - progressUpdatedAt > STALL_TIMEOUT_MS) {
+    status = 'failed';
+    error = 'stalled_no_progress';
+    // Best-effort: free the dead torrent's TorBox slot instead of leaving it
+    // to sit around consuming account capacity.
+    try { await TorBox.delete(job.rdId); } catch { /* already gone / transient - fine */ }
+  }
+
   return Store.update(job.id, {
     status,
-    progress: typeof t.progress === 'number' ? Math.round(t.progress * 100) : job.progress,
+    progress: newProgress,
     speed: typeof t.download_speed === 'number' ? t.download_speed : null,
-    error: status === 'failed' ? (t.download_state || 'failed') : null,
+    error,
+    progressUpdatedAt,
     rdCheckedAt: Date.now(),
   });
 }
