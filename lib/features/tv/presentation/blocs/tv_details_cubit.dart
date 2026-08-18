@@ -49,16 +49,30 @@ class TvDetailsCubit extends Cubit<TvDetailsState> {
 
   final TmdbTvDatasource _datasource;
 
+  // A transient network hiccup shouldn't need the user to notice something's
+  // wrong and tap a button - retry silently a couple more times first, with a
+  // short gap between attempts. Only a fetch that keeps failing (no internet,
+  // TMDB genuinely down) ever reaches the user, and even then the UI's Retry
+  // button is a real fallback, not the primary way transient failures recover.
+  static const int _maxAttempts = 3;
+
   Future<void> loadDetails(int tvId) async {
     emit(state.copyWith(isLoadingDetails: true, errorMessage: null));
-    try {
-      final details = await _datasource.getTvDetails(id: tvId);
-      emit(state.copyWith(details: details, isLoadingDetails: false));
-      if (details.seasons.isNotEmpty) {
-        await loadSeason(tvId, details.seasons.first.seasonNumber);
+    for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
+      try {
+        final details = await _datasource.getTvDetails(id: tvId);
+        emit(state.copyWith(details: details, isLoadingDetails: false));
+        if (details.seasons.isNotEmpty) {
+          await loadSeason(tvId, details.seasons.first.seasonNumber);
+        }
+        return;
+      } catch (_) {
+        if (attempt == _maxAttempts) {
+          emit(state.copyWith(isLoadingDetails: false, errorMessage: 'Failed to load show details.'));
+          return;
+        }
+        await Future.delayed(Duration(milliseconds: 500 * attempt));
       }
-    } catch (_) {
-      emit(state.copyWith(isLoadingDetails: false, errorMessage: 'Failed to load show details.'));
     }
   }
 
@@ -69,11 +83,18 @@ class TvDetailsCubit extends Cubit<TvDetailsState> {
     // anything went wrong (the error banner only shows when episodes is
     // empty; stale data would silently hide it).
     emit(state.copyWith(selectedSeason: seasonNumber, episodes: const [], isLoadingEpisodes: true, errorMessage: null));
-    try {
-      final season = await _datasource.getSeasonDetails(tvId: tvId, seasonNumber: seasonNumber);
-      emit(state.copyWith(episodes: season.episodes, isLoadingEpisodes: false));
-    } catch (_) {
-      emit(state.copyWith(isLoadingEpisodes: false, errorMessage: 'Failed to load episodes.'));
+    for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
+      try {
+        final season = await _datasource.getSeasonDetails(tvId: tvId, seasonNumber: seasonNumber);
+        emit(state.copyWith(episodes: season.episodes, isLoadingEpisodes: false));
+        return;
+      } catch (_) {
+        if (attempt == _maxAttempts) {
+          emit(state.copyWith(isLoadingEpisodes: false, errorMessage: 'Failed to load episodes.'));
+          return;
+        }
+        await Future.delayed(Duration(milliseconds: 500 * attempt));
+      }
     }
   }
 }

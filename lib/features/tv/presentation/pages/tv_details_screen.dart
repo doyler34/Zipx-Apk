@@ -91,7 +91,19 @@ class _TvDetailsBody extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
         if (state.errorMessage != null && state.details == null) {
-          return Center(child: Text(state.errorMessage!));
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(state.errorMessage!, style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: () => context.read<TvDetailsCubit>().loadDetails(show.id),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
         }
         final details = state.details;
 
