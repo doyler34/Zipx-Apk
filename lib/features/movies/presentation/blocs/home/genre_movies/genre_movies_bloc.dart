@@ -18,6 +18,19 @@ class GenreMoviesBloc extends Bloc<GenreMoviesEvent, GenreMoviesState> {
   int maxPages = 1;
   String genreId = '28';
 
+  // Guards against overlapping FetchMoreGenreMovies dispatches (e.g. the
+  // no-scroll-yet auto top-up below firing again before the previous page
+  // finished) corrupting currentPage/maxPages with a concurrent fetch.
+  bool _isFetchingMore = false;
+
+  // Bounds FetchMoreGenreMovies(auto: true) dispatches (fired by GenreMovies
+  // when a page came back too short to fill/scroll, so the normal
+  // scroll-triggered load-more would never fire on its own) - without this, a
+  // genre/year combo that's mostly unavailable could auto-fetch page after
+  // page indefinitely. A real user scroll is unbounded (uses auto: false).
+  static const int _autoTopUpBudget = 8;
+  int _autoTopUpsUsed = 0;
+
   GenreMoviesBloc({required this.getMoviesByGenre}) : super(GenreMoviesInitial()) {
     on<FetchGenreMovies>((event, emit) async {
       movies.clear();
@@ -25,6 +38,8 @@ class GenreMoviesBloc extends Bloc<GenreMoviesEvent, GenreMoviesState> {
       maxPages = 1;
       isMaxPage = false;
       genreId = '28';
+      _isFetchingMore = false;
+      _autoTopUpsUsed = 0;
 
       final hasConnection = await HelperFunctions.hasConnection();
       if (!hasConnection) {
@@ -57,35 +72,52 @@ class GenreMoviesBloc extends Bloc<GenreMoviesEvent, GenreMoviesState> {
     });
 
     on<FetchMoreGenreMovies>((event, emit) async {
-      final hasConnection = await HelperFunctions.hasConnection();
-      if (!hasConnection) {
-        return;
+      if (_isFetchingMore || isMaxPage) return;
+      if (event.auto) {
+        if (_autoTopUpsUsed >= _autoTopUpBudget) {
+          // Given up auto-topping-up (still not scrollable, so the user can't
+          // trigger a manual load-more either) - stop the spinner and show
+          // what was actually gathered instead of spinning forever.
+          isMaxPage = true;
+          emit(GenreMoviesLoaded(movies, isMaxPage, selectedYear));
+          return;
+        }
+        _autoTopUpsUsed++;
       }
-
-      currentPage++;
-
-      if (currentPage == maxPages) {
-        isMaxPage = true;
-      }
-
+      _isFetchingMore = true;
       try {
-        final genreMovies = await getMoviesByGenre(Params(
-          genreId: genreId,
-          page: currentPage,
-          year: selectedYear,
-        ));
-        movies.addAll(genreMovies.movies!);
-        maxPages = genreMovies.totalPages!;
+        final hasConnection = await HelperFunctions.hasConnection();
+        if (!hasConnection) {
+          return;
+        }
+
+        currentPage++;
 
         if (currentPage == maxPages) {
           isMaxPage = true;
         }
 
-        emit(GenreMoviesLoading());
-        emit(GenreMoviesLoaded(movies, isMaxPage, selectedYear));
-      } catch (e) {
-        currentPage--;
-        emit(const GenreMoviesError('Error fetching movies'));
+        try {
+          final genreMovies = await getMoviesByGenre(Params(
+            genreId: genreId,
+            page: currentPage,
+            year: selectedYear,
+          ));
+          movies.addAll(genreMovies.movies!);
+          maxPages = genreMovies.totalPages!;
+
+          if (currentPage == maxPages) {
+            isMaxPage = true;
+          }
+
+          emit(GenreMoviesLoading());
+          emit(GenreMoviesLoaded(movies, isMaxPage, selectedYear));
+        } catch (e) {
+          currentPage--;
+          emit(const GenreMoviesError('Error fetching movies'));
+        }
+      } finally {
+        _isFetchingMore = false;
       }
     });
   }

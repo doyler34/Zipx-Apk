@@ -25,6 +25,19 @@ class AllMoviesBloc extends Bloc<AllMoviesEvent, AllMoviesState> {
 
   bool isMaxPage = false;
 
+  // Guards against overlapping LoadMoreAllMovies dispatches (e.g. the
+  // no-scroll-yet auto top-up below firing again before the previous page
+  // finished) corrupting currentPage/maxPages with a concurrent fetch.
+  bool _isFetchingMore = false;
+
+  // Bounds LoadMoreAllMovies(auto: true) dispatches (fired by AllMoviesSection
+  // when a page came back too short to fill/scroll, so the normal
+  // scroll-triggered load-more would never fire on its own) - without this, a
+  // section that's mostly unavailable could auto-fetch page after page
+  // indefinitely. A real user scroll is unbounded (uses auto: false).
+  static const int _autoTopUpBudget = 8;
+  int _autoTopUpsUsed = 0;
+
   AllMoviesBloc({
     required this.getUpcoming,
     required this.getNowplaying,
@@ -36,6 +49,8 @@ class AllMoviesBloc extends Bloc<AllMoviesEvent, AllMoviesState> {
       currentPage = 1;
       maxPages = 1;
       isMaxPage = false;
+      _isFetchingMore = false;
+      _autoTopUpsUsed = 0;
 
       final hasConnection = await HelperFunctions.hasConnection();
       if (!hasConnection) {
@@ -79,41 +94,58 @@ class AllMoviesBloc extends Bloc<AllMoviesEvent, AllMoviesState> {
       }
     });
     on<LoadMoreAllMovies>((event, emit) async {
-      final hasConnection = await HelperFunctions.hasConnection();
-      if (!hasConnection) {
-        return;
+      if (_isFetchingMore || isMaxPage) return;
+      if (event.auto) {
+        if (_autoTopUpsUsed >= _autoTopUpBudget) {
+          // Given up auto-topping-up (still not scrollable, so the user can't
+          // trigger a manual load-more either) - stop the spinner and show
+          // what was actually gathered instead of spinning forever.
+          isMaxPage = true;
+          emit(AllMoviesLoaded(movies: allMovies, isMaxPage: isMaxPage));
+          return;
+        }
+        _autoTopUpsUsed++;
       }
-
-      currentPage++;
-
-      if (currentPage == maxPages) {
-        isMaxPage = true;
-      }
-
+      _isFetchingMore = true;
       try {
-        if (event.section == 'upcoming') {
-          final upcomingMovies = await getUpcoming(Params(page: currentPage));
-          allMovies.addAll(upcomingMovies.movies!);
-          maxPages = upcomingMovies.totalPages!;
-        } else if (event.section == 'now_playing') {
-          final nowplayingMovies = await getNowplaying(Params(page: currentPage));
-          allMovies.addAll(nowplayingMovies.movies!);
-          maxPages = nowplayingMovies.totalPages!;
-        } else if (event.section == 'top_rated') {
-          final topratedMovies = await getToprated(Params(page: currentPage));
-          allMovies.addAll(topratedMovies.movies!);
-          maxPages = topratedMovies.totalPages!;
-        } else if (event.section == 'popular') {
-          final popularMovies = await getPopular(Params(page: currentPage));
-          allMovies.addAll(popularMovies.movies!);
-          maxPages = popularMovies.totalPages!;
+        final hasConnection = await HelperFunctions.hasConnection();
+        if (!hasConnection) {
+          return;
         }
 
-        emit(AllMoviesLoading());
-        emit(AllMoviesLoaded(movies: allMovies, isMaxPage: isMaxPage));
-      } catch (e) {
-        currentPage--;
-        emit(const AllMoviesError(message: 'Error fetching movies'));
+        currentPage++;
+
+        if (currentPage == maxPages) {
+          isMaxPage = true;
+        }
+
+        try {
+          if (event.section == 'upcoming') {
+            final upcomingMovies = await getUpcoming(Params(page: currentPage));
+            allMovies.addAll(upcomingMovies.movies!);
+            maxPages = upcomingMovies.totalPages!;
+          } else if (event.section == 'now_playing') {
+            final nowplayingMovies = await getNowplaying(Params(page: currentPage));
+            allMovies.addAll(nowplayingMovies.movies!);
+            maxPages = nowplayingMovies.totalPages!;
+          } else if (event.section == 'top_rated') {
+            final topratedMovies = await getToprated(Params(page: currentPage));
+            allMovies.addAll(topratedMovies.movies!);
+            maxPages = topratedMovies.totalPages!;
+          } else if (event.section == 'popular') {
+            final popularMovies = await getPopular(Params(page: currentPage));
+            allMovies.addAll(popularMovies.movies!);
+            maxPages = popularMovies.totalPages!;
+          }
+
+          emit(AllMoviesLoading());
+          emit(AllMoviesLoaded(movies: allMovies, isMaxPage: isMaxPage));
+        } catch (e) {
+          currentPage--;
+          emit(const AllMoviesError(message: 'Error fetching movies'));
+        }
+      } finally {
+        _isFetchingMore = false;
       }
     });
   }

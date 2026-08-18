@@ -6,7 +6,7 @@ import 'package:movie_bloc_app/features/personalization/presentation/widgets/boo
 
 import '../../../data/models/movie_model.dart';
 
-class AllMoviesSection extends StatelessWidget {
+class AllMoviesSection extends StatefulWidget {
   const AllMoviesSection({super.key, required this.movies, required this.isMaxPage, required this.section});
 
   final List<MovieModel> movies;
@@ -14,26 +14,69 @@ class AllMoviesSection extends StatelessWidget {
   final String section;
 
   @override
-  Widget build(BuildContext context) {
-    final scrollController = ScrollController();
+  State<AllMoviesSection> createState() => _AllMoviesSectionState();
+}
 
+class _AllMoviesSectionState extends State<AllMoviesSection> {
+  // A page whose titles mostly got filtered for availability can be too
+  // short to fill the viewport, so it never becomes scrollable - the old
+  // scroll-position listener then never fires and the "load more" spinner
+  // spins forever. A persistent controller (instead of a fresh one every
+  // build) plus a post-frame check lets it top up on its own until the grid
+  // is actually scrollable; AllMoviesBloc budgets these auto top-ups (this
+  // widget gets torn down and recreated every load-more cycle via the
+  // bloc's interim Loading state, so any cap kept here wouldn't survive).
+  final _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _topUpIfNotScrollable());
+  }
+
+  @override
+  void didUpdateWidget(covariant AllMoviesSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.movies.length != oldWidget.movies.length) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _topUpIfNotScrollable());
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!widget.isMaxPage && _scrollController.position.pixels >= _scrollController.position.maxScrollExtent) {
+      context.read<AllMoviesBloc>().add(LoadMoreAllMovies(widget.section));
+    }
+  }
+
+  void _topUpIfNotScrollable() {
+    if (!mounted || widget.isMaxPage) return;
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.position.maxScrollExtent <= 0) {
+      context.read<AllMoviesBloc>().add(LoadMoreAllMovies(widget.section, auto: true));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: GridView.count(
         childAspectRatio: 9 / 16,
         padding: const EdgeInsets.all(6),
         crossAxisCount: 3,
-        controller: scrollController
-          ..addListener(() {
-            if (scrollController.position.pixels == scrollController.position.maxScrollExtent) {
-              context.read<AllMoviesBloc>().add(LoadMoreAllMovies(section));
-            }
-          }),
+        controller: _scrollController,
         crossAxisSpacing: 4,
         mainAxisSpacing: 4,
         children: [
-          for (final movie in movies) BookmarkCard(movie: movie),
-          if (!isMaxPage)
+          for (final movie in widget.movies) BookmarkCard(movie: movie),
+          if (!widget.isMaxPage)
             Center(
               child: LoadingAnimationWidget.beat(color: Theme.of(context).primaryColor, size: 50),
             ),
