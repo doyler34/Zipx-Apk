@@ -38,9 +38,11 @@ class _AllMoviesSectionState extends State<AllMoviesSection> {
   @override
   void didUpdateWidget(covariant AllMoviesSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.movies.length != oldWidget.movies.length) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _topUpIfNotScrollable());
-    }
+    // Always re-check, not just when movies.length changed: a load-more page
+    // that filtered down to zero newly-available titles leaves the count
+    // unchanged, and gating on the count meant that case never got another
+    // auto top-up dispatched - the spinner just hung forever.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _topUpIfNotScrollable());
   }
 
   @override

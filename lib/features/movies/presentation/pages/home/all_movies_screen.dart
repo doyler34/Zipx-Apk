@@ -1,6 +1,7 @@
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:movie_bloc_app/common/widgets/appbars_navbars/custom_appbar.dart';
 import 'package:movie_bloc_app/common/widgets/texts/centered_message.dart';
 import 'package:movie_bloc_app/core/dependency_injection/di.dart';
