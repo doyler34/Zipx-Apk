@@ -8,26 +8,30 @@ import 'stream_sources_service.dart';
 /// browse rows can drop the dead-ends.
 ///
 /// It reuses the exact same lookup the player uses ([StreamSourcesService.
-/// fetchQuiet]) - a non-empty result means AIOStreams returned at least one
-/// playable stream. For TV it uses [StreamSourcesService.tvShowHasStreams],
+/// probeHasStreams]) - a non-empty result means AIOStreams returned at least
+/// one playable stream. For TV it uses [StreamSourcesService.tvShowHasStreams],
 /// which probes a recent aired episode then falls back to S1E1 (avoids false
 /// negatives from using S1E1 alone as a proxy for the whole show).
 /// Checks run concurrently with a small pool (not sequentially, not
 /// all-at-once), only for titles that actually need a (re)check, and are
-/// **fail-open**: a lookup error never records a negative.
+/// **fail-open**: a lookup error never records a negative. An empty result for
+/// anime/JA-KO content also never records a negative (see [probe]) - AIOStreams
+/// coming back empty for that content is often an uncached/ID-mapping gap, not
+/// genuinely dead, mirroring the same guard [StreamSourcesService.fetch] uses
+/// on the player path.
 class AvailabilityProber {
   AvailabilityProber(this._sources, this._availability);
 
   final StreamSourcesService _sources;
   final StreamAvailabilityService _availability;
 
-  Future<bool> _hasStreams(PlaybackMediaType mediaType, PlaybackRequest r) {
+  Future<(bool hasStreams, bool isAnime)> _hasStreams(PlaybackMediaType mediaType, PlaybackRequest r) {
     if (mediaType == PlaybackMediaType.tv) {
       return _sources.tvShowHasStreams(tmdbId: r.tmdbId, title: r.title, posterPath: r.posterPath);
     }
     // strict: true - a genuine backend/network failure throws instead of
     // reading as "no streams", so the catch below fails open on it.
-    return _sources.fetchQuiet(r, strict: true).then((s) => s.isNotEmpty);
+    return _sources.probeHasStreams(r, strict: true);
   }
 
   /// Probes [requests] (each a full [PlaybackRequest]) for [mediaType]. Skips
@@ -51,8 +55,16 @@ class AvailabilityProber {
       while (next < pending.length) {
         final r = pending[next++]; // sync read+increment: no race on the event loop
         try {
-          final ok = await _hasStreams(mediaType, r);
-          await _availability.record(mediaType: mediaType, tmdbId: r.tmdbId, hasStreams: ok);
+          final (ok, isAnime) = await _hasStreams(mediaType, r);
+          // Never record a negative for anime/JA-KO content purely from an
+          // empty result: that's often just an uncached-only title or an
+          // ID-mapping gap, not genuinely dead (see fetch()'s matching
+          // guard for the player path). Leaving it unrecorded keeps it
+          // visible (isKnownUnavailable stays false) and re-probed later,
+          // rather than getting permanently hidden from browsing.
+          if (ok || !isAnime) {
+            await _availability.record(mediaType: mediaType, tmdbId: r.tmdbId, hasStreams: ok);
+          }
         } catch (_) {
           // Fail-open: never record a negative because a lookup errored.
         }

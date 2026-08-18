@@ -241,8 +241,12 @@ class StreamSourcesService {
   /// >= 1) or an unaired episode (`last_episode_to_air` is always aired).
   /// Uses strict lookups, so a genuine backend/network error propagates
   /// instead of being read as "no streams" - the caller ([AvailabilityProber])
-  /// fails open on any thrown error.
-  Future<bool> tvShowHasStreams({required int tmdbId, required String title, String? posterPath}) async {
+  /// fails open on any thrown error. Also returns whether this looks like
+  /// anime/JA-KO content (original_language ja/ko) - see [fetch]'s matching
+  /// isAnime guard: the caller should not record a negative for anime just
+  /// because AIOStreams came back empty (often an uncached/ID-mapping gap,
+  /// not genuinely dead), or it gets wrongly hidden from browsing.
+  Future<(bool hasStreams, bool isAnime)> tvShowHasStreams({required int tmdbId, required String title, String? posterPath}) async {
     PlaybackRequest req(int s, int e) => PlaybackRequest(
           tmdbId: tmdbId,
           mediaType: PlaybackMediaType.tv,
@@ -255,11 +259,14 @@ class StreamSourcesService {
     final recent = await _lastAiredEpisode(tmdbId);
     final hasDistinctRecent = recent != null && !(recent.$1 == 1 && recent.$2 == 1);
 
-    if (hasDistinctRecent && (await fetchQuiet(req(recent!.$1, recent.$2), strict: true)).isNotEmpty) {
-      return true;
+    if (hasDistinctRecent) {
+      final (sources, isAnime) = await _fetchSources(req(recent!.$1, recent.$2), strict: true);
+      if (sources.isNotEmpty) return (true, isAnime);
+      final (sources2, isAnime2) = await _fetchSources(req(1, 1), strict: true);
+      return (sources2.isNotEmpty, isAnime || isAnime2); // both probes empty - genuinely unavailable
     }
-    if ((await fetchQuiet(req(1, 1), strict: true)).isNotEmpty) return true;
-    return false; // both representative probes came back genuinely empty
+    final (sources, isAnime) = await _fetchSources(req(1, 1), strict: true);
+    return (sources.isNotEmpty, isAnime);
   }
 
   /// The most recent aired (season, episode) for a show from TMDB's
@@ -386,6 +393,16 @@ class StreamSourcesService {
   Future<List<StreamSource>> fetchQuiet(PlaybackRequest request, {bool strict = false}) async {
     final (sources, _) = await _fetchSources(request, strict: strict);
     return sources;
+  }
+
+  /// Availability probe for a single movie/episode request (for catalog
+  /// filtering) - like [fetchQuiet] but also returns whether this looks like
+  /// anime/JA-KO content, so the caller ([AvailabilityProber]) can apply the
+  /// same "don't hide anime over an empty result" guard [fetch] uses for the
+  /// player path.
+  Future<(bool hasStreams, bool isAnime)> probeHasStreams(PlaybackRequest request, {bool strict = true}) async {
+    final (sources, isAnime) = await _fetchSources(request, strict: strict);
+    return (sources.isNotEmpty, isAnime);
   }
 
   /// Cancels/removes a preparation job (and its Real-Debrid download).
