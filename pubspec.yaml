@@ -83,6 +83,7 @@ dependencies:
 
   # Detect Fire TV / Android TV (leanback) so the app runs landscape there.
   device_info_plus: ^10.1.2
+  dpad: ^2.0.2
 
 dev_dependencies:
   flutter_test:

@@ -1,16 +1,20 @@
+import 'package:dpad/dpad.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Wraps any tappable element so it works with a TV remote's D-pad as well as
-/// touch.
+import '../../../core/platform/tv.dart';
+
+/// Makes any tappable element work with a TV remote's D-pad as well as touch.
 ///
-/// - On a TV, arrow keys move focus between [TvFocusable]s (Flutter's built-in
-///   directional traversal), and the focused one shows a clear highlight
-///   (scale + accent border + glow) so the user can see what's selected.
-/// - The remote's OK/Select button (as well as Enter and a gamepad A button)
-///   triggers [onPressed], the same as a tap.
-/// - On a phone it's effectively a normal tappable: touch never triggers the
-///   focus highlight, so behaviour is unchanged.
+/// - **On Fire TV / Android TV** the `dpad` package is the sole navigation
+///   authority: this delegates entirely to [DpadFocusable] (focus memory,
+///   TV-correct directional traversal, auto-scroll-into-view and OK/Select), and
+///   none of the app's own focus/traversal/key handling runs. The focus effect
+///   (scale + accent border + glow) is drawn through dpad's builder so the
+///   design is unchanged.
+/// - **Everywhere else** (Android touch, Windows/desktop mouse + keyboard) it
+///   keeps its original behaviour: a plain tappable with a keyboard-focus
+///   highlight, so those platforms are untouched by the TV migration.
 class TvFocusable extends StatefulWidget {
   const TvFocusable({
     super.key,
@@ -34,29 +38,46 @@ class TvFocusable extends StatefulWidget {
 class _TvFocusableState extends State<TvFocusable> {
   bool _focused = false;
 
+  /// The focus highlight (scale + accent border + glow). Shared by both paths so
+  /// the look is identical on TV and desktop.
+  Widget _effect(BuildContext context, bool focused, Widget child) {
+    final accent = Theme.of(context).colorScheme.tertiary;
+    return AnimatedScale(
+      scale: focused ? widget.focusScale : 1.0,
+      duration: const Duration(milliseconds: 120),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(widget.borderRadius),
+          border: Border.all(color: focused ? accent : Colors.transparent, width: 3),
+          boxShadow: focused
+              ? [BoxShadow(color: accent.withOpacity(0.6), blurRadius: 14, spreadRadius: 1)]
+              : null,
+        ),
+        child: child,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.tertiary;
+    // Fire TV / Android TV: dpad owns focus + navigation + select + scroll.
+    if (isAndroidTv) {
+      return DpadFocusable(
+        autofocus: widget.autofocus,
+        onSelect: widget.onPressed,
+        // dpad scrolls the focused item into view (its own ensureVisible).
+        autoScroll: true,
+        builder: (context, isFocused, child) => _effect(context, isFocused, child ?? const SizedBox.shrink()),
+        child: widget.child,
+      );
+    }
+
+    // Non-TV: original tappable with keyboard-focus highlight (unchanged).
     return FocusableActionDetector(
       autofocus: widget.autofocus,
       onShowFocusHighlight: (value) {
         if (mounted) setState(() => _focused = value);
-      },
-      // Scroll the focused item into view within every enclosing scrollable, so
-      // D-pad focus moving to an off-screen card/row brings it on-screen (both
-      // the horizontal row and the vertical page). Runs after layout settles.
-      onFocusChange: (focused) {
-        if (!focused || !mounted) return;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          Scrollable.ensureVisible(
-            context,
-            alignment: 0.5,
-            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOut,
-          );
-        });
       },
       shortcuts: const <ShortcutActivator, Intent>{
         SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
@@ -64,37 +85,16 @@ class _TvFocusableState extends State<TvFocusable> {
         SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
       },
       actions: <Type, Action<Intent>>{
-        ActivateIntent: CallbackAction<ActivateIntent>(
-          onInvoke: (_) {
-            widget.onPressed();
-            return null;
-          },
-        ),
+        ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {
+          widget.onPressed();
+          return null;
+        }),
       },
       mouseCursor: SystemMouseCursors.click,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onPressed,
-        child: AnimatedScale(
-          scale: _focused ? widget.focusScale : 1.0,
-          duration: const Duration(milliseconds: 120),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(widget.borderRadius),
-              // Always-present border (transparent when unfocused) so gaining
-              // focus never shifts layout.
-              border: Border.all(
-                color: _focused ? accent : Colors.transparent,
-                width: 3,
-              ),
-              boxShadow: _focused
-                  ? [BoxShadow(color: accent.withOpacity(0.6), blurRadius: 14, spreadRadius: 1)]
-                  : null,
-            ),
-            child: widget.child,
-          ),
-        ),
+        child: _effect(context, _focused, widget.child),
       ),
     );
   }

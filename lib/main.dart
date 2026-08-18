@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 
 import 'package:adaptive_theme/adaptive_theme.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:dpad/dpad.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -127,14 +128,20 @@ class MyApp extends StatelessWidget {
             : sl<UserSettings>().getThemeMode() == 'light'
                 ? AdaptiveThemeMode.light
                 : AdaptiveThemeMode.system,
-        builder: (theme, darkTheme) => MaterialApp.router(
-          routerConfig: CustomGoRouterConfig().config,
-          debugShowCheckedModeBanner: false,
-          title: 'Zipx Movies',
-          theme: theme,
-          // locale: DevicePreview.locale(context),
-          // builder: DevicePreview.appBuilder,
-          darkTheme: darkTheme,
+        builder: (theme, darkTheme) => DpadNavigator(
+          // Fire TV / Android TV only: the sole D-pad navigation authority.
+          // Disabled elsewhere, where it's a pure pass-through so Android touch
+          // and Windows mouse/keyboard behave exactly as before.
+          enabled: isAndroidTv,
+          child: MaterialApp.router(
+            routerConfig: CustomGoRouterConfig().config,
+            debugShowCheckedModeBanner: false,
+            title: 'Zipx Movies',
+            theme: theme,
+            // locale: DevicePreview.locale(context),
+            // builder: DevicePreview.appBuilder,
+            darkTheme: darkTheme,
+          ),
         ),
       ),
     );
