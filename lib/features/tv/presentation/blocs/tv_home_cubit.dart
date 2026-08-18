@@ -5,6 +5,7 @@ import '../../../../core/dependency_injection/di.dart';
 import '../../../../core/playback/domain/entities/playback_media_type.dart';
 import '../../../../core/playback/domain/entities/playback_request.dart';
 import '../../../../core/playback/services/availability_prober.dart';
+import '../../../../core/playback/services/stream_availability_service.dart';
 import '../../../movies/data/models/genre_model.dart';
 import '../../data/datasources/remote/tmdb_tv_datasource.dart';
 import '../../data/models/tv_model.dart';
@@ -203,13 +204,25 @@ class TvHomeCubit extends Cubit<TvHomeState> {
       final topRated = results[2].shows;
       final onTheAir = results[3].shows;
       final airingToday = results[4].shows;
+
+      // Pre-filter using cache (known unavailable shows hidden even on first
+      // render) so subsequent loads don't show unfiltered TMDB while waiting
+      // for background probing to complete.
+      final avail = sl<StreamAvailabilityService>();
+      final trendingPre = trending.where((s) => !avail.isKnownUnavailable(PlaybackMediaType.tv, s.id)).toList();
+      final popularPre = popular.where((s) => !avail.isKnownUnavailable(PlaybackMediaType.tv, s.id)).toList();
+      final topRatedPre = topRated.where((s) => !avail.isKnownUnavailable(PlaybackMediaType.tv, s.id)).toList();
+      final onTheAirPre = onTheAir.where((s) => !avail.isKnownUnavailable(PlaybackMediaType.tv, s.id)).toList();
+      final airingTodayPre = airingToday.where((s) => !avail.isKnownUnavailable(PlaybackMediaType.tv, s.id)).toList();
+      final genresSectionsPre = genreRowsRaw.map((s) => (s.$2, s.$3.where((show) => !avail.isKnownUnavailable(PlaybackMediaType.tv, show.id)).toList())).toList();
+
       safeEmit(state.copyWith(
-        trending: trending,
-        popular: popular,
-        topRated: topRated,
-        onTheAir: onTheAir,
-        airingToday: airingToday,
-        genreSections: [for (final s in genreRowsRaw) (s.$2, s.$3)],
+        trending: trendingPre,
+        popular: popularPre,
+        topRated: topRatedPre,
+        onTheAir: onTheAirPre,
+        airingToday: airingTodayPre,
+        genreSections: genresSectionsPre,
         genres: genres,
         isLoading: false,
       ));

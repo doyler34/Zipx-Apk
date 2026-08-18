@@ -125,19 +125,41 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           safeEmit(const HomeError('Error while fetching data'));
         } else {
           trendingMovies = trendingResult.movies!;
+
+          // Pre-filter using cache (known unavailable titles are hidden even on
+          // first render) so subsequent loads don't show unfiltered TMDB while
+          // waiting for background probing to complete.
+          final avail = sl<StreamAvailabilityService>();
+          final popularPre = (popularResult.movies ?? const <MovieModel>[])
+              .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
+              .toList();
+          final upcomingPre = (upcomingResult.movies ?? const <MovieModel>[])
+              .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
+              .toList();
+          final nowPlayingPre = (nowPlayingResult.movies ?? const <MovieModel>[])
+              .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
+              .toList();
+          final topRatedPre = (topRatedResult.movies ?? const <MovieModel>[])
+              .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
+              .toList();
+          final trendingPre = (trendingResult.movies ?? const <MovieModel>[])
+              .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
+              .toList();
+
           safeEmit(HomeLoaded(
-            popularMovies: popularResult,
-            upcomingMovies: upcomingResult,
+            popularMovies: MoviesResultModel(movies: popularPre, totalPages: popularResult.totalPages),
+            upcomingMovies: MoviesResultModel(movies: upcomingPre, totalPages: upcomingResult.totalPages),
             genres: genresResult,
-            nowPlayingMovies: nowPlayingResult,
-            topRatedMovies: topRatedResult,
-            trendingMovies: trendingResult,
+            nowPlayingMovies: MoviesResultModel(movies: nowPlayingPre, totalPages: nowPlayingResult.totalPages),
+            topRatedMovies: MoviesResultModel(movies: topRatedPre, totalPages: topRatedResult.totalPages),
+            trendingMovies: MoviesResultModel(movies: trendingPre, totalPages: trendingResult.totalPages),
           ));
-          // Background availability fill (option B): the rows are already shown
-          // above; now probe each title via AIOStreams, top up the pageable rows
-          // to their target across a few pages, and re-emit with the titles that
-          // have no playable stream removed. Guarded by `gen` so a superseded
-          // load's fill can never land after a fresher one.
+          // Background availability fill (option B): rows are shown above with
+          // cache-known-unavailable titles already hidden; now probe each title
+          // via AIOStreams, top up the pageable rows to their target across a
+          // few pages, and re-emit with newly-discovered unavailable titles
+          // removed. Guarded by `gen` so a superseded load's fill can never land
+          // after a fresher one.
           await _fillAvailability(
             emit,
             gen: gen,
