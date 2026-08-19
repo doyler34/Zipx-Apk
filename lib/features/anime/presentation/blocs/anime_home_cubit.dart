@@ -104,30 +104,41 @@ class AnimeHomeCubit extends Cubit<AnimeHomeState> {
             posterPath: s.posterPath,
           );
 
-      final List<MovieModel> moviesF;
-      final List<TvModel> seriesF;
-      try {
-        moviesF = await prober.fillAvailable<MovieModel>(
+      // Both rows fill concurrently and each re-emits the instant it lands,
+      // instead of series waiting behind movies. They share `prober`'s global
+      // request gate, so this finishes sooner without multiplying total
+      // AIOStreams load.
+      var moviesF = movies;
+      var seriesF = series;
+      void safeEmitRow() {
+        // Superseded by a newer loadHome() (e.g. pull-to-refresh) while
+        // probing ran - drop this result rather than overwrite the fresher one.
+        if (gen != _generation || isClosed) return;
+        emit(state.copyWith(movies: moviesF, series: seriesF));
+      }
+
+      await Future.wait([
+        prober.fillAvailable<MovieModel>(
           mediaType: PlaybackMediaType.movie,
           firstPage: movies,
           fetchPage: (p) => _movieDatasource.discoverAnimeMovies(page: p).then((r) => r.movies ?? const <MovieModel>[]),
           idOf: (m) => m.id,
           toRequest: movieReq,
-        );
-        seriesF = await prober.fillAvailable<TvModel>(
+        ).then((r) {
+          moviesF = r;
+          safeEmitRow();
+        }).catchError((_) {}), // fail-open - keep this row as first shown
+        prober.fillAvailable<TvModel>(
           mediaType: PlaybackMediaType.tv,
           firstPage: series,
           fetchPage: (p) => _tvDatasource.discoverAnimeTv(page: p).then((r) => r.shows),
           idOf: (s) => s.id,
           toRequest: tvReq,
-        );
-      } catch (_) {
-        return; // fail-open - keep rows as first shown
-      }
-      // Superseded by a newer loadHome() (e.g. pull-to-refresh) while probing
-      // ran - drop this result rather than overwrite the fresher one.
-      if (gen != _generation || isClosed) return;
-      emit(state.copyWith(movies: moviesF, series: seriesF));
+        ).then((r) {
+          seriesF = r;
+          safeEmitRow();
+        }).catchError((_) {}), // fail-open - keep this row as first shown
+      ]);
     } catch (_) {
       safeEmit(state.copyWith(isLoading: false, errorMessage: 'Failed to load anime.'));
     }

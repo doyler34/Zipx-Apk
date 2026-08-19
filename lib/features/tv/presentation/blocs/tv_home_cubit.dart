@@ -235,35 +235,55 @@ class TvHomeCubit extends Cubit<TvHomeState> {
             toRequest: req,
             maxPages: maxPages,
           );
-      final List<TvModel> trendingF, popularF, topRatedF;
-      final List<TvSection> genreSectionsF;
-      try {
-        trendingF = await fill(trending, (p) => _datasource.getTrendingTv(page: p).then((r) => r.shows));
-        popularF = await fill(popular, (p) => _datasource.getPopularTv(page: p).then((r) => r.shows));
-        topRatedF = await fill(topRated, (p) => _datasource.getTopRatedTv(page: p).then((r) => r.shows));
-        // Genre rows top up too (each capped at the prober's default 3 pages) -
-        // without this, a genre whose page-1 picks skew unavailable (e.g.
-        // Crime/Mystery) ends up nearly empty instead of refilled.
-        genreSectionsF = await Future.wait(genreRowsRaw.map((s) async {
-          try {
-            final filled = await fill(s.$3, (p) => _datasource.discoverTvByGenre(genreId: s.$1, page: p).then((r) => r.shows));
-            return (s.$2, filled);
-          } catch (_) {
-            return (s.$2, s.$3); // fail-open: keep this genre row as first shown
-          }
-        }));
-      } catch (_) {
-        return; // fail-open
-      }
+      // Each row's fill runs as its own future and re-emits the instant it
+      // lands, instead of one row's `await` blocking the next from even
+      // starting. Rows share `prober`'s global request gate, so running them
+      // concurrently finishes sooner without multiplying total AIOStreams load.
+      var trendingF = trending;
+      var popularF = popular;
+      var topRatedF = topRated;
+      var genreSectionsF = genreRowsRaw.map((s) => (s.$2, s.$3)).toList();
+
       // Superseded by a newer loadHome() (e.g. pull-to-refresh) while probing
       // ran - drop this result rather than overwrite the fresher one.
-      if (gen != _generation || isClosed) return;
-      emit(state.copyWith(
-        trending: trendingF,
-        popular: popularF,
-        topRated: topRatedF,
-        genreSections: genreSectionsF,
-      ));
+      void safeEmitRow() {
+        if (gen != _generation || isClosed) return;
+        emit(state.copyWith(
+          trending: trendingF,
+          popular: popularF,
+          topRated: topRatedF,
+          genreSections: genreSectionsF,
+        ));
+      }
+
+      final fillFutures = <Future<void>>[
+        fill(trending, (p) => _datasource.getTrendingTv(page: p).then((r) => r.shows)).then((r) {
+          trendingF = r;
+          safeEmitRow();
+        }).catchError((_) {}),
+        fill(popular, (p) => _datasource.getPopularTv(page: p).then((r) => r.shows)).then((r) {
+          popularF = r;
+          safeEmitRow();
+        }).catchError((_) {}),
+        fill(topRated, (p) => _datasource.getTopRatedTv(page: p).then((r) => r.shows)).then((r) {
+          topRatedF = r;
+          safeEmitRow();
+        }).catchError((_) {}),
+      ];
+      // Genre rows top up too (each capped at the prober's default 3 pages) -
+      // without this, a genre whose page-1 picks skew unavailable (e.g.
+      // Crime/Mystery) ends up nearly empty instead of refilled.
+      for (var i = 0; i < genreRowsRaw.length; i++) {
+        final s = genreRowsRaw[i];
+        fillFutures.add(fill(s.$3, (p) => _datasource.discoverTvByGenre(genreId: s.$1, page: p).then((r) => r.shows)).then((filled) {
+          genreSectionsF = [
+            for (var j = 0; j < genreSectionsF.length; j++)
+              j == i ? (s.$2, filled) : genreSectionsF[j],
+          ];
+          safeEmitRow();
+        }).catchError((_) {})); // fail-open: keep this genre row as first shown
+      }
+      await Future.wait(fillFutures);
     } catch (_) {
       safeEmit(state.copyWith(isLoading: false, errorMessage: 'Failed to load TV shows.'));
     }

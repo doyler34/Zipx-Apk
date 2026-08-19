@@ -1,7 +1,41 @@
+import 'dart:async';
+
 import '../domain/entities/playback_media_type.dart';
 import '../domain/entities/playback_request.dart';
 import 'stream_availability_service.dart';
 import 'stream_sources_service.dart';
+
+/// A simple counting semaphore (FIFO queue of waiters). Used to cap the
+/// TOTAL number of simultaneous AIOStreams requests across the whole app:
+/// multiple catalog rows now fill concurrently (see [AvailabilityProber]),
+/// but must still share one fixed-size request budget between them, or
+/// running rows in parallel would multiply total load instead of just
+/// finishing sooner - exactly what overloaded a self-hosted AIOStreams
+/// instance before.
+class _Semaphore {
+  _Semaphore(this._permits);
+
+  int _permits;
+  final _waiters = <Completer<void>>[];
+
+  Future<void> acquire() {
+    if (_permits > 0) {
+      _permits--;
+      return Future.value();
+    }
+    final c = Completer<void>();
+    _waiters.add(c);
+    return c.future;
+  }
+
+  void release() {
+    if (_waiters.isNotEmpty) {
+      _waiters.removeAt(0).complete();
+    } else {
+      _permits++;
+    }
+  }
+}
 
 /// Proactively checks whether catalog titles have playable streams (via
 /// AIOStreams) and records the verdicts in [StreamAvailabilityService], so
@@ -24,6 +58,12 @@ class AvailabilityProber {
 
   final StreamSourcesService _sources;
   final StreamAvailabilityService _availability;
+
+  // Shared across every probe()/fillAvailable() call on this instance (it's a
+  // DI singleton), so rows filling concurrently still share one fixed request
+  // budget against AIOStreams instead of each spinning up their own pool.
+  static const int _globalConcurrency = 6;
+  final _gate = _Semaphore(_globalConcurrency);
 
   Future<(bool hasStreams, bool isAnime)> _hasStreams(PlaybackMediaType mediaType, PlaybackRequest r) {
     if (mediaType == PlaybackMediaType.tv) {
@@ -54,6 +94,9 @@ class AvailabilityProber {
     Future<void> worker() async {
       while (next < pending.length) {
         final r = pending[next++]; // sync read+increment: no race on the event loop
+        // Global gate: bounds TOTAL in-flight AIOStreams requests across every
+        // concurrently-filling row, not just within this one probe() call.
+        await _gate.acquire();
         try {
           final (ok, isAnime) = await _hasStreams(mediaType, r);
           // Never record a negative for anime/JA-KO-ZH content purely from an
@@ -67,6 +110,8 @@ class AvailabilityProber {
           }
         } catch (_) {
           // Fail-open: never record a negative because a lookup errored.
+        } finally {
+          _gate.release();
         }
       }
     }

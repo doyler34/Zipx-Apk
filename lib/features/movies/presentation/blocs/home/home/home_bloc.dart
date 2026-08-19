@@ -214,44 +214,63 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           maxPages: maxPages,
         );
 
-    final List<MovieModel> popularF, topRatedF, trendingF;
-    final List<MovieSection> genreSectionsF;
-    try {
-      popularF = await fill(popular, (p) => getPopular(Params(page: p)));
-      topRatedF = await fill(topRated, (p) => getTopRated(Params(page: p)));
-      // Trending isn't pageable (NoParams) - just probe this page + filter it.
-      await prober.probe(PlaybackMediaType.movie, (trending.movies ?? const <MovieModel>[]).map(req).toList());
-      final avail = sl<StreamAvailabilityService>();
-      trendingF = (trending.movies ?? const <MovieModel>[])
-          .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
-          .toList();
-      // Genre rows top up too - without this, a genre whose page-1 picks skew
-      // unavailable ends up sparser than it needs to be instead of refilled.
-      genreSectionsF = await Future.wait(genreRows.map((g) async {
-        try {
-          final filled = await fill(
-            MoviesResultModel(movies: g.$3, totalPages: 1),
-            (p) => tmdbDatasource.discoverMoviesByGenre(genreId: g.$1, page: p),
-          );
-          return (g.$2, filled);
-        } catch (_) {
-          return (g.$2, g.$3); // fail-open: keep this genre row as first shown
-        }
-      }));
-    } catch (_) {
-      return; // fail-open
-    }
-    // Superseded by a newer LoadHome (e.g. pull-to-refresh) while probing ran -
-    // drop this result rather than overwrite the fresher one.
-    if (gen != _generation || emit.isDone) return;
+    // Each row's fill runs as its own future and re-emits the instant it
+    // lands, instead of one row's `await` blocking the next from even
+    // starting. Rows share `prober`'s global request gate, so running them
+    // concurrently finishes sooner without multiplying total AIOStreams load.
+    var popularF = popular.movies ?? const <MovieModel>[];
+    var topRatedF = topRated.movies ?? const <MovieModel>[];
+    var trendingF = trending.movies ?? const <MovieModel>[];
+    var genreSectionsF = genreRows.map((g) => (g.$2, g.$3)).toList();
+
     MoviesResultModel wrap(List<MovieModel> ms, MoviesResultModel src) =>
         MoviesResultModel(movies: ms, totalPages: src.totalPages);
-    emit(HomeLoaded(
-      popularMovies: wrap(popularF, popular),
-      genres: genres,
-      topRatedMovies: wrap(topRatedF, topRated),
-      trendingMovies: wrap(trendingF, trending),
-      genreSections: genreSectionsF,
-    ));
+    // Superseded by a newer LoadHome (e.g. pull-to-refresh) while probing ran -
+    // drop this result rather than overwrite the fresher one.
+    void safeEmitRow() {
+      if (gen != _generation || emit.isDone) return;
+      emit(HomeLoaded(
+        popularMovies: wrap(popularF, popular),
+        genres: genres,
+        topRatedMovies: wrap(topRatedF, topRated),
+        trendingMovies: wrap(trendingF, trending),
+        genreSections: genreSectionsF,
+      ));
+    }
+
+    final futures = <Future<void>>[
+      fill(popular, (p) => getPopular(Params(page: p))).then((r) {
+        popularF = r;
+        safeEmitRow();
+      }).catchError((_) {}),
+      fill(topRated, (p) => getTopRated(Params(page: p))).then((r) {
+        topRatedF = r;
+        safeEmitRow();
+      }).catchError((_) {}),
+      // Trending isn't pageable (NoParams) - just probe this page + filter it.
+      prober.probe(PlaybackMediaType.movie, (trending.movies ?? const <MovieModel>[]).map(req).toList()).then((_) {
+        final avail = sl<StreamAvailabilityService>();
+        trendingF = (trending.movies ?? const <MovieModel>[])
+            .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
+            .toList();
+        safeEmitRow();
+      }).catchError((_) {}),
+    ];
+    // Genre rows top up too - without this, a genre whose page-1 picks skew
+    // unavailable ends up sparser than it needs to be instead of refilled.
+    for (var i = 0; i < genreRows.length; i++) {
+      final g = genreRows[i];
+      futures.add(fill(
+        MoviesResultModel(movies: g.$3, totalPages: 1),
+        (p) => tmdbDatasource.discoverMoviesByGenre(genreId: g.$1, page: p),
+      ).then((filled) {
+        genreSectionsF = [
+          for (var j = 0; j < genreSectionsF.length; j++)
+            j == i ? (g.$2, filled) : genreSectionsF[j],
+        ];
+        safeEmitRow();
+      }).catchError((_) {})); // fail-open: keep this genre row as first shown
+    }
+    await Future.wait(futures);
   }
 }
