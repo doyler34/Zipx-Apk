@@ -441,22 +441,24 @@ class StreamSourcesService {
 
   String _prepareBase() => _prepareUrl.replaceAll(RegExp(r'/+$'), '');
 
-  /// The AIOStreams request retries a few times on a thrown error (timeout,
-  /// transient overload) before giving up - a request that errors isn't the
-  /// same as AIOStreams genuinely having nothing, and without this a single
-  /// bad request could misread a title with tons of real availability as
-  /// "no stream found". [strict] is for background availability probing only
-  /// (never the player path): when true, a lookup failure that survives every
-  /// retry (IMDb-id resolution or the AIOStreams request itself) is rethrown
-  /// instead of being read as "no streams", so callers like
-  /// [AvailabilityProber] can fail open on a real error rather than recording
-  /// a false negative. Normal playback (`fetch`) always calls this with
-  /// `strict: false`, unchanged.
+  /// On the player path (`strict: false`), the AIOStreams request retries a
+  /// couple of times on a thrown error (timeout, transient overload) before
+  /// giving up - a single bad request shouldn't misread a title with tons of
+  /// real availability as "no stream found". This retry is deliberately
+  /// SKIPPED for [strict] (background availability probing, [AvailabilityProber]):
+  /// that path already fails open on any error without needing a retry (it
+  /// just skips recording that probe's result), and probing runs dozens of
+  /// titles concurrently across every catalog row - retrying every failure
+  /// there would multiply the request volume hitting AIOStreams and, under
+  /// load, make the underlying slowness worse instead of better. [strict]:
+  /// true also means a lookup failure (IMDb-id resolution or the AIOStreams
+  /// request itself) is rethrown instead of being read as "no streams", so
+  /// [AvailabilityProber] can fail open on it.
   Future<(List<StreamSource>, bool)> _fetchSources(PlaybackRequest request, {bool strict = false}) async {
     // Resolve the IMDb id (AIOStreams needs it) and the original language
     // (drives anime detection + audio ranking) up front, in parallel.
     final meta = await Future.wait([
-      strict ? _imdbId(request) : _imdbId(request).catchError((_) => null),
+      strict ? _imdbId(request) : _imdbId(request, retry: true).catchError((_) => null),
       originalLanguage(request).catchError((_) => null), // ranking-only, never worth failing a probe over
     ]);
     final imdb = meta[0];
@@ -471,13 +473,9 @@ class StreamSourcesService {
     // does the anime id mapping, dedup, cached-filtering and ranking
     // server-side. Just send it the IMDb id.
     if (_aioUrl.isNotEmpty && imdb != null && imdb.isNotEmpty) {
-      // A request that THROWS (timeout, transient overload, connection
-      // reset) is not the same as AIOStreams genuinely returning nothing -
-      // without a retry, one bad request on a title with tons of real
-      // availability (e.g. a huge blockbuster) reads as "no stream found"
-      // exactly like a genuinely dead title, with no way to tell them apart.
-      // A couple of quick retries absorb that before ever giving up.
-      const maxAttempts = 3;
+      // Retry only on the player path (strict: false) - see the class-level
+      // doc above for why background probing must NOT retry.
+      final maxAttempts = strict ? 1 : 3;
       for (var attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
           final aio = await _fetchAio(request, imdb, origLang);
@@ -522,14 +520,16 @@ class StreamSourcesService {
   }
 
   /// Without the IMDb id, [_fetchSources] skips AIOStreams entirely and reads
-  /// as "no stream found" - identical to a genuinely dead title - so a
-  /// transient TMDB blip here is just as costly as one on the AIOStreams
-  /// request itself. Retries a couple of times before letting the error
-  /// propagate (callers decide from there: swallowed for the player path,
-  /// rethrown for [strict] probing).
-  Future<String?> _imdbId(PlaybackRequest request) async {
+  /// as "no stream found" - identical to a genuinely dead title - so on the
+  /// player path a transient TMDB blip here is just as costly as one on the
+  /// AIOStreams request itself, and [retry] (only ever passed true from
+  /// there) absorbs it. Never enabled for background probing: that path
+  /// already fails open on any error without needing a retry, and probing
+  /// runs dozens of titles concurrently - retrying every failure there would
+  /// multiply the request volume for no correctness benefit.
+  Future<String?> _imdbId(PlaybackRequest request, {bool retry = false}) async {
     final type = request.isTvEpisode ? 'tv' : 'movie';
-    const maxAttempts = 3;
+    final maxAttempts = retry ? 3 : 1;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         final response = await _dio.get(
