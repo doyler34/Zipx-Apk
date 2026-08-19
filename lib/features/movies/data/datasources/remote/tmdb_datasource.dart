@@ -18,6 +18,9 @@ class TmdbDatasource {
 
     settings['page'] = page;
     settings['sort_by'] = 'popularity.desc';
+    // Animation (16) lives in the dedicated Anime section instead - keeping
+    // it here too would just duplicate that content under Movies.
+    settings['without_genres'] = 16;
 
     final response = await dio.get(
       '${UrlStrings.baseUrl}discover/movie',
@@ -49,7 +52,9 @@ class TmdbDatasource {
 
     settings['page'] = page;
     settings['sort_by'] = 'vote_average.desc';
-    settings['without_genres'] = '99,10755';
+    // Animation (16) lives in the dedicated Anime section instead - keeping
+    // it here too would just duplicate that content under Movies.
+    settings['without_genres'] = '99,10755,16';
     settings['vote_count.gte'] = 200;
 
     final response = await dio.get(
@@ -139,6 +144,9 @@ class TmdbDatasource {
     settings['page'] = page;
     settings['with_genres'] = genreId;
     settings['sort_by'] = 'popularity.desc';
+    // Animation (16) lives in the dedicated Anime section instead - keeping
+    // it here too would just duplicate that content under Movies.
+    settings['without_genres'] = 16;
 
     final response = await dio.get(
       '${UrlStrings.baseUrl}discover/movie',

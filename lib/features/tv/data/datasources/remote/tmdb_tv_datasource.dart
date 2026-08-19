@@ -82,6 +82,9 @@ class TmdbTvDatasource {
     settings['page'] = page;
     settings['with_genres'] = genreId;
     settings['sort_by'] = 'popularity.desc';
+    // Animation (16) lives in the dedicated Anime section instead - keeping
+    // it here too would just duplicate that content under TV Shows.
+    settings['without_genres'] = 16;
 
     final response = await dio.get(
       '${UrlStrings.baseUrl}discover/tv',

@@ -23,6 +23,10 @@ class TvModel extends TvEntity {
 
   bool get isLikelyUnstreamable => genreIds.any(unstreamableGenreIds.contains);
 
+  /// Animation-genre content (TMDB genre 16) belongs in the dedicated Anime
+  /// section, not mixed into TV Shows browsing.
+  bool get isAnimation => genreIds.contains(16);
+
   factory TvModel.fromJson(Map<String, dynamic> json) {
     return TvModel(
       id: json['id'],

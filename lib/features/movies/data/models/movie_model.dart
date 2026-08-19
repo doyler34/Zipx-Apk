@@ -17,6 +17,10 @@ class MovieModel extends MovieEntity with EquatableMixin {
     super.genreIds,
   });
 
+  /// Animation-genre content (TMDB genre 16) belongs in the dedicated Anime
+  /// section, not mixed into Movies browsing.
+  bool get isAnimation => genreIds.contains(16);
+
   factory MovieModel.fromJson(Map<String, dynamic> json) {
     return MovieModel(
       id: json['id'],

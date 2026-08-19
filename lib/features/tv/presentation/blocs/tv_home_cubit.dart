@@ -191,9 +191,12 @@ class TvHomeCubit extends Cubit<TvHomeState> {
       final genreRowsRaw = (await genreRowsFuture).where((s) => s.$3.isNotEmpty).toList();
       final genres = await genresListFuture;
 
-      final trending = results[0].shows;
-      final popular = results[1].shows;
-      final topRated = results[2].shows;
+      // Trending/Popular/Top Rated have no discover-style genre filter to
+      // exclude Animation (16) server-side (unlike the genre rows below) -
+      // filter client-side instead, so anime doesn't leak into TV Shows.
+      final trending = results[0].shows.where((s) => !s.isAnimation).toList();
+      final popular = results[1].shows.where((s) => !s.isAnimation).toList();
+      final topRated = results[2].shows.where((s) => !s.isAnimation).toList();
 
       // Pre-filter using cache (known unavailable shows hidden even on first
       // render) so subsequent loads don't show unfiltered TMDB while waiting
@@ -256,16 +259,19 @@ class TvHomeCubit extends Cubit<TvHomeState> {
         ));
       }
 
+      // Trending/Popular/Top Rated can't be filtered server-side (see above),
+      // so top-up pages need the same client-side Animation filter as page 1.
+      List<TvModel> noAnime(List<TvModel> shows) => shows.where((s) => !s.isAnimation).toList();
       final fillFutures = <Future<void>>[
-        fill(trending, (p) => _datasource.getTrendingTv(page: p).then((r) => r.shows)).then((r) {
+        fill(trending, (p) => _datasource.getTrendingTv(page: p).then((r) => noAnime(r.shows))).then((r) {
           trendingF = r;
           safeEmitRow();
         }).catchError((_) {}),
-        fill(popular, (p) => _datasource.getPopularTv(page: p).then((r) => r.shows)).then((r) {
+        fill(popular, (p) => _datasource.getPopularTv(page: p).then((r) => noAnime(r.shows))).then((r) {
           popularF = r;
           safeEmitRow();
         }).catchError((_) {}),
-        fill(topRated, (p) => _datasource.getTopRatedTv(page: p).then((r) => r.shows)).then((r) {
+        fill(topRated, (p) => _datasource.getTopRatedTv(page: p).then((r) => noAnime(r.shows))).then((r) {
           topRatedF = r;
           safeEmitRow();
         }).catchError((_) {}),
