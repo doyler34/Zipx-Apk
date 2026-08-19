@@ -61,8 +61,14 @@ class AvailabilityProber {
 
   // Shared across every probe()/fillAvailable() call on this instance (it's a
   // DI singleton), so rows filling concurrently still share one fixed request
-  // budget against AIOStreams instead of each spinning up their own pool.
-  static const int _globalConcurrency = 6;
+  // budget against AIOStreams instead of each spinning up an unbounded number
+  // of independent pools. Set high enough that a single screen's rows (each
+  // with their own pool of up to 6) still fill at roughly their old speed -
+  // this only kicks in to cap the pathological case of multiple screens
+  // (Home+TV+Anime) all background-filling at once. The actual cause of the
+  // earlier outage was unconditional retries multiplying request volume
+  // (fixed separately, see _fetchSources), not this per-row concurrency.
+  static const int _globalConcurrency = 24;
   final _gate = _Semaphore(_globalConcurrency);
 
   Future<(bool hasStreams, bool isAnime)> _hasStreams(PlaybackMediaType mediaType, PlaybackRequest r) {
