@@ -4,10 +4,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../common/styles/zipx_ui.dart';
 import '../../../../core/dependency_injection/di.dart';
 import '../../../movies/data/models/movie_model.dart';
-import '../../../personalization/presentation/widgets/bookmarks/bookmark_card.dart';
 import '../../../tv/data/models/tv_model.dart';
 import '../../../tv/presentation/widgets/tv_card.dart';
 import '../../../tv/presentation/widgets/tv_row.dart';
+import '../widgets/anime_movie_card.dart';
 import '../blocs/anime_home_cubit.dart';
 
 class AnimeHomeScreen extends StatelessWidget {
@@ -97,7 +97,7 @@ class _AnimeHomeViewState extends State<_AnimeHomeView> {
     if (movies.isEmpty) return const SizedBox.shrink();
     return TvRow(
       title: title,
-      cards: [for (final m in movies) SizedBox(width: 150, child: BookmarkCard(movie: m))],
+      cards: [for (final m in movies) SizedBox(width: 150, child: AnimeMovieCard(movie: m))],
     );
   }
 
@@ -105,7 +105,7 @@ class _AnimeHomeViewState extends State<_AnimeHomeView> {
     if (shows.isEmpty) return const SizedBox.shrink();
     return TvRow(
       title: title,
-      cards: [for (var i = 0; i < shows.length; i++) SizedBox(width: 150, child: TvCard(show: shows[i], autofocus: false))],
+      cards: [for (var i = 0; i < shows.length; i++) SizedBox(width: 150, child: TvCard(show: shows[i], autofocus: false, isAnime: true))],
     );
   }
 }
@@ -132,8 +132,8 @@ class _AnimeGrid extends StatelessWidget {
       itemCount: results.length,
       itemBuilder: (context, index) {
         final item = results[index];
-        if (item is MovieModel) return BookmarkCard(movie: item);
-        if (item is TvModel) return TvCard(show: item, autofocus: index == 0);
+        if (item is MovieModel) return AnimeMovieCard(movie: item);
+        if (item is TvModel) return TvCard(show: item, autofocus: index == 0, isAnime: true);
         return const SizedBox.shrink();
       },
     );

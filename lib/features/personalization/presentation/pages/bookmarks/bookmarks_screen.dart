@@ -4,6 +4,7 @@ import 'package:movie_bloc_app/common/widgets/texts/centered_message.dart';
 import 'package:movie_bloc_app/core/dependency_injection/di.dart';
 import 'package:movie_bloc_app/core/playback/domain/entities/playback_media_type.dart';
 import 'package:movie_bloc_app/core/playback/services/favourite_service.dart';
+import 'package:movie_bloc_app/features/anime/presentation/widgets/anime_movie_card.dart';
 import 'package:movie_bloc_app/features/movies/data/models/movie_model.dart';
 import 'package:movie_bloc_app/features/personalization/presentation/blocs/bookmarks/bookmarks_bloc.dart';
 import 'package:movie_bloc_app/features/personalization/presentation/blocs/settings/settings_bloc.dart';
@@ -11,8 +12,9 @@ import 'package:movie_bloc_app/features/personalization/presentation/widgets/boo
 import 'package:movie_bloc_app/features/tv/data/models/tv_model.dart';
 import 'package:movie_bloc_app/features/tv/presentation/widgets/tv_card.dart';
 
-/// Saved items, split into a TV Shows section (backed by [FavouriteService])
-/// and a Movies section (backed by [BookmarksBloc]).
+/// Saved items, split into a TV Shows section, an Anime section (both backed
+/// by [FavouriteService], kept separate from each other) and a Movies section
+/// (backed by [BookmarksBloc]).
 class BookmarksScreen extends StatefulWidget {
   const BookmarksScreen({super.key});
 
@@ -21,13 +23,14 @@ class BookmarksScreen extends StatefulWidget {
 }
 
 class _BookmarksScreenState extends State<BookmarksScreen> {
-  // TV bookmarks are stored as lightweight entries; rebuild them into TvModels
-  // so the shared TvCard renders them (and its badge can un-bookmark). Read on
-  // build so the list reflects the latest saves each time the tab is shown.
-  List<TvModel> _tvBookmarks() {
+  // Favourite entries are stored as lightweight records; rebuild them into
+  // TvModel/MovieModel so the shared cards render them (and their badges can
+  // un-bookmark). Read on build so the list reflects the latest saves each
+  // time the tab is shown.
+  List<TvModel> _tvBookmarks({required bool isAnime}) {
     return sl<FavouriteService>()
         .getFavourites()
-        .where((e) => e.mediaType == PlaybackMediaType.tv)
+        .where((e) => e.mediaType == PlaybackMediaType.tv && e.isAnime == isAnime)
         .map((e) => TvModel(
               id: e.tmdbId,
               name: e.title,
@@ -40,15 +43,35 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
         .toList();
   }
 
+  List<MovieModel> _animeMovieBookmarks() {
+    return sl<FavouriteService>()
+        .getFavourites()
+        .where((e) => e.mediaType == PlaybackMediaType.movie && e.isAnime)
+        .map((e) => MovieModel(
+              id: e.tmdbId,
+              title: e.title,
+              overview: '',
+              posterPath: e.posterPath ?? '',
+              backdropPath: '',
+              voteAverage: 0,
+              releaseDate: '',
+              video: false,
+              adult: false,
+            ))
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<BookmarksBloc, BookmarksState>(
           bloc: context.read<BookmarksBloc>(),
           builder: (context, state) {
             final List<MovieModel> movies = context.read<BookmarksBloc>().bookmarks;
-            final tvShows = _tvBookmarks();
+            final tvShows = _tvBookmarks(isAnime: false);
+            final animeSeries = _tvBookmarks(isAnime: true);
+            final animeMovies = _animeMovieBookmarks();
 
-            if (movies.isEmpty && tvShows.isEmpty) {
+            if (movies.isEmpty && tvShows.isEmpty && animeSeries.isEmpty && animeMovies.isEmpty) {
               return const CenteredMessage(message: 'Your watchlist is empty');
             }
 
@@ -61,6 +84,13 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
                     if (tvShows.isNotEmpty) ...[
                       _header('TV Shows'),
                       _grid([for (final show in tvShows.reversed) TvCard(show: show)]),
+                    ],
+                    if (animeMovies.isNotEmpty || animeSeries.isNotEmpty) ...[
+                      _header('Anime'),
+                      _grid([
+                        for (final show in animeSeries.reversed) TvCard(show: show, isAnime: true),
+                        for (final movie in animeMovies.reversed) AnimeMovieCard(movie: movie),
+                      ]),
                     ],
                     if (movies.isNotEmpty) ...[
                       _header('Movies'),

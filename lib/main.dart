@@ -23,8 +23,6 @@ import 'common/blocs/bloc/nav_bar_bloc.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 import 'core/platform/tv.dart';
-import 'core/playback/services/provider_preferences_service.dart';
-import 'core/settings/user_settings.dart';
 import 'features/personalization/data/models/bookmarked_movie_hive.dart';
 
 Future<void> main() async {
@@ -39,10 +37,6 @@ Future<void> main() async {
   await Hive.openBox<BookmarkedMovie>('bookmarks');
   await Hive.openBox('settings');
   await Hive.openBox('theme_mode');
-
-  // Streaming provider configuration is stored separately from TMDB
-  // settings above, so it can never accidentally mix with it.
-  await Hive.openBox('provider_preferences');
   await Hive.openBox('playback_history');
   await Hive.openBox('favourites');
   // Remembers which titles have no streams, so browsing can hide dead-ends.
@@ -51,7 +45,6 @@ Future<void> main() async {
   await Hive.openBox('downloads');
 
   await initDependencyInjection();
-  await sl<ProviderPreferencesService>().initialize();
 
   // Desktop (PC): open the window centered on screen at a sensible size,
   // instead of the OS default top-left placement. No-op on mobile/web.
@@ -121,13 +114,12 @@ class MyApp extends StatelessWidget {
         BlocProvider(create: (_) => sl<SettingsBloc>()..add(const ChangeSettings())),
       ],
       child: AdaptiveTheme(
-        light: CustomTheme.lightTheme,
+        // Dark is the only supported mode - both slots point at the same
+        // theme so nothing (system brightness, a stale stored preference)
+        // can ever surface the light theme.
+        light: CustomTheme.darkTheme,
         dark: CustomTheme.darkTheme,
-        initial: sl<UserSettings>().getThemeMode() == 'dark'
-            ? AdaptiveThemeMode.dark
-            : sl<UserSettings>().getThemeMode() == 'light'
-                ? AdaptiveThemeMode.light
-                : AdaptiveThemeMode.system,
+        initial: AdaptiveThemeMode.dark,
         builder: (theme, darkTheme) => DpadNavigator(
           // Fire TV / Android TV only: the sole D-pad navigation authority.
           // Disabled elsewhere, where it's a pure pass-through so Android touch

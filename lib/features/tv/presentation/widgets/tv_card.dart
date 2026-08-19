@@ -15,11 +15,15 @@ import '../../../../core/utils/strings/url_strings.dart';
 import '../../data/models/tv_model.dart';
 
 class TvCard extends StatelessWidget {
-  const TvCard({super.key, required this.show, this.aspectRatio = 10 / 16, this.autofocus = false});
+  const TvCard({super.key, required this.show, this.aspectRatio = 10 / 16, this.autofocus = false, this.isAnime = false});
 
   final TvModel show;
   final double aspectRatio;
   final bool autofocus;
+
+  /// Anime series bookmark into their own store, separate from regular TV
+  /// Shows bookmarks - see [_TvBookmarkBadge].
+  final bool isAnime;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +50,7 @@ class TvCard extends StatelessWidget {
               child: Stack(
                 children: [
                   if (show.posterPath.trim() == '') const Center(child: FaIcon(FontAwesomeIcons.tv, color: Colors.white24, size: 40)),
-                  _TvBookmarkBadge(show: show),
+                  _TvBookmarkBadge(show: show, isAnime: isAnime),
                   VoteAvgWidget(voteAvg: show.voteAverage, alignment: Alignment.bottomRight),
                 ],
               ),
@@ -60,18 +64,21 @@ class TvCard extends StatelessWidget {
 
 /// Compact bookmark toggle in the poster's top-right corner, matching the
 /// movie card's bookmark badge. TV bookmarks are stored via [FavouriteService]
-/// (the shared TV store) and surfaced in the Bookmarks tab's TV Shows section.
+/// - regular shows in the shared TV store (surfaced in the Bookmarks tab's TV
+/// Shows section), anime series in their own separate store ([isAnime]),
+/// surfaced in the Bookmarks tab's Anime section instead.
 class _TvBookmarkBadge extends StatefulWidget {
-  const _TvBookmarkBadge({required this.show});
+  const _TvBookmarkBadge({required this.show, this.isAnime = false});
 
   final TvModel show;
+  final bool isAnime;
 
   @override
   State<_TvBookmarkBadge> createState() => _TvBookmarkBadgeState();
 }
 
 class _TvBookmarkBadgeState extends State<_TvBookmarkBadge> {
-  late bool _isBookmarked = sl<FavouriteService>().isFavourite(PlaybackMediaType.tv, widget.show.id);
+  late bool _isBookmarked = sl<FavouriteService>().isFavourite(PlaybackMediaType.tv, widget.show.id, isAnime: widget.isAnime);
 
   Future<void> _toggle() async {
     await sl<FavouriteService>().toggleFavourite(
@@ -80,6 +87,7 @@ class _TvBookmarkBadgeState extends State<_TvBookmarkBadge> {
         mediaType: PlaybackMediaType.tv,
         title: widget.show.name,
         posterPath: widget.show.posterPath,
+        isAnime: widget.isAnime,
       ),
     );
     if (!mounted) return;

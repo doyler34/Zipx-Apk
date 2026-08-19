@@ -14,8 +14,9 @@ class FavouriteService {
     return _box.values.whereType<Map>().map(FavouriteEntry.fromMap).toList();
   }
 
-  bool isFavourite(PlaybackMediaType mediaType, int tmdbId) {
-    return _box.containsKey('${mediaType.name}_$tmdbId');
+  bool isFavourite(PlaybackMediaType mediaType, int tmdbId, {bool isAnime = false}) {
+    final key = isAnime ? 'anime_${mediaType.name}_$tmdbId' : '${mediaType.name}_$tmdbId';
+    return _box.containsKey(key);
   }
 
   Future<void> toggleFavourite(FavouriteEntry entry) async {

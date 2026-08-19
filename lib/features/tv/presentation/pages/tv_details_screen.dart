@@ -53,7 +53,12 @@ class _BookmarkToggle extends StatefulWidget {
 }
 
 class _BookmarkToggleState extends State<_BookmarkToggle> {
-  late bool _isBookmarked = sl<FavouriteService>().isFavourite(PlaybackMediaType.tv, widget.show.id);
+  // No explicit "opened from Anime" flag is threaded through navigation, so
+  // this reuses the same Animation-genre signal that keeps anime out of TV
+  // Home's rows - it's already present on the real TMDB-sourced show.
+  bool get _isAnime => widget.show.isAnimation;
+
+  late bool _isBookmarked = sl<FavouriteService>().isFavourite(PlaybackMediaType.tv, widget.show.id, isAnime: _isAnime);
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +74,7 @@ class _BookmarkToggleState extends State<_BookmarkToggle> {
               mediaType: PlaybackMediaType.tv,
               title: widget.show.name,
               posterPath: widget.show.posterPath,
+              isAnime: _isAnime,
             ),
           );
           setState(() => _isBookmarked = !_isBookmarked);

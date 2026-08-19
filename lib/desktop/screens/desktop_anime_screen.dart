@@ -4,8 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../common/styles/zipx_ui.dart';
 import '../../core/dependency_injection/di.dart';
 import '../../features/anime/presentation/blocs/anime_home_cubit.dart';
+import '../../features/anime/presentation/widgets/anime_movie_card.dart';
 import '../../features/movies/data/models/movie_model.dart';
-import '../../features/personalization/presentation/widgets/bookmarks/bookmark_card.dart';
 import '../../features/tv/data/models/tv_model.dart';
 import '../../features/tv/presentation/widgets/tv_card.dart';
 import '../widgets/hover_scale.dart';
@@ -68,7 +68,7 @@ class _MovieRow extends StatelessWidget {
           itemCount: movies.length,
           itemBuilder: (context, i) => SizedBox(
             width: 215,
-            child: HoverScale(child: BookmarkCard(movie: movies[i])),
+            child: HoverScale(child: AnimeMovieCard(movie: movies[i])),
           ),
         ),
       ],
@@ -98,7 +98,7 @@ class _TvRow extends StatelessWidget {
           itemCount: shows.length,
           itemBuilder: (context, i) => SizedBox(
             width: 215,
-            child: HoverScale(child: TvCard(show: shows[i])),
+            child: HoverScale(child: TvCard(show: shows[i], isAnime: true)),
           ),
         ),
       ],

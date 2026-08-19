@@ -4,6 +4,7 @@ import 'package:movie_bloc_app/common/widgets/appbars_navbars/custom_appbar.dart
 import 'package:movie_bloc_app/common/widgets/movie/mark_widget.dart';
 
 import '../../../../../core/dependency_injection/di.dart';
+import '../../../../anime/presentation/widgets/anime_movie_card.dart';
 import '../../../data/models/movie_model.dart';
 import '../../blocs/details/details/details_bloc.dart';
 import '../../widgets/details/details_section.dart';
@@ -32,7 +33,7 @@ class DetailsScreen extends StatelessWidget {
                 actions: [
                   Padding(
                     padding: const EdgeInsets.only(right: 15),
-                    child: MarkWidget(movie: movie, align: false),
+                    child: movie.isAnimation ? AnimeMovieBookmarkToggle(movie: movie) : MarkWidget(movie: movie, align: false),
                   ),
                 ],
               ),

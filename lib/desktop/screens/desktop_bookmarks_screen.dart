@@ -5,6 +5,7 @@ import '../../common/styles/zipx_ui.dart';
 import '../../core/dependency_injection/di.dart';
 import '../../core/playback/domain/entities/playback_media_type.dart';
 import '../../core/playback/services/favourite_service.dart';
+import '../../features/anime/presentation/widgets/anime_movie_card.dart';
 import '../../features/movies/data/models/movie_model.dart';
 import '../../features/personalization/presentation/blocs/bookmarks/bookmarks_bloc.dart';
 import '../../features/personalization/presentation/blocs/settings/settings_bloc.dart';
@@ -13,9 +14,9 @@ import '../../features/tv/data/models/tv_model.dart';
 import '../../features/tv/presentation/widgets/tv_card.dart';
 import '../widgets/hover_scale.dart';
 
-/// Desktop Watchlist: the saved TV Shows and Movies in a wide, hover-aware poster
-/// grid. Same data as the phone screen ([FavouriteService] for TV, [BookmarksBloc]
-/// for movies) - just the desktop layout.
+/// Desktop Watchlist: the saved TV Shows, Anime and Movies in a wide,
+/// hover-aware poster grid. Same data as the phone screen ([FavouriteService]
+/// for TV/Anime, [BookmarksBloc] for movies) - just the desktop layout.
 class DesktopBookmarksScreen extends StatefulWidget {
   const DesktopBookmarksScreen({super.key});
 
@@ -24,10 +25,10 @@ class DesktopBookmarksScreen extends StatefulWidget {
 }
 
 class _DesktopBookmarksScreenState extends State<DesktopBookmarksScreen> {
-  List<TvModel> _tvBookmarks() {
+  List<TvModel> _tvBookmarks({required bool isAnime}) {
     return sl<FavouriteService>()
         .getFavourites()
-        .where((e) => e.mediaType == PlaybackMediaType.tv)
+        .where((e) => e.mediaType == PlaybackMediaType.tv && e.isAnime == isAnime)
         .map((e) => TvModel(
               id: e.tmdbId,
               name: e.title,
@@ -40,6 +41,24 @@ class _DesktopBookmarksScreenState extends State<DesktopBookmarksScreen> {
         .toList();
   }
 
+  List<MovieModel> _animeMovieBookmarks() {
+    return sl<FavouriteService>()
+        .getFavourites()
+        .where((e) => e.mediaType == PlaybackMediaType.movie && e.isAnime)
+        .map((e) => MovieModel(
+              id: e.tmdbId,
+              title: e.title,
+              overview: '',
+              posterPath: e.posterPath ?? '',
+              backdropPath: '',
+              voteAverage: 0,
+              releaseDate: '',
+              video: false,
+              adult: false,
+            ))
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -48,9 +67,11 @@ class _DesktopBookmarksScreenState extends State<DesktopBookmarksScreen> {
         bloc: context.read<BookmarksBloc>(),
         builder: (context, state) {
           final List<MovieModel> movies = context.read<BookmarksBloc>().bookmarks;
-          final tvShows = _tvBookmarks();
+          final tvShows = _tvBookmarks(isAnime: false);
+          final animeSeries = _tvBookmarks(isAnime: true);
+          final animeMovies = _animeMovieBookmarks();
 
-          if (movies.isEmpty && tvShows.isEmpty) {
+          if (movies.isEmpty && tvShows.isEmpty && animeSeries.isEmpty && animeMovies.isEmpty) {
             return const Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -72,8 +93,16 @@ class _DesktopBookmarksScreenState extends State<DesktopBookmarksScreen> {
                   _header('TV Shows'),
                   _grid([for (final show in tvShows.reversed) HoverScale(child: TvCard(show: show))]),
                 ],
-                if (movies.isNotEmpty) ...[
+                if (animeMovies.isNotEmpty || animeSeries.isNotEmpty) ...[
                   if (tvShows.isNotEmpty) const SizedBox(height: 28),
+                  _header('Anime'),
+                  _grid([
+                    for (final show in animeSeries.reversed) HoverScale(child: TvCard(show: show, isAnime: true)),
+                    for (final movie in animeMovies.reversed) HoverScale(child: AnimeMovieCard(movie: movie)),
+                  ]),
+                ],
+                if (movies.isNotEmpty) ...[
+                  if (tvShows.isNotEmpty || animeMovies.isNotEmpty || animeSeries.isNotEmpty) const SizedBox(height: 28),
                   _header('Movies'),
                   BlocBuilder<SettingsBloc, SettingsState>(
                     builder: (context, s) {

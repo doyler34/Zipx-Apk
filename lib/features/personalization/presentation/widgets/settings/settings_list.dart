@@ -2,14 +2,12 @@ import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:movie_bloc_app/features/personalization/presentation/widgets/settings/adult_content_tile.dart';
-import 'package:movie_bloc_app/features/personalization/presentation/widgets/settings/theme_mode_tile.dart';
 
 import '../../blocs/settings/settings_bloc.dart';
 import 'change_language_tile.dart';
 import 'clear_bookmarks_tile.dart';
 import 'clear_continue_watching_tile.dart';
 import 'downloads_tile.dart';
-import 'streaming_providers_section.dart';
 
 class SettingsList extends StatelessWidget {
   const SettingsList({super.key});
@@ -30,8 +28,6 @@ class SettingsList extends StatelessWidget {
                     ClearBookmarksTile(),
                     ClearContinueWatchingTile(),
                     ChangeLanguageTile(),
-                    ThemeModeTile(),
-                    StreamingProvidersSection(),
                   ],
                 ),
               ),

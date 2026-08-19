@@ -2,15 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:movie_bloc_app/common/blocs/bloc/nav_bar_bloc.dart';
-import 'package:movie_bloc_app/core/playback/domain/providers/streaming_provider.dart';
-import 'package:movie_bloc_app/core/playback/domain/providers/streaming_provider_registry.dart';
-import 'package:movie_bloc_app/core/playback/domain/providers/template_embed_provider.dart';
-import 'package:movie_bloc_app/core/playback/domain/providers/vidsrc_provider.dart';
 import 'package:movie_bloc_app/core/playback/services/downloads_service.dart';
 import 'package:movie_bloc_app/core/playback/services/favourite_service.dart';
 import 'package:movie_bloc_app/core/playback/services/playback_history_service.dart';
-import 'package:movie_bloc_app/core/playback/services/playback_provider_service.dart';
-import 'package:movie_bloc_app/core/playback/services/provider_preferences_service.dart';
 import 'package:movie_bloc_app/core/playback/services/availability_prober.dart';
 import 'package:movie_bloc_app/core/playback/services/stream_availability_service.dart';
 import 'package:movie_bloc_app/core/playback/services/stream_sources_service.dart';
@@ -55,24 +49,6 @@ Future initDependencyInjection() async {
   sl.registerLazySingleton<MovieRepo>(() => MovieRepoImpl(tmdbDatasource: sl()));
   sl.registerLazySingleton<TmdbTvDatasource>(() => TmdbTvDatasource(sl()));
 
-  // --- Streaming provider architecture -------------------------------
-  // Every embedded playback provider is registered exactly once, here.
-  // To add a new provider later: implement `StreamingProvider` in its own
-  // file under core/playback/domain/providers/, then add one line to this
-  // list. Nothing else in the app (registry, services, player UI,
-  // settings screen) needs to change.
-  sl.registerLazySingleton<StreamingProviderRegistry>(
-    () => StreamingProviderRegistry(<StreamingProvider>[
-      // VidSrc stays first (priority 0) so it remains the default that
-      // auto-plays. The rest are a TEST BATCH - switch to them from the
-      // player's provider button to find which also come out ad-free under
-      // our navigation blocking; we'll trim to the winners afterwards.
-      VidSrcProvider(),
-      ...buildEmbedProviders(),
-    ]),
-  );
-  sl.registerLazySingleton<ProviderPreferencesService>(() => ProviderPreferencesService(sl()));
-  sl.registerLazySingleton<PlaybackProviderService>(() => PlaybackProviderService(sl(), sl(), sl()));
   sl.registerLazySingleton<PlaybackHistoryService>(() => PlaybackHistoryService());
   sl.registerLazySingleton<StreamAvailabilityService>(() => StreamAvailabilityService());
   sl.registerLazySingleton<StreamSourcesService>(() => StreamSourcesService(sl<Dio>()));
