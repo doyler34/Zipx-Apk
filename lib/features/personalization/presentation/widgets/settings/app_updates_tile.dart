@@ -2,7 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:open_file/open_file.dart';
 
 import '../../../../../common/styles/zipx_ui.dart';
 import '../../../../../core/dependency_injection/di.dart';
@@ -30,6 +30,8 @@ class _AppUpdatesTileState extends State<AppUpdatesTile> {
   UpdateManifest? _manifest;
   bool _checking = false;
   bool _hasCheckedOnce = false;
+  bool _downloading = false;
+  double _downloadProgress = 0;
 
   @override
   void initState() {
@@ -67,17 +69,33 @@ class _AppUpdatesTileState extends State<AppUpdatesTile> {
   }
 
   Future<void> _download(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
+    setState(() {
+      _downloading = true;
+      _downloadProgress = 0;
+    });
     try {
-      // Handing off to the OS browser/download manager rather than
-      // downloading in-app: on Android that lands in Downloads and offers to
-      // open it (the normal package installer) with no extra permissions;
-      // on Windows the installer's stable AppId (installer/zipx.iss) already
-      // updates the existing install in place once the user runs it.
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      // Downloaded straight into the app (no browser hand-off), then handed
+      // to the OS installer/opener: on Android that's the normal package
+      // installer (updates the existing install in place, same applicationId);
+      // on Windows it runs the installer, which uses a stable AppId
+      // (installer/zipx.iss) so it also updates in place.
+      final path = await _service.downloadUpdate(
+        url: url,
+        onProgress: (p) {
+          if (mounted) setState(() => _downloadProgress = p);
+        },
+      );
+      if (!mounted) return;
+      setState(() => _downloading = false);
+      final result = await OpenFile.open(path);
+      if (result.type != ResultType.done && mounted) {
+        HelperFunctions.showSnackBar(context, 'Downloaded - open it from your Downloads/Files app to install.');
+      }
     } catch (_) {
-      if (mounted) HelperFunctions.showSnackBar(context, 'Could not open the download link.');
+      if (mounted) {
+        setState(() => _downloading = false);
+        HelperFunctions.showSnackBar(context, 'Download failed - please try again.');
+      }
     }
   }
 
@@ -130,14 +148,30 @@ class _AppUpdatesTileState extends State<AppUpdatesTile> {
                   ),
               ],
               const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: downloadUrl.isEmpty ? null : () => _download(downloadUrl),
-                  style: ElevatedButton.styleFrom(backgroundColor: ZipxUi.red),
-                  child: const Text('Download Update', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              if (_downloading) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: _downloadProgress >= 0 ? _downloadProgress : null,
+                    minHeight: 8,
+                    backgroundColor: Colors.white12,
+                    valueColor: const AlwaysStoppedAnimation(ZipxUi.red),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 8),
+                Text(
+                  _downloadProgress >= 0 ? 'Downloading... ${(_downloadProgress * 100).round()}%' : 'Downloading...',
+                  style: const TextStyle(color: ZipxUi.textMuted, fontSize: 12),
+                ),
+              ] else
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: downloadUrl.isEmpty ? null : () => _download(downloadUrl),
+                    style: ElevatedButton.styleFrom(backgroundColor: ZipxUi.red),
+                    child: const Text('Download Update', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  ),
+                ),
             ] else if (manifest != null)
               const Row(
                 children: [

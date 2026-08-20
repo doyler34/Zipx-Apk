@@ -1,5 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Lets the user install the APK the app just downloaded itself
+         (Profile -> App Updates), instead of only being able to open one
+         downloaded some other way. The OS still shows its own install
+         confirmation - this doesn't allow silent/automatic installs. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Fire TV / Android TV support: leanback is optional (still a phone app),
          and a touchscreen must NOT be required or the app is hidden from the TV

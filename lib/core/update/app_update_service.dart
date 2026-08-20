@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'update_manifest.dart';
 
@@ -80,5 +82,30 @@ class AppUpdateService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Downloads [url] into the app's cache dir (overwriting any previous
+  /// download there) and reports progress via [onProgress] (0.0-1.0, or -1
+  /// when the server doesn't send a content-length). Returns the local file
+  /// path on success, so the caller can hand it to the OS installer/opener.
+  Future<String> downloadUpdate({
+    required String url,
+    required void Function(double progress) onProgress,
+  }) async {
+    final dir = await getTemporaryDirectory();
+    final fileName = Uri.parse(url).pathSegments.isNotEmpty ? Uri.parse(url).pathSegments.last : 'zipx-update';
+    final savePath = '${dir.path}/$fileName';
+    // Drop a stale partial/previous download before starting a fresh one.
+    final existing = File(savePath);
+    if (await existing.exists()) await existing.delete();
+
+    await _dio.download(
+      url,
+      savePath,
+      onReceiveProgress: (received, total) {
+        onProgress(total > 0 ? received / total : -1);
+      },
+    );
+    return savePath;
   }
 }

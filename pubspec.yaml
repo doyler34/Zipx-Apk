@@ -38,6 +38,8 @@ dependencies:
 
   #App version (Profile -> App Updates)
   package_info_plus: ^8.1.0
+  path_provider: ^2.1.1
+  open_file: ^4.0.0
 
   #UI
   carousel_slider: ^4.2.1
