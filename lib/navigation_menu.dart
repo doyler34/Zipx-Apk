@@ -23,11 +23,11 @@ class NavigationMenu extends StatelessWidget {
   Widget _bodyFor(int index) {
     switch (index) {
       case 1:
-        return const SearchScreen();
-      case 2:
         return const TvHomeScreen();
-      case 3:
+      case 2:
         return const AnimeHomeScreen();
+      case 3:
+        return const SearchScreen();
       case 4:
         return const BookmarksScreen();
       case 5:

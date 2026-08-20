@@ -47,9 +47,9 @@ class _DesktopShellState extends State<DesktopShell> {
     final expanded = Responsive.isWide(context);
     final screens = <Widget>[
       const DesktopHomeScreen(),
-      const DesktopSearchScreen(),
       const DesktopTvScreen(),
       const DesktopAnimeScreen(),
+      const DesktopSearchScreen(),
       const DesktopBookmarksScreen(),
       const DesktopSettingsScreen(),
     ];

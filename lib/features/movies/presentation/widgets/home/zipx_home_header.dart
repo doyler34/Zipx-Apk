@@ -32,7 +32,7 @@ class ZipxHomeHeader extends StatelessWidget {
         IconButton(
           splashRadius: 22,
           icon: const Icon(Icons.search, color: Colors.white, size: 26),
-          onPressed: () => context.read<NavBarBloc>().add(const NavBarTapEvent(1)),
+          onPressed: () => context.read<NavBarBloc>().add(const NavBarTapEvent(3)),
         ),
         Padding(
           padding: const EdgeInsets.only(right: 16, left: 4),

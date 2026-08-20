@@ -12,9 +12,9 @@ class DesktopNavItem {
 
 const List<DesktopNavItem> kDesktopNavItems = [
   DesktopNavItem(Icons.home_rounded, 'Home'),
-  DesktopNavItem(Icons.search_rounded, 'Search'),
   DesktopNavItem(Icons.tv_rounded, 'TV Shows'),
   DesktopNavItem(Icons.animation_rounded, 'Anime'),
+  DesktopNavItem(Icons.search_rounded, 'Search'),
   DesktopNavItem(Icons.bookmark_rounded, 'Watchlist'),
 ];
 
