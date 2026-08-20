@@ -13,6 +13,7 @@ import '../../core/utils/strings/url_strings.dart';
 import '../../features/tv/data/models/tv_model.dart';
 import '../../features/tv/presentation/blocs/tv_details_cubit.dart';
 import '../../features/tv/presentation/widgets/episode_tile.dart';
+import '../../features/tv/presentation/widgets/season_chip.dart';
 import '../../common/widgets/youtube_player/trailer_preview.dart';
 import '../../common/widgets/tv/tv_focusable.dart';
 
@@ -36,23 +37,59 @@ class DesktopTvDetails extends StatelessWidget {
         body: BlocBuilder<TvDetailsCubit, TvDetailsState>(
           builder: (context, state) {
             final details = state.details;
-            return SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _banner(context),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(_pad, 0, _pad, 8),
-                    child: _info(context, genres: details?.genres ?? const <String>[]),
+            final hasSeasons = details != null && details.seasons.isNotEmpty;
+            return CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _banner(context),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(_pad, 0, _pad, 8),
+                        child: _info(context, genres: details?.genres ?? const <String>[]),
+                      ),
+                      if (details != null && details.trailerKey.isNotEmpty) _Trailer(videoId: details.trailerKey),
+                      if (state.isLoadingDetails)
+                        const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator(color: ZipxUi.red)))
+                      else if (hasSeasons)
+                        _SeasonSelector(show: show, state: state),
+                    ],
                   ),
-                  if (details != null && details.trailerKey.isNotEmpty) _Trailer(videoId: details.trailerKey),
-                  if (state.isLoadingDetails)
-                    const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator(color: ZipxUi.red)))
-                  else if (details != null && details.seasons.isNotEmpty)
-                    _Seasons(show: show, state: state),
-                  const SizedBox(height: 40),
-                ],
-              ),
+                ),
+                // A real sliver list instead of unrolling every episode into
+                // the Column above: a long season (20+ episodes, each with its
+                // own thumbnail) used to build and paint every tile at once -
+                // this only builds the ones actually near the viewport.
+                if (hasSeasons && !state.isLoadingEpisodes && state.episodes.isNotEmpty)
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: _pad - 12),
+                    sliver: SliverList.builder(
+                      itemCount: state.episodes.length,
+                      itemBuilder: (context, index) {
+                        final episode = state.episodes[index];
+                        return ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 900),
+                          child: EpisodeTile(
+                            episode: episode,
+                            onPlay: () => context.push(
+                              '/player',
+                              extra: PlaybackRequest(
+                                tmdbId: show.id,
+                                mediaType: PlaybackMediaType.tv,
+                                title: '${show.name} - S${episode.seasonNumber}E${episode.episodeNumber}',
+                                seasonNumber: episode.seasonNumber,
+                                episodeNumber: episode.episodeNumber,
+                                posterPath: show.posterPath,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                const SliverToBoxAdapter(child: SizedBox(height: 40)),
+              ],
             );
           },
         ),
@@ -181,8 +218,12 @@ class DesktopTvDetails extends StatelessWidget {
   }
 }
 
-class _Seasons extends StatelessWidget {
-  const _Seasons({required this.show, required this.state});
+/// Header + horizontal season-chip row, plus the episodes loading/error/empty
+/// states. The episode list itself lives in a sliver in the parent scroll
+/// view instead of being unrolled here, so a long season doesn't build every
+/// tile (and its thumbnail) at once.
+class _SeasonSelector extends StatelessWidget {
+  const _SeasonSelector({required this.show, required this.state});
 
   final TvModel show;
   final TvDetailsState state;
@@ -198,7 +239,7 @@ class _Seasons extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(DesktopTvDetails._pad, 26, DesktopTvDetails._pad, 12),
           child: Text('Episodes', style: TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w700)),
         ),
-        // Season chips.
+        // Season chips - a horizontal scroller copes with any season count.
         SizedBox(
           height: 40,
           child: ListView(
@@ -208,7 +249,7 @@ class _Seasons extends StatelessWidget {
               for (final season in details.seasons)
                 Padding(
                   padding: const EdgeInsets.only(right: 10),
-                  child: _SeasonChip(
+                  child: SeasonChip(
                     label: season.name,
                     selected: season.seasonNumber == selected,
                     onTap: () => context.read<TvDetailsCubit>().loadSeason(show.id, season.seasonNumber),
@@ -220,62 +261,27 @@ class _Seasons extends StatelessWidget {
         const SizedBox(height: 12),
         if (state.isLoadingEpisodes)
           const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator(color: ZipxUi.red)))
-        else
+        else if (state.errorMessage != null && state.episodes.isEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: DesktopTvDetails._pad - 12),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
-              child: Column(
-                children: [
-                  for (final episode in state.episodes)
-                    EpisodeTile(
-                      episode: episode,
-                      onPlay: () => context.push(
-                        '/player',
-                        extra: PlaybackRequest(
-                          tmdbId: show.id,
-                          mediaType: PlaybackMediaType.tv,
-                          title: '${show.name} - S${episode.seasonNumber}E${episode.episodeNumber}',
-                          seasonNumber: episode.seasonNumber,
-                          episodeNumber: episode.episodeNumber,
-                          posterPath: show.posterPath,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+            padding: const EdgeInsets.symmetric(horizontal: DesktopTvDetails._pad, vertical: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(state.errorMessage!, style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: () => context.read<TvDetailsCubit>().loadSeason(show.id, selected),
+                  child: const Text('Retry'),
+                ),
+              ],
             ),
+          )
+        else if (state.episodes.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: DesktopTvDetails._pad, vertical: 16),
+            child: Text('No episodes found for this season.', style: TextStyle(color: Colors.white54)),
           ),
       ],
-    );
-  }
-}
-
-class _SeasonChip extends StatelessWidget {
-  const _SeasonChip({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return TvFocusable(
-      onPressed: onTap,
-      borderRadius: 10,
-      focusScale: 1.06,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
-        decoration: BoxDecoration(
-          color: selected ? ZipxUi.red : ZipxUi.surface,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Text(label,
-            style: TextStyle(
-                color: selected ? Colors.white : ZipxUi.textMuted,
-                fontWeight: FontWeight.w600,
-                fontSize: 13)),
-      ),
     );
   }
 }

@@ -15,6 +15,7 @@ import '../../../../core/utils/strings/url_strings.dart';
 import '../../data/models/tv_model.dart';
 import '../blocs/tv_details_cubit.dart';
 import '../widgets/episode_tile.dart';
+import '../widgets/season_chip.dart';
 
 class TvDetailsScreen extends StatelessWidget {
   const TvDetailsScreen({super.key, required this.show});
@@ -112,118 +113,132 @@ class _TvDetailsBody extends StatelessWidget {
           );
         }
         final details = state.details;
+        final hasSeasons = details != null && details.seasons.isNotEmpty;
+        final selectedSeason = hasSeasons ? (state.selectedSeason ?? details.seasons.first.seasonNumber) : null;
 
-        return SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (show.backdropPath.trim().isNotEmpty)
-                SizedBox(
-                  // Capped so the backdrop doesn't fill a whole wide TV screen.
-                  height: (MediaQuery.of(context).size.height * 0.45).clamp(180.0, 340.0),
-                  width: double.infinity,
-                  child: ExtendedImage.network(UrlStrings.imageUrl + show.backdropPath, fit: BoxFit.cover, cache: true),
-                ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(show.name, style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.white)),
-                    const SizedBox(height: 8),
-                    if (show.overview.trim().isNotEmpty) Text(show.overview, style: const TextStyle(color: Colors.white70)),
-                    if (details != null && details.genres.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(details.genres.join(', '), style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                    ],
-                  ],
-                ),
-              ),
-              if (details != null && details.trailerKey.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                const Header(title: 'Trailer'),
-                const SizedBox(height: 8),
-                TrailerPreview(videoId: details.trailerKey),
-                const SizedBox(height: 8),
-              ],
-              if (details != null && details.seasons.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      const Text('Season:', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 12),
-                      DropdownButton<int>(
-                        value: state.selectedSeason ?? details.seasons.first.seasonNumber,
-                        dropdownColor: Theme.of(context).colorScheme.primary,
-                        style: const TextStyle(color: Colors.white),
-                        items: [
-                          for (final season in details.seasons)
-                            DropdownMenuItem(value: season.seasonNumber, child: Text(season.name)),
-                        ],
-                        onChanged: (seasonNumber) {
-                          if (seasonNumber != null) {
-                            context.read<TvDetailsCubit>().loadSeason(show.id, seasonNumber);
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (state.isLoadingEpisodes)
-                  const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
-                else if (state.errorMessage != null && state.episodes.isEmpty)
-                  // A failed episode fetch (network hiccup, timeout) used to
-                  // render nothing here - identical to a season that genuinely
-                  // has no episodes, so a transient failure looked like "this
-                  // show has no episodes" with no way to tell the two apart or
-                  // retry without leaving the page.
+        return CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (show.backdropPath.trim().isNotEmpty)
+                    SizedBox(
+                      // Capped so the backdrop doesn't fill a whole wide TV screen.
+                      height: (MediaQuery.of(context).size.height * 0.45).clamp(180.0, 340.0),
+                      width: double.infinity,
+                      child: ExtendedImage.network(UrlStrings.imageUrl + show.backdropPath, fit: BoxFit.cover, cache: true),
+                    ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(state.errorMessage!, style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center),
-                        const SizedBox(height: 12),
-                        ElevatedButton(
-                          onPressed: () => context.read<TvDetailsCubit>().loadSeason(
-                                show.id,
-                                state.selectedSeason ?? details.seasons.first.seasonNumber,
-                              ),
-                          child: const Text('Retry'),
-                        ),
+                        Text(show.name, style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.white)),
+                        const SizedBox(height: 8),
+                        if (show.overview.trim().isNotEmpty) Text(show.overview, style: const TextStyle(color: Colors.white70)),
+                        if (details != null && details.genres.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(details.genres.join(', '), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                        ],
                       ],
                     ),
-                  )
-                else if (state.episodes.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-                    child: Center(
-                      child: Text('No episodes found for this season.', style: TextStyle(color: Colors.white54)),
+                  ),
+                  if (details != null && details.trailerKey.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    const Header(title: 'Trailer'),
+                    const SizedBox(height: 8),
+                    TrailerPreview(videoId: details.trailerKey),
+                    const SizedBox(height: 8),
+                  ],
+                  if (hasSeasons) ...[
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      child: Text('Season', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
-                  )
-                else
-                  for (final episode in state.episodes)
-                    EpisodeTile(
-                      episode: episode,
-                      onPlay: () {
-                        context.push(
-                          '/player',
-                          extra: PlaybackRequest(
-                            tmdbId: show.id,
-                            mediaType: PlaybackMediaType.tv,
-                            title: '${show.name} - S${episode.seasonNumber}E${episode.episodeNumber}',
-                            seasonNumber: episode.seasonNumber,
-                            episodeNumber: episode.episodeNumber,
-                            posterPath: show.posterPath,
-                          ),
-                        );
-                      },
+                    // Horizontal scroll instead of a dropdown: a show with a
+                    // dozen+ seasons just scrolls sideways instead of a menu
+                    // trying to cram every season into a popup.
+                    SizedBox(
+                      height: 40,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        children: [
+                          for (final season in details.seasons)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 10),
+                              child: SeasonChip(
+                                label: season.name,
+                                selected: season.seasonNumber == selectedSeason,
+                                onTap: () => context.read<TvDetailsCubit>().loadSeason(show.id, season.seasonNumber),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-              ],
-              const SizedBox(height: 32),
-            ],
-          ),
+                    const SizedBox(height: 8),
+                    if (state.isLoadingEpisodes)
+                      const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+                    else if (state.errorMessage != null && state.episodes.isEmpty)
+                      // A failed episode fetch (network hiccup, timeout) used to
+                      // render nothing here - identical to a season that genuinely
+                      // has no episodes, so a transient failure looked like "this
+                      // show has no episodes" with no way to tell the two apart or
+                      // retry without leaving the page.
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                        child: Column(
+                          children: [
+                            Text(state.errorMessage!, style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center),
+                            const SizedBox(height: 12),
+                            ElevatedButton(
+                              onPressed: () => context.read<TvDetailsCubit>().loadSeason(show.id, selectedSeason!),
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (state.episodes.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                        child: Center(
+                          child: Text('No episodes found for this season.', style: TextStyle(color: Colors.white54)),
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+            // A real sliver list instead of unrolling every episode into the
+            // Column above: a long season (20+ episodes, each with its own
+            // thumbnail) used to build and paint every tile at once - this
+            // only builds the ones actually near the viewport.
+            if (hasSeasons && !state.isLoadingEpisodes && state.episodes.isNotEmpty)
+              SliverList.builder(
+                itemCount: state.episodes.length,
+                itemBuilder: (context, index) {
+                  final episode = state.episodes[index];
+                  return EpisodeTile(
+                    episode: episode,
+                    onPlay: () {
+                      context.push(
+                        '/player',
+                        extra: PlaybackRequest(
+                          tmdbId: show.id,
+                          mediaType: PlaybackMediaType.tv,
+                          title: '${show.name} - S${episode.seasonNumber}E${episode.episodeNumber}',
+                          seasonNumber: episode.seasonNumber,
+                          episodeNumber: episode.episodeNumber,
+                          posterPath: show.posterPath,
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            const SliverToBoxAdapter(child: SizedBox(height: 32)),
+          ],
         );
       },
     );
