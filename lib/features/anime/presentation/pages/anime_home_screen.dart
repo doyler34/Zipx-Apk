@@ -22,6 +22,12 @@ class AnimeHomeScreen extends StatelessWidget {
   }
 }
 
+/// Which of a mixed movie+series search result to show. Search results have
+/// no inherent type separation (One Piece alone turns up a dozen films and
+/// specials mixed in with the main series), so this lets the user narrow
+/// down to just one kind instead of hunting through both.
+enum _SearchTypeFilter { all, movies, series }
+
 class _AnimeHomeView extends StatefulWidget {
   const _AnimeHomeView();
 
@@ -31,11 +37,23 @@ class _AnimeHomeView extends StatefulWidget {
 
 class _AnimeHomeViewState extends State<_AnimeHomeView> {
   final _controller = TextEditingController();
+  _SearchTypeFilter _searchFilter = _SearchTypeFilter.all;
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  List<dynamic> _filtered(List<dynamic> results) {
+    switch (_searchFilter) {
+      case _SearchTypeFilter.all:
+        return results;
+      case _SearchTypeFilter.movies:
+        return results.whereType<MovieModel>().toList();
+      case _SearchTypeFilter.series:
+        return results.whereType<TvModel>().toList();
+    }
   }
 
   @override
@@ -50,7 +68,13 @@ class _AnimeHomeViewState extends State<_AnimeHomeView> {
               controller: _controller,
               style: const TextStyle(color: Colors.white),
               cursorColor: ZipxUi.red,
-              onChanged: (value) => context.read<AnimeHomeCubit>().search(value),
+              onChanged: (value) {
+                context.read<AnimeHomeCubit>().search(value);
+                // A new search starts from "All" - a filter left over from a
+                // previous query could otherwise hide every result with no
+                // indication why.
+                setState(() => _searchFilter = _SearchTypeFilter.all);
+              },
               decoration: InputDecoration(
                 hintText: 'Search anime...',
                 hintStyle: const TextStyle(color: ZipxUi.textMuted),
@@ -75,7 +99,26 @@ class _AnimeHomeViewState extends State<_AnimeHomeView> {
 
                 if (state.isSearching) {
                   if (state.isLoading) return const Center(child: CircularProgressIndicator());
-                  return _AnimeGrid(results: state.searchResults);
+                  return Column(
+                    children: [
+                      _SearchTypeChips(
+                        selected: _searchFilter,
+                        onChanged: (f) => setState(() => _searchFilter = f),
+                      ),
+                      Expanded(
+                        child: _AnimeGrid(
+                          results: _filtered(state.searchResults),
+                          emptyLabel: state.searchResults.isEmpty
+                              ? 'No anime found.'
+                              : switch (_searchFilter) {
+                                  _SearchTypeFilter.all => 'No anime found.',
+                                  _SearchTypeFilter.movies => 'No matching movies - try Series or All.',
+                                  _SearchTypeFilter.series => 'No matching series - try Movies or All.',
+                                },
+                        ),
+                      ),
+                    ],
+                  );
                 }
 
                 return ListView(
@@ -117,16 +160,60 @@ class _AnimeHomeViewState extends State<_AnimeHomeView> {
   }
 }
 
+/// "All / Movies / Series" filter row shown above search results.
+class _SearchTypeChips extends StatelessWidget {
+  const _SearchTypeChips({required this.selected, required this.onChanged});
+
+  final _SearchTypeFilter selected;
+  final ValueChanged<_SearchTypeFilter> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Row(
+        children: [
+          _chip(label: 'All', value: _SearchTypeFilter.all),
+          const SizedBox(width: 8),
+          _chip(label: 'Movies', value: _SearchTypeFilter.movies),
+          const SizedBox(width: 8),
+          _chip(label: 'Series', value: _SearchTypeFilter.series),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip({required String label, required _SearchTypeFilter value}) {
+    final isSelected = selected == value;
+    return GestureDetector(
+      onTap: () => onChanged(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? ZipxUi.red : ZipxUi.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isSelected ? ZipxUi.red : Colors.white24, width: 0.6),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(color: Colors.white, fontWeight: isSelected ? FontWeight.bold : FontWeight.w500),
+        ),
+      ),
+    );
+  }
+}
+
 /// Responsive poster grid for search results (a mix of anime movies + series).
 class _AnimeGrid extends StatelessWidget {
-  const _AnimeGrid({required this.results});
+  const _AnimeGrid({required this.results, this.emptyLabel = 'No anime found.'});
 
   final List<dynamic> results;
+  final String emptyLabel;
 
   @override
   Widget build(BuildContext context) {
     if (results.isEmpty) {
-      return const Center(child: Text('No anime found.', style: TextStyle(color: Colors.white70)));
+      return Center(child: Text(emptyLabel, style: const TextStyle(color: Colors.white70)));
     }
     final width = MediaQuery.of(context).size.width;
     final crossAxisCount = (width / 200).floor().clamp(2, 6);
