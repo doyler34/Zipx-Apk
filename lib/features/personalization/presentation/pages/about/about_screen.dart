@@ -67,6 +67,11 @@ class AboutScreen extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 20),
+            const Text(
+              '-Zipx',
+              style: TextStyle(color: Colors.white70, fontSize: 14.5, fontStyle: FontStyle.italic),
+            ),
           ],
         ),
       ),
