@@ -20,7 +20,7 @@ import '../../common/widgets/tv/tv_focusable.dart';
 /// Desktop TV details: a cinematic backdrop banner, the poster beside
 /// title/meta/overview and actions, then the trailer and a season selector with
 /// its episode list. Wired to [TvDetailsCubit], reusing [EpisodeTile].
-class DesktopTvDetails extends StatelessWidget {
+class DesktopTvDetails extends StatefulWidget {
   const DesktopTvDetails({super.key, required this.show});
 
   final TvModel show;
@@ -29,69 +29,94 @@ class DesktopTvDetails extends StatelessWidget {
   static const double _pad = 48;
 
   @override
+  State<DesktopTvDetails> createState() => _DesktopTvDetailsState();
+}
+
+class _DesktopTvDetailsState extends State<DesktopTvDetails> {
+  static const int _episodesPerPage = 20;
+
+  // Reset whenever the selected season changes (via the BlocListener below),
+  // so switching seasons doesn't leave you stuck on e.g. page 3 of a season
+  // with only one page.
+  int _episodePage = 0;
+
+  TvModel get show => widget.show;
+
+  @override
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) => sl<TvDetailsCubit>()..loadDetails(show.id),
       child: Scaffold(
         backgroundColor: ZipxUi.bg,
-        body: BlocBuilder<TvDetailsCubit, TvDetailsState>(
-          builder: (context, state) {
-            final details = state.details;
-            final hasSeasons = details != null && details.seasons.isNotEmpty;
-            return CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _banner(context),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(_pad, 0, _pad, 8),
-                        child: _info(context, genres: details?.genres ?? const <String>[]),
-                      ),
-                      if (details != null && details.trailerKey.isNotEmpty) _Trailer(videoId: details.trailerKey),
-                      if (state.isLoadingDetails)
-                        const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator(color: ZipxUi.red)))
-                      else if (hasSeasons)
-                        _SeasonSelector(show: show, state: state),
-                    ],
-                  ),
-                ),
-                // A real sliver list instead of unrolling every episode into
-                // the Column above: a long season (20+ episodes, each with its
-                // own thumbnail) used to build and paint every tile at once -
-                // this only builds the ones actually near the viewport.
-                if (hasSeasons && !state.isLoadingEpisodes && state.episodes.isNotEmpty)
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: _pad - 12),
-                    sliver: SliverList.builder(
-                      itemCount: state.episodes.length,
-                      itemBuilder: (context, index) {
-                        final episode = state.episodes[index];
-                        return ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 900),
-                          child: EpisodeTile(
-                            episode: episode,
-                            onPlay: () => context.push(
-                              '/player',
-                              extra: PlaybackRequest(
-                                tmdbId: show.id,
-                                mediaType: PlaybackMediaType.tv,
-                                title: '${show.name} - S${episode.seasonNumber}E${episode.episodeNumber}',
-                                seasonNumber: episode.seasonNumber,
-                                episodeNumber: episode.episodeNumber,
-                                posterPath: show.posterPath,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+        body: BlocListener<TvDetailsCubit, TvDetailsState>(
+          listenWhen: (previous, current) => previous.selectedSeason != current.selectedSeason,
+          listener: (context, state) => setState(() => _episodePage = 0),
+          child: BlocBuilder<TvDetailsCubit, TvDetailsState>(
+            builder: (context, state) {
+              final details = state.details;
+              final hasSeasons = details != null && details.seasons.isNotEmpty;
+
+              final totalEpisodePages = (state.episodes.length / _episodesPerPage).ceil();
+              final page = _episodePage.clamp(0, totalEpisodePages == 0 ? 0 : totalEpisodePages - 1);
+              final pageEpisodes = state.episodes.skip(page * _episodesPerPage).take(_episodesPerPage).toList();
+
+              return SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _banner(context),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(DesktopTvDetails._pad, 0, DesktopTvDetails._pad, 8),
+                      child: _info(context, genres: details?.genres ?? const <String>[]),
                     ),
-                  ),
-                const SliverToBoxAdapter(child: SizedBox(height: 40)),
-              ],
-            );
-          },
+                    if (details != null && details.trailerKey.isNotEmpty) _Trailer(videoId: details.trailerKey),
+                    if (state.isLoadingDetails)
+                      const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator(color: ZipxUi.red)))
+                    else if (hasSeasons)
+                      _SeasonSelector(show: show, state: state),
+                    // Capped to a page of 20 instead of unrolling the whole
+                    // season at once - a long season (One Piece-length shows
+                    // can run to 20+ episodes per TMDB "season") used to build
+                    // and paint every tile up front.
+                    if (hasSeasons && !state.isLoadingEpisodes && state.episodes.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: DesktopTvDetails._pad - 12),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 900),
+                          child: Column(
+                            children: [
+                              for (final episode in pageEpisodes)
+                                EpisodeTile(
+                                  episode: episode,
+                                  onPlay: () => context.push(
+                                    '/player',
+                                    extra: PlaybackRequest(
+                                      tmdbId: show.id,
+                                      mediaType: PlaybackMediaType.tv,
+                                      title: '${show.name} - S${episode.seasonNumber}E${episode.episodeNumber}',
+                                      seasonNumber: episode.seasonNumber,
+                                      episodeNumber: episode.episodeNumber,
+                                      posterPath: show.posterPath,
+                                    ),
+                                  ),
+                                ),
+                              if (totalEpisodePages > 1)
+                                _EpisodePager(
+                                  page: page,
+                                  totalPages: totalEpisodePages,
+                                  onChanged: (p) => setState(() => _episodePage = p),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 40),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -108,7 +133,7 @@ class DesktopTvDetails extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               if (show.backdropPath.trim().isNotEmpty)
-                ExtendedImage.network(_backdrop(show.backdropPath), fit: BoxFit.cover, cache: true, printError: false)
+                ExtendedImage.network(DesktopTvDetails._backdrop(show.backdropPath), fit: BoxFit.cover, cache: true, printError: false)
               else
                 const ColoredBox(color: ZipxUi.surface),
               const DecoratedBox(
@@ -219,9 +244,8 @@ class DesktopTvDetails extends StatelessWidget {
 }
 
 /// Header + horizontal season-chip row, plus the episodes loading/error/empty
-/// states. The episode list itself lives in a sliver in the parent scroll
-/// view instead of being unrolled here, so a long season doesn't build every
-/// tile (and its thumbnail) at once.
+/// states. The episode list itself is rendered by the parent (paginated),
+/// not here.
 class _SeasonSelector extends StatelessWidget {
   const _SeasonSelector({required this.show, required this.state});
 
@@ -418,6 +442,37 @@ class _ActionButton extends StatelessWidget {
             Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// "< Page X of Y >" control shown under a season's episode list once it
+/// spans more than one page.
+class _EpisodePager extends StatelessWidget {
+  const _EpisodePager({required this.page, required this.totalPages, required this.onChanged});
+
+  final int page; // 0-indexed
+  final int totalPages;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            onPressed: page > 0 ? () => onChanged(page - 1) : null,
+            icon: const Icon(Icons.chevron_left, color: Colors.white),
+          ),
+          Text('Page ${page + 1} of $totalPages', style: const TextStyle(color: ZipxUi.textMuted)),
+          IconButton(
+            onPressed: page < totalPages - 1 ? () => onChanged(page + 1) : null,
+            icon: const Icon(Icons.chevron_right, color: Colors.white),
+          ),
+        ],
       ),
     );
   }
