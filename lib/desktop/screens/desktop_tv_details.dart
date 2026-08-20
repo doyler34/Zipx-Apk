@@ -13,7 +13,7 @@ import '../../core/utils/strings/url_strings.dart';
 import '../../features/tv/data/models/tv_model.dart';
 import '../../features/tv/presentation/blocs/tv_details_cubit.dart';
 import '../../features/tv/presentation/widgets/episode_tile.dart';
-import '../../features/tv/presentation/widgets/season_chip.dart';
+import '../../features/tv/presentation/widgets/season_dropdown.dart';
 import '../../common/widgets/youtube_player/trailer_preview.dart';
 import '../../common/widgets/tv/tv_focusable.dart';
 
@@ -243,9 +243,9 @@ class _DesktopTvDetailsState extends State<DesktopTvDetails> {
   }
 }
 
-/// Header + horizontal season-chip row, plus the episodes loading/error/empty
-/// states. The episode list itself is rendered by the parent (paginated),
-/// not here.
+/// "Episodes" header + the season dropdown, plus the episodes
+/// loading/error/empty states. The episode list itself is rendered by the
+/// parent (paginated), not here.
 class _SeasonSelector extends StatelessWidget {
   const _SeasonSelector({required this.show, required this.state});
 
@@ -263,22 +263,17 @@ class _SeasonSelector extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(DesktopTvDetails._pad, 26, DesktopTvDetails._pad, 12),
           child: Text('Episodes', style: TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w700)),
         ),
-        // Season chips - a horizontal scroller copes with any season count.
-        SizedBox(
-          height: 40,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: DesktopTvDetails._pad),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: DesktopTvDetails._pad),
+          child: Row(
             children: [
-              for (final season in details.seasons)
-                Padding(
-                  padding: const EdgeInsets.only(right: 10),
-                  child: SeasonChip(
-                    label: season.name,
-                    selected: season.seasonNumber == selected,
-                    onTap: () => context.read<TvDetailsCubit>().loadSeason(show.id, season.seasonNumber),
-                  ),
-                ),
+              const Text('Season:', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              const SizedBox(width: 12),
+              SeasonDropdown(
+                seasons: details.seasons,
+                selectedSeasonNumber: selected,
+                onChanged: (seasonNumber) => context.read<TvDetailsCubit>().loadSeason(show.id, seasonNumber),
+              ),
             ],
           ),
         ),

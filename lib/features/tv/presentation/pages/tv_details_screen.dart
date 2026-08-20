@@ -15,6 +15,7 @@ import '../../../../core/utils/strings/url_strings.dart';
 import '../../data/models/tv_model.dart';
 import '../blocs/tv_details_cubit.dart';
 import '../widgets/episode_tile.dart';
+import '../widgets/season_dropdown.dart';
 
 class TvDetailsScreen extends StatelessWidget {
   const TvDetailsScreen({super.key, required this.show});
@@ -176,23 +177,10 @@ class _TvDetailsBodyState extends State<_TvDetailsBody> {
                       children: [
                         const Text('Season:', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                         const SizedBox(width: 12),
-                        DropdownButton<int>(
-                          value: selectedSeason,
-                          dropdownColor: Theme.of(context).colorScheme.primary,
-                          style: const TextStyle(color: Colors.white),
-                          // Bounds the popup's height and makes it scroll
-                          // internally instead of trying to cram every season
-                          // in - this is what broke for shows with 7+ seasons.
-                          menuMaxHeight: 320,
-                          items: [
-                            for (final season in details.seasons)
-                              DropdownMenuItem(value: season.seasonNumber, child: Text(season.name)),
-                          ],
-                          onChanged: (seasonNumber) {
-                            if (seasonNumber != null) {
-                              context.read<TvDetailsCubit>().loadSeason(show.id, seasonNumber);
-                            }
-                          },
+                        SeasonDropdown(
+                          seasons: details.seasons,
+                          selectedSeasonNumber: selectedSeason!,
+                          onChanged: (seasonNumber) => context.read<TvDetailsCubit>().loadSeason(show.id, seasonNumber),
                         ),
                       ],
                     ),
