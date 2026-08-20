@@ -101,7 +101,10 @@ class _AppUpdatesTileState extends State<AppUpdatesTile> {
       setState(() => _downloading = false);
       final result = await OpenFile.open(path);
       if (result.type != ResultType.done && mounted) {
-        HelperFunctions.showSnackBar(context, 'Downloaded - open it from your Downloads/Files app to install.');
+        // Surfaces the plugin's actual failure reason (e.g. permissionDenied,
+        // noAppToOpen) instead of a generic message, so a real cause can be
+        // diagnosed from the field instead of guessed at.
+        HelperFunctions.showSnackBar(context, 'Could not open installer: ${result.type} - ${result.message}');
       }
     } catch (_) {
       if (mounted) {
