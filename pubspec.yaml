@@ -36,6 +36,9 @@ dependencies:
   youtube_player_iframe: ^4.0.4
   url_launcher: ^6.3.1
 
+  #App version (Profile -> App Updates)
+  package_info_plus: ^8.1.0
+
   #UI
   carousel_slider: ^4.2.1
   blur: ^4.0.0

@@ -43,6 +43,8 @@ Future<void> main() async {
   await Hive.openBox('stream_availability');
   // Server-side preparation jobs shown under Profile → Downloads.
   await Hive.openBox('downloads');
+  // Cached update-manifest check result, shown under Profile → App Updates.
+  await Hive.openBox('app_update');
 
   await initDependencyInjection();
 

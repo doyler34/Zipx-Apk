@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:movie_bloc_app/common/blocs/bloc/nav_bar_bloc.dart';
+import 'package:movie_bloc_app/core/update/app_update_service.dart';
 import 'package:movie_bloc_app/core/playback/services/downloads_service.dart';
 import 'package:movie_bloc_app/core/playback/services/favourite_service.dart';
 import 'package:movie_bloc_app/core/playback/services/playback_history_service.dart';
@@ -56,6 +57,7 @@ Future initDependencyInjection() async {
   sl.registerLazySingleton<DownloadsService>(() => DownloadsService());
   sl.registerLazySingleton<SubtitleService>(() => SubtitleService(sl<Dio>()));
   sl.registerLazySingleton<FavouriteService>(() => FavouriteService());
+  sl.registerLazySingleton<AppUpdateService>(() => AppUpdateService(sl<Dio>()));
 
   //Others
   sl.registerSingleton<TextEditingController>(TextEditingController(), instanceName: 'search_controller');

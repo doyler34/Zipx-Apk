@@ -1,0 +1,10 @@
+{
+  "version": "1.0.188",
+  "android_url": "https://your-domain-or-ip/zipx-movies.apk",
+  "windows_url": "https://your-domain-or-ip/ZipX-Setup.exe",
+  "release_notes": [
+    "Faster loading",
+    "UI improvements",
+    "Bug fixes"
+  ]
+}

@@ -26,6 +26,7 @@ jobs:
     # secrets aren't set (secrets can't be referenced directly in `if:`).
     env:
       VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_PUBLIC_URL: ${{ secrets.VPS_PUBLIC_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -103,12 +104,20 @@ jobs:
       - name: Build release APK
         run: |
           build() {
+            # When VPS_PUBLIC_URL is set (Settings -> Secrets), point the app's
+            # update check at your own VPS instead of the GitHub Releases
+            # default - see backend/install-page/README.md.
+            EXTRA_DEFINES=()
+            if [ -n "$VPS_PUBLIC_URL" ]; then
+              EXTRA_DEFINES+=(--dart-define=UPDATE_MANIFEST_URL="$VPS_PUBLIC_URL/update-manifest.json")
+            fi
             flutter build apk --release \
               --build-number=${{ github.run_number }} \
               --build-name=1.0.${{ github.run_number }} \
               --dart-define=AIOSTREAMS_ADDON_URL=${{ secrets.AIOSTREAMS_ADDON_URL }} \
               --dart-define=PREPARE_ADDON_URL=${{ secrets.PREPARE_ADDON_URL }} \
-              --dart-define=PREPARE_API_KEY=${{ secrets.PREPARE_API_KEY }}
+              --dart-define=PREPARE_API_KEY=${{ secrets.PREPARE_API_KEY }} \
+              "${EXTRA_DEFINES[@]}"
           }
           for n in 1 2 3; do
             if build; then exit 0; fi

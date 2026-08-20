@@ -27,6 +27,7 @@ jobs:
     # secrets aren't set (secrets can't be referenced directly in `if:`).
     env:
       VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_PUBLIC_URL: ${{ secrets.VPS_PUBLIC_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,7 +60,14 @@ jobs:
         run: flutter pub get
 
       - name: Build Windows (release)
-        run: flutter build windows --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }} --dart-define=AIOSTREAMS_ADDON_URL=${{ secrets.AIOSTREAMS_ADDON_URL }} --dart-define=PREPARE_ADDON_URL=${{ secrets.PREPARE_ADDON_URL }} --dart-define=PREPARE_API_KEY=${{ secrets.PREPARE_API_KEY }}
+        shell: pwsh
+        run: |
+          # When VPS_PUBLIC_URL is set (Settings -> Secrets), point the app's
+          # update check at your own VPS instead of the GitHub Releases
+          # default - see backend/install-page/README.md.
+          $extra = @()
+          if ($env:VPS_PUBLIC_URL) { $extra += "--dart-define=UPDATE_MANIFEST_URL=$($env:VPS_PUBLIC_URL)/update-manifest.json" }
+          flutter build windows --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }} --dart-define=AIOSTREAMS_ADDON_URL=${{ secrets.AIOSTREAMS_ADDON_URL }} --dart-define=PREPARE_ADDON_URL=${{ secrets.PREPARE_ADDON_URL }} --dart-define=PREPARE_API_KEY=${{ secrets.PREPARE_API_KEY }} @extra
 
       - name: Build installer (Inno Setup)
         shell: pwsh
