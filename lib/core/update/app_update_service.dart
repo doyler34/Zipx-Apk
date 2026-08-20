@@ -85,12 +85,14 @@ class AppUpdateService {
   }
 
   /// Downloads [url] into the app's cache dir (overwriting any previous
-  /// download there) and reports progress via [onProgress] (0.0-1.0, or -1
-  /// when the server doesn't send a content-length). Returns the local file
-  /// path on success, so the caller can hand it to the OS installer/opener.
+  /// download there) and reports progress via [onProgress] - both the
+  /// 0.0-1.0 fraction (or -1 when the server doesn't send a content-length)
+  /// and the raw byte counts, so the UI can show "42.3 MB / 68.1 MB".
+  /// Returns the local file path on success, so the caller can hand it to
+  /// the OS installer/opener.
   Future<String> downloadUpdate({
     required String url,
-    required void Function(double progress) onProgress,
+    required void Function(double progress, int received, int total) onProgress,
   }) async {
     final dir = await getTemporaryDirectory();
     final fileName = Uri.parse(url).pathSegments.isNotEmpty ? Uri.parse(url).pathSegments.last : 'zipx-update';
@@ -103,6 +105,13 @@ class AppUpdateService {
       url,
       savePath,
       onReceiveProgress: (received, total) {
+        onProgress(total > 0 ? received / total : -1, received, total);
+      },
+    );
+    return savePath;
+  }
+}
+
         onProgress(total > 0 ? received / total : -1);
       },
     );

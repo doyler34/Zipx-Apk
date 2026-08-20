@@ -32,6 +32,8 @@ class _AppUpdatesTileState extends State<AppUpdatesTile> {
   bool _hasCheckedOnce = false;
   bool _downloading = false;
   double _downloadProgress = 0;
+  int _downloadedBytes = 0;
+  int _totalBytes = 0;
 
   @override
   void initState() {
@@ -68,10 +70,14 @@ class _AppUpdatesTileState extends State<AppUpdatesTile> {
     return '';
   }
 
+  String _formatMb(int bytes) => (bytes / (1024 * 1024)).toStringAsFixed(1);
+
   Future<void> _download(String url) async {
     setState(() {
       _downloading = true;
       _downloadProgress = 0;
+      _downloadedBytes = 0;
+      _totalBytes = 0;
     });
     try {
       // Downloaded straight into the app (no browser hand-off), then handed
@@ -81,8 +87,14 @@ class _AppUpdatesTileState extends State<AppUpdatesTile> {
       // (installer/zipx.iss) so it also updates in place.
       final path = await _service.downloadUpdate(
         url: url,
-        onProgress: (p) {
-          if (mounted) setState(() => _downloadProgress = p);
+        onProgress: (p, received, total) {
+          if (mounted) {
+            setState(() {
+              _downloadProgress = p;
+              _downloadedBytes = received;
+              _totalBytes = total;
+            });
+          }
         },
       );
       if (!mounted) return;
@@ -160,7 +172,9 @@ class _AppUpdatesTileState extends State<AppUpdatesTile> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  _downloadProgress >= 0 ? 'Downloading... ${(_downloadProgress * 100).round()}%' : 'Downloading...',
+                  _totalBytes > 0
+                      ? '${_formatMb(_downloadedBytes)} MB / ${_formatMb(_totalBytes)} MB (${(_downloadProgress * 100).round()}%)'
+                      : 'Downloading...',
                   style: const TextStyle(color: ZipxUi.textMuted, fontSize: 12),
                 ),
               ] else
