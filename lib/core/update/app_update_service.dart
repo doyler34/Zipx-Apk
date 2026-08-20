@@ -111,10 +111,3 @@ class AppUpdateService {
     return savePath;
   }
 }
-
-        onProgress(total > 0 ? received / total : -1);
-      },
-    );
-    return savePath;
-  }
-}
