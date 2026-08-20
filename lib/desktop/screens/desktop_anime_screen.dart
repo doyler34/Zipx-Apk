@@ -23,10 +23,10 @@ class DesktopAnimeScreen extends StatelessWidget {
       create: (_) => sl<AnimeHomeCubit>()..loadHome(),
       child: BlocBuilder<AnimeHomeCubit, AnimeHomeState>(
         builder: (context, state) {
-          if (state.isLoading && state.movies.isEmpty && state.series.isEmpty) {
+          if (state.isLoading && state.isEmpty) {
             return const Center(child: CircularProgressIndicator(color: ZipxUi.red));
           }
-          if (state.errorMessage != null && state.movies.isEmpty && state.series.isEmpty) {
+          if (state.errorMessage != null && state.isEmpty) {
             return Center(child: Text(state.errorMessage!, style: const TextStyle(color: Colors.white70)));
           }
           return SingleChildScrollView(
@@ -34,14 +34,30 @@ class DesktopAnimeScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 20),
-                _MovieRow(title: 'Anime Movies', movies: state.movies),
-                _TvRow(title: 'Anime Series', shows: state.series),
+                if (state.movieSections.isNotEmpty) _GroupHeader('Movies'),
+                for (final section in state.movieSections) _MovieRow(title: section.$1, movies: section.$2),
+                if (state.tvSections.isNotEmpty) _GroupHeader('TV Shows'),
+                for (final section in state.tvSections) _TvRow(title: section.$1, shows: section.$2),
                 const SizedBox(height: 32),
               ],
             ),
           );
         },
       ),
+    );
+  }
+}
+
+class _GroupHeader extends StatelessWidget {
+  const _GroupHeader(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(48, 24, 48, 0),
+      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800)),
     );
   }
 }

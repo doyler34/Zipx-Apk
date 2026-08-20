@@ -176,14 +176,24 @@ class TmdbDatasource {
   }
 
   /// Anime movies, via TMDB's standard heuristic for it: Animation genre (16)
-  /// + Japanese origin. TMDB has no dedicated "anime" flag.
-  Future<MoviesResultModel> discoverAnimeMovies({int page = 1}) async {
+  /// + Japanese origin. TMDB has no dedicated "anime" flag. [extraGenreId]
+  /// narrows further (e.g. Action, Romance) for the Anime home's genre rows;
+  /// [sortBy]/[minVoteCount] drive the Popular/New/Top Rated row variants.
+  Future<MoviesResultModel> discoverAnimeMovies({
+    int page = 1,
+    String sortBy = 'popularity.desc',
+    int? extraGenreId,
+    int? minVoteCount,
+    Map<String, dynamic>? extraParams,
+  }) async {
     Map<String, dynamic> settings = sl<UserSettings>().getSettings();
 
     settings['page'] = page;
-    settings['sort_by'] = 'popularity.desc';
-    settings['with_genres'] = 16;
+    settings['sort_by'] = sortBy;
+    settings['with_genres'] = extraGenreId != null ? '16,$extraGenreId' : 16;
     settings['with_origin_country'] = 'JP';
+    if (minVoteCount != null) settings['vote_count.gte'] = minVoteCount;
+    if (extraParams != null) settings.addAll(extraParams);
 
     final response = await dio.get(
       '${UrlStrings.baseUrl}discover/movie',

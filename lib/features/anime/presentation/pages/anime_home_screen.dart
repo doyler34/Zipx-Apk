@@ -66,10 +66,10 @@ class _AnimeHomeViewState extends State<_AnimeHomeView> {
           Expanded(
             child: BlocBuilder<AnimeHomeCubit, AnimeHomeState>(
               builder: (context, state) {
-                if (state.isLoading && state.movies.isEmpty && state.series.isEmpty && !state.isSearching) {
+                if (state.isLoading && state.isEmpty && !state.isSearching) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                if (state.errorMessage != null && state.movies.isEmpty && state.series.isEmpty) {
+                if (state.errorMessage != null && state.isEmpty) {
                   return Center(child: Text(state.errorMessage!, style: const TextStyle(color: Colors.white70)));
                 }
 
@@ -80,8 +80,10 @@ class _AnimeHomeViewState extends State<_AnimeHomeView> {
 
                 return ListView(
                   children: [
-                    _movieRow('Anime Movies', state.movies),
-                    _tvRow('Anime Series', state.series),
+                    if (state.movieSections.isNotEmpty) _groupHeader('Movies'),
+                    for (final section in state.movieSections) _movieRow(section.$1, section.$2),
+                    if (state.tvSections.isNotEmpty) _groupHeader('TV Shows'),
+                    for (final section in state.tvSections) _tvRow(section.$1, section.$2),
                     const SizedBox(height: 24),
                   ],
                 );
@@ -92,6 +94,11 @@ class _AnimeHomeViewState extends State<_AnimeHomeView> {
       ),
     );
   }
+
+  Widget _groupHeader(String text) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+        child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+      );
 
   Widget _movieRow(String title, List<MovieModel> movies) {
     if (movies.isEmpty) return const SizedBox.shrink();
