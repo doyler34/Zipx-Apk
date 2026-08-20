@@ -10,6 +10,7 @@ import 'package:movie_bloc_app/features/movies/presentation/pages/details/detail
 import 'package:movie_bloc_app/features/movies/presentation/pages/home/genre_movies_screen.dart';
 import 'package:movie_bloc_app/features/tv/data/models/tv_model.dart';
 import 'package:movie_bloc_app/features/tv/presentation/pages/tv_details_screen.dart';
+import 'package:movie_bloc_app/features/personalization/presentation/pages/about/about_screen.dart';
 import 'package:movie_bloc_app/features/personalization/presentation/pages/downloads/downloads_screen.dart';
 import 'package:movie_bloc_app/navigation_menu.dart';
 
@@ -114,6 +115,10 @@ class CustomGoRouterConfig {
       GoRoute(
         path: '/downloads',
         builder: (BuildContext context, GoRouterState state) => const DownloadsScreen(),
+      ),
+      GoRoute(
+        path: '/about',
+        builder: (BuildContext context, GoRouterState state) => const AboutScreen(),
       ),
     ],
   );

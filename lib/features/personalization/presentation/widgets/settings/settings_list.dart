@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:movie_bloc_app/features/personalization/presentation/widgets/settings/adult_content_tile.dart';
 
 import '../../blocs/settings/settings_bloc.dart';
+import 'about_tile.dart';
 import 'app_updates_tile.dart';
 import 'change_language_tile.dart';
 import 'clear_bookmarks_tile.dart';
@@ -30,6 +31,7 @@ class SettingsList extends StatelessWidget {
                     ClearContinueWatchingTile(),
                     ChangeLanguageTile(),
                     AppUpdatesTile(),
+                    AboutTile(),
                   ],
                 ),
               ),
