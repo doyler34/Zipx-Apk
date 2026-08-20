@@ -124,12 +124,13 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           topRatedMovies = topRatedResult.movies!;
         }
 
-        // Trending has no discover-style genre filter to exclude Animation (16)
-        // server-side (unlike Popular/Top Rated/genre rows) - filter client-side
-        // instead, so anime doesn't leak into Movies Home from here either.
+        // Trending has no discover-style filter to exclude Animation (16) or
+        // non-English titles server-side (unlike Popular/Top Rated/genre
+        // rows) - filter client-side instead, so anime and foreign-language
+        // titles don't leak into Movies Home from here either.
         final trendingRaw = await getTrending(NoParams());
         final trendingResult = MoviesResultModel(
-          movies: (trendingRaw.movies ?? const <MovieModel>[]).where((m) => !m.isAnimation).toList(),
+          movies: (trendingRaw.movies ?? const <MovieModel>[]).where((m) => !m.isAnimation && m.isEnglish).toList(),
           totalPages: trendingRaw.totalPages,
         );
         final genreRowsRaw = (await genreRowsFuture).where((g) => g.$3.isNotEmpty).toList();

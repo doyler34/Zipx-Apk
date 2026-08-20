@@ -11,6 +11,7 @@ abstract class MovieEntity extends Equatable {
   final bool video;
   final bool adult;
   final List<int> genreIds;
+  final String originalLanguage;
 
   const MovieEntity({
     required this.id,
@@ -23,6 +24,7 @@ abstract class MovieEntity extends Equatable {
     required this.video,
     required this.adult,
     this.genreIds = const [],
+    this.originalLanguage = '',
   });
 
   @override
@@ -37,5 +39,6 @@ abstract class MovieEntity extends Equatable {
         video,
         adult,
         genreIds,
+        originalLanguage,
       ];
 }

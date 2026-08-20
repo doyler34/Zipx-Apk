@@ -85,6 +85,9 @@ class TmdbTvDatasource {
     // Animation (16) lives in the dedicated Anime section instead - keeping
     // it here too would just duplicate that content under TV Shows.
     settings['without_genres'] = 16;
+    // Foreign-language shows (Chinese dramas etc.) are still fully
+    // reachable via Search - just not mixed into the general browse rows.
+    settings['with_original_language'] = 'en';
 
     final response = await dio.get(
       '${UrlStrings.baseUrl}discover/tv',

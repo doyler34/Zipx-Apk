@@ -10,11 +10,16 @@ class TvModel extends TvEntity {
     required super.voteAverage,
     required super.firstAirDate,
     this.genreIds = const [],
+    this.originalLanguage = '',
   });
 
   /// TMDB genre ids from list endpoints (kept out of [TvEntity] since it's a
   /// data-layer detail used only for stream-availability filtering).
   final List<int> genreIds;
+
+  /// TMDB `original_language` from list endpoints (same reasoning as
+  /// [genreIds] - kept out of [TvEntity]).
+  final String originalLanguage;
 
   /// TMDB TV genres that essentially never have torrents / Real-Debrid streams:
   /// News (10763), Reality (10764), Soap (10766), Talk (10767). Titles in these
@@ -27,6 +32,10 @@ class TvModel extends TvEntity {
   /// section, not mixed into TV Shows browsing.
   bool get isAnimation => genreIds.contains(16);
 
+  /// Non-English-language shows (e.g. Chinese dramas) are still reachable
+  /// via Search - just not mixed into the general browse rows.
+  bool get isEnglish => originalLanguage == 'en';
+
   factory TvModel.fromJson(Map<String, dynamic> json) {
     return TvModel(
       id: json['id'],
@@ -37,6 +46,7 @@ class TvModel extends TvEntity {
       voteAverage: (json['vote_average'] ?? 0).toDouble(),
       firstAirDate: json['first_air_date'] ?? '',
       genreIds: (json['genre_ids'] as List?)?.whereType<int>().toList() ?? const [],
+      originalLanguage: json['original_language'] ?? '',
     );
   }
 }

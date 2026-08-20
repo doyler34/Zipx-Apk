@@ -191,12 +191,13 @@ class TvHomeCubit extends Cubit<TvHomeState> {
       final genreRowsRaw = (await genreRowsFuture).where((s) => s.$3.isNotEmpty).toList();
       final genres = await genresListFuture;
 
-      // Trending/Popular/Top Rated have no discover-style genre filter to
-      // exclude Animation (16) server-side (unlike the genre rows below) -
-      // filter client-side instead, so anime doesn't leak into TV Shows.
-      final trending = results[0].shows.where((s) => !s.isAnimation).toList();
-      final popular = results[1].shows.where((s) => !s.isAnimation).toList();
-      final topRated = results[2].shows.where((s) => !s.isAnimation).toList();
+      // Trending/Popular/Top Rated have no discover-style filter to exclude
+      // Animation (16) or non-English shows server-side (unlike the genre
+      // rows below) - filter client-side instead, so anime and
+      // foreign-language shows don't leak into TV Shows.
+      final trending = results[0].shows.where((s) => !s.isAnimation && s.isEnglish).toList();
+      final popular = results[1].shows.where((s) => !s.isAnimation && s.isEnglish).toList();
+      final topRated = results[2].shows.where((s) => !s.isAnimation && s.isEnglish).toList();
 
       // Pre-filter using cache (known unavailable shows hidden even on first
       // render) so subsequent loads don't show unfiltered TMDB while waiting
@@ -260,8 +261,8 @@ class TvHomeCubit extends Cubit<TvHomeState> {
       }
 
       // Trending/Popular/Top Rated can't be filtered server-side (see above),
-      // so top-up pages need the same client-side Animation filter as page 1.
-      List<TvModel> noAnime(List<TvModel> shows) => shows.where((s) => !s.isAnimation).toList();
+      // so top-up pages need the same client-side filters as page 1.
+      List<TvModel> noAnime(List<TvModel> shows) => shows.where((s) => !s.isAnimation && s.isEnglish).toList();
       final fillFutures = <Future<void>>[
         fill(trending, (p) => _datasource.getTrendingTv(page: p).then((r) => noAnime(r.shows))).then((r) {
           trendingF = r;

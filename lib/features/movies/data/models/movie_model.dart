@@ -15,11 +15,16 @@ class MovieModel extends MovieEntity with EquatableMixin {
     required super.video,
     required super.adult,
     super.genreIds,
+    super.originalLanguage,
   });
 
   /// Animation-genre content (TMDB genre 16) belongs in the dedicated Anime
   /// section, not mixed into Movies browsing.
   bool get isAnimation => genreIds.contains(16);
+
+  /// Non-English-language movies (e.g. Chinese dramas) are still reachable
+  /// via Search - just not mixed into the general browse rows.
+  bool get isEnglish => originalLanguage == 'en';
 
   factory MovieModel.fromJson(Map<String, dynamic> json) {
     return MovieModel(
@@ -33,6 +38,7 @@ class MovieModel extends MovieEntity with EquatableMixin {
       adult: json['adult'] ?? false,
       video: json['video'] ?? false,
       genreIds: (json['genre_ids'] as List?)?.whereType<int>().toList() ?? const [],
+      originalLanguage: json['original_language'] ?? '',
     );
   }
 
