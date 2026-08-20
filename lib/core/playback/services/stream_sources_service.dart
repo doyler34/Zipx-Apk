@@ -45,17 +45,18 @@ class StreamSourcesService {
 
   Future<List<StreamSource>> fetch(PlaybackRequest request) async {
     final (sources, isAnime) = await _fetchSources(request);
-    // Learn availability so dead titles get hidden from browsing - but NEVER
-    // hide anime this way: "no cached source" doesn't mean dead, it just means
-    // it may need preparing (uncached), so anime must stay visible. Only record
-    // a negative for non-anime; a positive (found sources) is always fine.
-    if (!isAnime || sources.isNotEmpty) {
-      unawaited(sl<StreamAvailabilityService>().record(
-        mediaType: request.mediaType,
-        tmdbId: request.tmdbId,
-        hasStreams: sources.isNotEmpty,
-      ));
-    }
+    // Learn availability so dead titles get hidden from browsing. Anime/
+    // JA-KO-ZH content gets extra grace on an empty result (handled inside
+    // record()) rather than never being hidden - "no cached source" often
+    // just means it needs preparing (uncached), not that it's dead, but a
+    // title that stays empty across several probes really is dead and
+    // shouldn't clutter browsing forever.
+    unawaited(sl<StreamAvailabilityService>().record(
+      mediaType: request.mediaType,
+      tmdbId: request.tmdbId,
+      hasStreams: sources.isNotEmpty,
+      isAnime: isAnime,
+    ));
     return sources;
   }
 
