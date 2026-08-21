@@ -123,6 +123,19 @@ class _AppUpdatesTileState extends State<AppUpdatesTile> {
     }
   }
 
+  /// Bypasses the cache TTL entirely - used by the manual refresh button, so
+  /// a manifest edit on the server doesn't sit unseen for up to 6 hours.
+  Future<void> _forceRefresh() async {
+    setState(() => _checking = true);
+    final fresh = await _service.checkForUpdate();
+    if (!mounted) return;
+    setState(() {
+      _checking = false;
+      _hasCheckedOnce = true;
+      if (fresh != null) _manifest = fresh;
+    });
+  }
+
   Future<void> _openInstallPermissionSettings() async {
     if (!Platform.isAndroid) return;
     try {
@@ -161,9 +174,22 @@ class _AppUpdatesTileState extends State<AppUpdatesTile> {
               children: [
                 const Icon(Icons.system_update_alt_rounded, color: Colors.white),
                 const SizedBox(width: 10),
-                Text(
-                  'App Updates',
-                  style: Theme.of(context).textTheme.titleSmall!.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+                Expanded(
+                  child: Text(
+                    'App Updates',
+                    style: Theme.of(context).textTheme.titleSmall!.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ),
+                IconButton(
+                  onPressed: _checking ? null : _forceRefresh,
+                  tooltip: 'Check again',
+                  icon: _checking
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: ZipxUi.textMuted),
+                        )
+                      : const Icon(Icons.refresh_rounded, color: ZipxUi.textMuted, size: 20),
                 ),
               ],
             ),
