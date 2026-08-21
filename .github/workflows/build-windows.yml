@@ -67,7 +67,7 @@ jobs:
           # default - see backend/install-page/README.md.
           $extra = @()
           if ($env:VPS_PUBLIC_URL) { $extra += "--dart-define=UPDATE_MANIFEST_URL=$($env:VPS_PUBLIC_URL)/update-manifest.json" }
-          flutter build windows --release --build-number=${{ github.run_number }} --build-name=1.1.${{ github.run_number }} --dart-define=AIOSTREAMS_ADDON_URL=${{ secrets.AIOSTREAMS_ADDON_URL }} --dart-define=PREPARE_ADDON_URL=${{ secrets.PREPARE_ADDON_URL }} --dart-define=PREPARE_API_KEY=${{ secrets.PREPARE_API_KEY }} @extra
+          flutter build windows --release --build-number=${{ github.run_number }} --build-name=1.2.${{ github.run_number }} --dart-define=AIOSTREAMS_ADDON_URL=${{ secrets.AIOSTREAMS_ADDON_URL }} --dart-define=PREPARE_ADDON_URL=${{ secrets.PREPARE_ADDON_URL }} --dart-define=PREPARE_API_KEY=${{ secrets.PREPARE_API_KEY }} @extra
 
       - name: Build installer (Inno Setup)
         shell: pwsh
@@ -78,7 +78,7 @@ jobs:
           $icon = (Resolve-Path "zipx.ico").Path
           choco install innosetup -y --no-progress
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-          & "$iscc" "/DMyAppVersion=1.1.${{ github.run_number }}" "/DSourceDir=$src" "/DMyAppIcon=$icon" "/O$($PWD.Path)" "installer\zipx.iss"
+          & "$iscc" "/DMyAppVersion=1.2.${{ github.run_number }}" "/DSourceDir=$src" "/DMyAppIcon=$icon" "/O$($PWD.Path)" "installer\zipx.iss"
           if (!(Test-Path "ZipX-Setup.exe")) { Write-Error "Installer not produced"; exit 1 }
 
       # Upload the installer to your VPS so it can be served from your own
