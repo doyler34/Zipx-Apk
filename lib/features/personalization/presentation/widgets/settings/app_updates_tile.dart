@@ -1,8 +1,10 @@
 import 'dart:io' show Platform;
 
+import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:open_file/open_file.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../../../common/styles/zipx_ui.dart';
 import '../../../../../core/dependency_injection/di.dart';
@@ -100,10 +102,17 @@ class _AppUpdatesTileState extends State<AppUpdatesTile> {
       if (!mounted) return;
       setState(() => _downloading = false);
       final result = await OpenFile.open(path);
-      if (result.type != ResultType.done && mounted) {
-        // Surfaces the plugin's actual failure reason (e.g. permissionDenied,
-        // noAppToOpen) instead of a generic message, so a real cause can be
-        // diagnosed from the field instead of guessed at.
+      if (result.type == ResultType.permissionDenied && mounted) {
+        // Android blocks installing an APK from this app until the user
+        // flips "Allow from this source" for it once, in Settings. Send
+        // them straight to that exact screen instead of a dead-end error -
+        // after enabling it, tapping Download Update again just works.
+        HelperFunctions.showSnackBar(
+          context,
+          'Enable "Allow from this source" for Zipx Movies, then tap Download Update again.',
+        );
+        await _openInstallPermissionSettings();
+      } else if (result.type != ResultType.done && mounted) {
         HelperFunctions.showSnackBar(context, 'Could not open installer: ${result.type} - ${result.message}');
       }
     } catch (_) {
@@ -111,6 +120,21 @@ class _AppUpdatesTileState extends State<AppUpdatesTile> {
         setState(() => _downloading = false);
         HelperFunctions.showSnackBar(context, 'Download failed - please try again.');
       }
+    }
+  }
+
+  Future<void> _openInstallPermissionSettings() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final intent = AndroidIntent(
+        action: 'android.settings.MANAGE_UNKNOWN_APP_SOURCES',
+        data: 'package:${info.packageName}',
+      );
+      await intent.launch();
+    } catch (_) {
+      // Older Android versions don't have this exact screen - the snackbar
+      // message alone still points the user to Settings manually.
     }
   }
 
