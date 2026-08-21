@@ -75,11 +75,17 @@ class AppUpdateService {
   Future<UpdateManifest?> checkForUpdate() async {
     lastError = null;
     try {
+      // A cache-busting query param defeats any browser/CDN/proxy cache
+      // sitting between the phone and wherever the manifest is hosted -
+      // otherwise an edited file on the server can keep serving a stale
+      // cached response indefinitely regardless of what's actually on disk.
+      final bustUrl = '$_manifestUrl?t=${DateTime.now().millisecondsSinceEpoch}';
       final response = await _dio.get(
-        _manifestUrl,
+        bustUrl,
         options: Options(
           sendTimeout: const Duration(seconds: 6),
           receiveTimeout: const Duration(seconds: 6),
+          headers: const {'Cache-Control': 'no-cache'},
         ),
       );
       final data = response.data;
