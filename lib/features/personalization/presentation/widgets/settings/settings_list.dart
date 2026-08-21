@@ -10,6 +10,7 @@ import 'change_language_tile.dart';
 import 'clear_bookmarks_tile.dart';
 import 'clear_continue_watching_tile.dart';
 import 'downloads_tile.dart';
+import 'help_tile.dart';
 
 class SettingsList extends StatelessWidget {
   const SettingsList({super.key});
@@ -31,6 +32,7 @@ class SettingsList extends StatelessWidget {
                     ClearContinueWatchingTile(),
                     ChangeLanguageTile(),
                     AppUpdatesTile(),
+                    HelpTile(),
                     AboutTile(),
                   ],
                 ),
