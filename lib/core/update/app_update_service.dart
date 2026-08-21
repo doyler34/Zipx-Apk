@@ -34,6 +34,16 @@ class AppUpdateService {
   /// instead of hitting the network again - "lightweight" per the spec.
   static const Duration _cacheTtl = Duration(hours: 6);
 
+  /// The manifest URL this exact build was compiled with - shown in the UI
+  /// so it's obvious whether a build is actually pointed at the VPS or still
+  /// on the GitHub default, without having to guess from behaviour alone.
+  String get manifestUrl => _manifestUrl;
+
+  /// The last checkForUpdate() failure, if any (e.g. "404", a timeout, a
+  /// parse error) - shown in the UI instead of being silently swallowed, so
+  /// a real failure reason is visible instead of just "unable to check".
+  String? lastError;
+
   Box get _box => Hive.box(_boxName);
 
   Future<String> currentVersion() async {
@@ -63,6 +73,7 @@ class AppUpdateService {
   /// (network down, bad JSON, timeout) - callers should fall back to
   /// [cachedManifest] rather than surface this as an error dialog.
   Future<UpdateManifest?> checkForUpdate() async {
+    lastError = null;
     try {
       final response = await _dio.get(
         _manifestUrl,
@@ -73,13 +84,23 @@ class AppUpdateService {
       );
       final data = response.data;
       final json = data is String ? jsonDecode(data) : data;
-      if (json is! Map) return null;
+      if (json is! Map) {
+        lastError = 'Response was not JSON (status ${response.statusCode})';
+        return null;
+      }
       final manifest = UpdateManifest.fromJson(json.cast<String, dynamic>());
-      if (manifest.version.isEmpty) return null;
+      if (manifest.version.isEmpty) {
+        lastError = 'Manifest JSON had no "version" field';
+        return null;
+      }
       await _box.put('manifest', manifest.toMap());
       await _box.put('checkedAt', DateTime.now().millisecondsSinceEpoch);
       return manifest;
-    } catch (_) {
+    } on DioException catch (e) {
+      lastError = '${e.type.name}${e.response != null ? ' (HTTP ${e.response!.statusCode})' : ''}: ${e.message}';
+      return null;
+    } catch (e) {
+      lastError = e.toString();
       return null;
     }
   }

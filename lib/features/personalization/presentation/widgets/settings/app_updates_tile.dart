@@ -221,8 +221,18 @@ class _AppUpdatesTileState extends State<AppUpdatesTile> {
                   Text("You're running the latest version", style: TextStyle(color: Colors.white70, fontSize: 13)),
                 ],
               )
-            else if (_hasCheckedOnce)
+            else if (_hasCheckedOnce) ...[
               const Text('Unable to check for updates.', style: TextStyle(color: ZipxUi.textMuted, fontSize: 13)),
+              if (_service.lastError != null) ...[
+                const SizedBox(height: 4),
+                Text(_service.lastError!, style: const TextStyle(color: ZipxUi.textMuted, fontSize: 11)),
+              ],
+            ],
+            const SizedBox(height: 10),
+            Text(
+              'Checking: ${_service.manifestUrl}',
+              style: const TextStyle(color: Colors.white24, fontSize: 10),
+            ),
           ],
         ),
       ),
