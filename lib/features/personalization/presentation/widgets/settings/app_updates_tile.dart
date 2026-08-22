@@ -49,12 +49,9 @@ class _AppUpdatesTileState extends State<AppUpdatesTile> {
     if (!mounted) return;
     setState(() => _currentVersion = version);
 
-    // A fresh-enough cache is shown as-is; only hit the network when there's
-    // nothing cached yet or it's gone stale - keeps this "lightweight".
-    if (_manifest != null && !_service.isCacheStale) {
-      setState(() => _hasCheckedOnce = true);
-      return;
-    }
+    // Any cached manifest is shown immediately (set in initState) so this
+    // never flashes blank, but every visit to this section still checks
+    // fresh - no manual refresh control, just always up to date on open.
     setState(() => _checking = true);
     final fresh = await _service.checkForUpdate();
     if (!mounted) return;

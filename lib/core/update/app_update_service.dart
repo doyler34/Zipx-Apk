@@ -30,10 +30,6 @@ class AppUpdateService {
 
   static const String _boxName = 'app_update';
 
-  /// A check made within this long of the last one just reuses the cache
-  /// instead of hitting the network again - "lightweight" per the spec.
-  static const Duration _cacheTtl = Duration(hours: 6);
-
   /// The manifest URL this exact build was compiled with - shown in the UI
   /// so it's obvious whether a build is actually pointed at the VPS or still
   /// on the GitHub default, without having to guess from behaviour alone.
@@ -61,12 +57,6 @@ class AppUpdateService {
     } catch (_) {
       return null;
     }
-  }
-
-  bool get isCacheStale {
-    final ts = _box.get('checkedAt');
-    if (ts is! int) return true;
-    return DateTime.now().millisecondsSinceEpoch - ts > _cacheTtl.inMilliseconds;
   }
 
   /// Fetches and caches the remote manifest. Returns null on any failure
@@ -100,7 +90,6 @@ class AppUpdateService {
         return null;
       }
       await _box.put('manifest', manifest.toMap());
-      await _box.put('checkedAt', DateTime.now().millisecondsSinceEpoch);
       return manifest;
     } on DioException catch (e) {
       lastError = '${e.type.name}${e.response != null ? ' (HTTP ${e.response!.statusCode})' : ''}: ${e.message}';
