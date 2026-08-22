@@ -76,6 +76,23 @@
 
   .foot { color: var(--muted); font-size: 12px; margin-top: 34px; text-align: center; }
   .foot .pill { display: inline-block; background: var(--surface-high); border-radius: 999px; padding: 4px 12px; color: var(--muted); }
+
+  .version-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface-high); border: 1px solid var(--line);
+    border-radius: 999px; padding: 5px 14px; margin-top: 14px;
+    font-size: 12.5px; color: var(--muted);
+  }
+  .version-badge b { color: var(--text); font-weight: 700; }
+  .version-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: #3ddc84; flex-shrink: 0; }
+
+  .whatsnew { display: none; }
+  .whatsnew.show {
+    display: block; margin-top: 30px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px;
+  }
+  .whatsnew h3 { margin: 0 0 10px; font-size: 15px; font-weight: 700; }
+  .whatsnew ul { margin: 0; padding-left: 20px; color: var(--muted); font-size: 13.5px; line-height: 1.7; }
 </style>
 </head>
 <body>
@@ -87,6 +104,15 @@
   <div class="hero">
     <h1>Install ZipX Movies</h1>
     <p>Movies &amp; TV, streamed in one app. Pick your platform below.</p>
+    <div class="version-badge" id="version-badge" style="display:none;">
+      <span class="dot"></span>
+      Latest version: <b id="version-number">—</b>
+    </div>
+  </div>
+
+  <div class="whatsnew" id="whatsnew">
+    <h3>What's new</h3>
+    <ul id="whatsnew-list"></ul>
   </div>
 
   <div class="cards">
@@ -127,7 +153,7 @@
         <li>Tap <b>Install</b>, wait a few seconds, then tap <b>Open</b>.</li>
         <li>If your phone shows a Play Protect / "unsafe app" warning, choose <b>Install anyway</b> — it flags anything installed outside the Play Store.</li>
       </ol>
-      <p class="tip"><b>Updating later:</b> just download the newest APK from this page and install it over the top — your watchlist and settings are kept, no need to uninstall.</p>
+      <p class="tip"><b>Updating later:</b> open the app and go to <b>Profile → App Updates</b> — it downloads and installs updates for you. Re-downloading from this page also still works and keeps your watchlist and settings either way.</p>
     </div>
 
     <div class="note" id="note-windows">
@@ -137,7 +163,7 @@
         <li>If SmartScreen shows <b>“Windows protected your PC”</b>, click <b>More info → Run anyway</b> — that's expected for a new app and is safe.</li>
         <li>Follow the installer. It adds a Start-menu shortcut (and a desktop icon if you tick the box).</li>
       </ol>
-      <p class="tip"><b>Updating later:</b> download and run the newest installer — it installs over the previous version.</p>
+      <p class="tip"><b>Updating later:</b> open the app and go to <b>Profile → App Updates</b> — it downloads the new installer for you. Re-running the installer from this page also still works.</p>
     </div>
   </div>
 
@@ -152,6 +178,29 @@
     var w = document.getElementById("card-windows");
     if (/Android/i.test(ua)) { a.classList.add("rec"); a.parentNode.prepend(a); }
     else if (/Windows/i.test(ua)) { w.classList.add("rec"); w.parentNode.prepend(w); }
+  })();
+
+  // Pull the live version + release notes from the same manifest the app's
+  // Profile -> App Updates check reads, so this page never goes stale on its
+  // own - editing update-manifest.json updates both places at once.
+  (function () {
+    fetch("update-manifest.json?t=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.version) return;
+        document.getElementById("version-number").textContent = data.version;
+        document.getElementById("version-badge").style.display = "inline-flex";
+        if (Array.isArray(data.release_notes) && data.release_notes.length) {
+          var list = document.getElementById("whatsnew-list");
+          data.release_notes.forEach(function (note) {
+            var li = document.createElement("li");
+            li.textContent = note;
+            list.appendChild(li);
+          });
+          document.getElementById("whatsnew").classList.add("show");
+        }
+      })
+      .catch(function () { /* Page still works fine without the badge. */ });
   })();
 </script>
 </body>
