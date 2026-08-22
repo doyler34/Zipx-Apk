@@ -88,8 +88,9 @@ class TmdbDatasource {
     return MoviesResultModel.fromJson(response.data);
   }
 
-  Future<MoviesResultModel> getTrendingMovies() async {
+  Future<MoviesResultModel> getTrendingMovies({int page = 1}) async {
     Map<String, dynamic> settings = sl<UserSettings>().getSettings();
+    settings['page'] = page;
 
     final response = await dio.get(
       '${UrlStrings.baseUrl}trending/movie/day',

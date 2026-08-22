@@ -136,7 +136,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         // non-English titles server-side (unlike Popular/Top Rated/genre
         // rows) - filter client-side instead, so anime and foreign-language
         // titles don't leak into Movies Home from here either.
-        final trendingRaw = await getTrending(NoParams());
+        final trendingRaw = await getTrending(Params());
         final trendingResult = MoviesResultModel(
           movies: (trendingRaw.movies ?? const <MovieModel>[]).where((m) => !m.isAnimation && m.isEnglish).toList(),
           totalPages: trendingRaw.totalPages,
@@ -263,12 +263,20 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         topRatedF = r;
         safeEmitRow();
       }).catchError((_) {}),
-      // Trending isn't pageable (NoParams) - just probe this page + filter it.
-      prober.probe(PlaybackMediaType.movie, (trending.movies ?? const <MovieModel>[]).map(req).toList()).then((_) {
-        final avail = sl<StreamAvailabilityService>();
-        trendingF = (trending.movies ?? const <MovieModel>[])
-            .where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id))
-            .toList();
+      // Trending has no server-side language/animation filter (unlike
+      // Popular/Top Rated/genre rows), so top-up pages need the same
+      // client-side filter page 1 already got. Without paging here, a heavy
+      // day's worth of foreign-language/anime/unavailable trending titles
+      // could shrink this to just 1-2 real items - which reads as the hero
+      // carousel repeating the same title on every peek instead of cycling.
+      fill(
+        trending,
+        (p) => getTrending(Params(page: p)).then((r) => MoviesResultModel(
+              movies: (r.movies ?? const <MovieModel>[]).where((m) => !m.isAnimation && m.isEnglish).toList(),
+              totalPages: r.totalPages,
+            )),
+      ).then((r) {
+        trendingF = r;
         safeEmitRow();
       }).catchError((_) {}),
     ];
