@@ -179,14 +179,16 @@ class TvHomeCubit extends Cubit<TvHomeState> {
             episodeNumber: 1,
             posterPath: s.posterPath,
           );
-      // maxPages is a safety ceiling, not the everyday driver - see
-      // AvailabilityProber.fillAvailable's doc for the actual stop conditions.
-      // Deliberately NOT raised beyond the prober's own defaults (target 20,
-      // maxPages 8) - a prior attempt at 30/12 nearly doubled worst-case
-      // AIOStreams probe volume across the ~10 rows that fill concurrently on
-      // this screen, which made rows take far longer (or fail) to clear the
-      // minimum-row-size bar and show at all - the opposite of the intent.
-      Future<List<TvModel>> fill(List<TvModel> first, Future<List<TvModel>> Function(int) fetch, {int maxPages = 8}) =>
+      // Trending/Popular/Top Rated have no genre filter, so a deep page-walk
+      // on them digs into the same popularity-ranked pool every genre row
+      // also draws from; with thin stream availability, that makes unrelated
+      // rows converge on the same handful of broadly-popular, broadly-
+      // available shows instead of staying genre-distinct (same mechanism
+      // fixed on Movies Home - see HomeBloc._fillAvailability). Kept shallow
+      // (3) here for that reason; genre rows get their own deeper override
+      // below since a niche genre (Crime, Mystery) needs more pages to find
+      // enough available titles at all.
+      Future<List<TvModel>> fill(List<TvModel> first, Future<List<TvModel>> Function(int) fetch, {int maxPages = 3}) =>
           prober.fillAvailable<TvModel>(
             mediaType: PlaybackMediaType.tv,
             firstPage: first,
@@ -241,6 +243,7 @@ class TvHomeCubit extends Cubit<TvHomeState> {
         fillFutures.add(fill(
           s.$3,
           (p) => _datasource.discoverTvByGenre(genreId: s.$1, page: p).then((r) => r.shows),
+          maxPages: 6,
         ).then((filled) {
           genreSectionsF = [
             for (var j = 0; j < genreSectionsF.length; j++)
