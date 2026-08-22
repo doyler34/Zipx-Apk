@@ -83,12 +83,11 @@ class TvHomeCubit extends Cubit<TvHomeState> {
   // in-flight load's emits are dropped instead of overwriting fresher rows.
   int _generation = 0;
 
-  // A genre row this thin (after the English/available filtering) reads as
-  // broken rather than intentional - hide it instead of showing a couple of
-  // posters trailing off into empty space. Still tops up in the background;
-  // it reappears once/if it clears this bar.
-  static const int _minGenreRowSize = 6;
-  List<TvSection> _pruneThin(List<TvSection> sections) => sections.where((s) => s.$2.length >= _minGenreRowSize).toList();
+  // A genre with zero available titles has nothing to show and should be
+  // omitted; anything with at least one is a real row, not "broken" - a
+  // 4-5 item row is still worth showing rather than hidden pending a 6-item
+  // bar it might never reach for a genuinely thinner genre.
+  List<TvSection> _pruneThin(List<TvSection> sections) => sections.where((s) => s.$2.isNotEmpty).toList();
 
   /// Extra genre rows shown on the home screen (TMDB TV genre id -> title), so
   /// there's plenty to browse beyond the main category rows. Animation (16) is
