@@ -32,14 +32,19 @@ class StreamAvailabilityService {
   static const Duration _newBadRetry = Duration(hours: 4); // within the 3-6h target
   static const Duration _oldBadRetry = Duration(hours: 48); // within the 24-72h target
 
-  /// Anime/JA-KO-ZH-language content gets this many empty probes (each paced
-  /// by the normal cooldown below, so this plays out over ~16h+) before a
-  /// negative is actually recorded - an empty AIOStreams result for that
-  /// content is often just an uncached/ID-mapping gap rather than genuinely
-  /// dead. Once it does cross the threshold it's treated exactly like any
-  /// other title from then on (same cooldown/re-probe cycle) - it never gets
-  /// buried forever, but it also isn't shown forever if it's just dead.
-  static const int _animeMissThreshold = 4;
+  /// Every title gets this many empty probes (each paced by the normal
+  /// cooldown below, so this plays out over ~16h+) before a negative is
+  /// actually recorded - an empty AIOStreams result is often just an
+  /// uncached/transient gap rather than genuinely dead, and marking
+  /// something unavailable on a single miss was hiding titles too eagerly
+  /// (originally this grace only applied to anime/JA-KO-ZH content, which is
+  /// why movies/TV rows converged on the same "safe" survivors far more than
+  /// anime did - anime titles got several chances to prove they had a stream
+  /// before being hidden, everything else got one). Once a title does cross
+  /// the threshold it's treated exactly like any other unavailable title
+  /// from then on (same cooldown/re-probe cycle) - it never gets buried
+  /// forever, but it also isn't shown forever if it's genuinely dead.
+  static const int _missThreshold = 4;
 
   Box get _box => Hive.box(boxName);
 
@@ -82,16 +87,15 @@ class StreamAvailabilityService {
   /// overrides any earlier negative; a negative never overwrites a positive, and
   /// preserves the original "first went bad" time so new-vs-old stays accurate.
   ///
-  /// [isAnime] (anime/JA-KO-ZH-language content) gets [_animeMissThreshold]
-  /// empty misses before the negative actually sticks - see that constant.
-  /// Below the threshold nothing is hidden (`isKnownUnavailable` stays
-  /// false); the miss is still timestamped so the next probe is paced by the
-  /// normal cooldown instead of hammering it every load.
+  /// Every title gets [_missThreshold] empty misses before the negative
+  /// actually sticks - see that constant. Below the threshold nothing is
+  /// hidden (`isKnownUnavailable` stays false); the miss is still timestamped
+  /// so the next probe is paced by the normal cooldown instead of hammering
+  /// it every load.
   Future<void> record({
     required PlaybackMediaType mediaType,
     required int tmdbId,
     required bool hasStreams,
-    bool isAnime = false,
   }) async {
     final key = _key(mediaType, tmdbId);
     if (hasStreams) {
@@ -102,12 +106,10 @@ class StreamAvailabilityService {
     if (existing is Map && existing['available'] == true) return; // keep positive
     final firstBad = existing is Map && existing['firstBad'] is int ? existing['firstBad'] as int : _now;
 
-    if (isAnime) {
-      final missCount = (existing is Map && existing['missCount'] is int ? existing['missCount'] as int : 0) + 1;
-      if (missCount < _animeMissThreshold) {
-        await _box.put(key, {'missCount': missCount, 'ts': _now, 'firstBad': firstBad});
-        return;
-      }
+    final missCount = (existing is Map && existing['missCount'] is int ? existing['missCount'] as int : 0) + 1;
+    if (missCount < _missThreshold) {
+      await _box.put(key, {'missCount': missCount, 'ts': _now, 'firstBad': firstBad});
+      return;
     }
 
     await _box.put(key, {'available': false, 'ts': _now, 'firstBad': firstBad});

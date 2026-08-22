@@ -44,18 +44,17 @@ class StreamSourcesService {
   static const bool _debugPrepare = bool.fromEnvironment('PREPARE_DEBUG');
 
   Future<List<StreamSource>> fetch(PlaybackRequest request) async {
-    final (sources, isAnime) = await _fetchSources(request);
-    // Learn availability so dead titles get hidden from browsing. Anime/
-    // JA-KO-ZH content gets extra grace on an empty result (handled inside
-    // record()) rather than never being hidden - "no cached source" often
-    // just means it needs preparing (uncached), not that it's dead, but a
-    // title that stays empty across several probes really is dead and
-    // shouldn't clutter browsing forever.
+    final (sources, _) = await _fetchSources(request);
+    // Learn availability so dead titles get hidden from browsing. Every
+    // title gets extra grace on an empty result (handled inside record())
+    // rather than never being hidden - "no cached source" often just means
+    // it needs preparing (uncached), not that it's dead, but a title that
+    // stays empty across several probes really is dead and shouldn't
+    // clutter browsing forever.
     unawaited(sl<StreamAvailabilityService>().record(
       mediaType: request.mediaType,
       tmdbId: request.tmdbId,
       hasStreams: sources.isNotEmpty,
-      isAnime: isAnime,
     ));
     return sources;
   }

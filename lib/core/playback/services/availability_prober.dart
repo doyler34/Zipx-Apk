@@ -104,14 +104,13 @@ class AvailabilityProber {
         // concurrently-filling row, not just within this one probe() call.
         await _gate.acquire();
         try {
-          final (ok, isAnime) = await _hasStreams(mediaType, r);
-          // Anime/JA-KO-ZH content gets extra grace on an empty result
-          // (handled inside record()) rather than being hidden immediately -
-          // an empty AIOStreams result there is often just an uncached-only
-          // title or an ID-mapping gap, not genuinely dead (see fetch()'s
-          // matching guard for the player path). It only actually gets
-          // hidden once it's stayed empty across several probes.
-          await _availability.record(mediaType: mediaType, tmdbId: r.tmdbId, hasStreams: ok, isAnime: isAnime);
+          final (ok, _) = await _hasStreams(mediaType, r);
+          // Every title gets extra grace on an empty result (handled inside
+          // record()) rather than being hidden immediately - an empty
+          // AIOStreams result is often just an uncached-only title or a
+          // transient gap, not genuinely dead. It only actually gets hidden
+          // once it's stayed empty across several probes.
+          await _availability.record(mediaType: mediaType, tmdbId: r.tmdbId, hasStreams: ok);
         } catch (_) {
           // Fail-open: never record a negative because a lookup errored.
         } finally {
