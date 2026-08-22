@@ -182,13 +182,17 @@ class TvHomeCubit extends Cubit<TvHomeState> {
           );
       // maxPages is a safety ceiling, not the everyday driver - see
       // AvailabilityProber.fillAvailable's doc for the actual stop conditions.
-      Future<List<TvModel>> fill(List<TvModel> first, Future<List<TvModel>> Function(int) fetch, {int maxPages = 8}) =>
+      // target raised from the prober's default of 20 so TV home rows have
+      // more to scroll through; maxPages raised alongside it so that deeper
+      // target actually gets reached instead of just extending the ceiling.
+      Future<List<TvModel>> fill(List<TvModel> first, Future<List<TvModel>> Function(int) fetch, {int target = 30, int maxPages = 12}) =>
           prober.fillAvailable<TvModel>(
             mediaType: PlaybackMediaType.tv,
             firstPage: first,
             fetchPage: fetch,
             idOf: (s) => s.id,
             toRequest: req,
+            target: target,
             maxPages: maxPages,
           );
       // Each row's fill runs as its own future and re-emits the instant it

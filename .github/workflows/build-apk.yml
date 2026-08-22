@@ -113,7 +113,7 @@ jobs:
             fi
             flutter build apk --release \
               --build-number=${{ github.run_number }} \
-              --build-name=1.2.${{ github.run_number }} \
+              --build-name=1.3.${{ github.run_number }} \
               --dart-define=AIOSTREAMS_ADDON_URL=${{ secrets.AIOSTREAMS_ADDON_URL }} \
               --dart-define=PREPARE_ADDON_URL=${{ secrets.PREPARE_ADDON_URL }} \
               --dart-define=PREPARE_API_KEY=${{ secrets.PREPARE_API_KEY }} \
