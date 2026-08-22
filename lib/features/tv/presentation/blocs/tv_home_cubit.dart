@@ -136,6 +136,13 @@ class TvHomeCubit extends Cubit<TvHomeState> {
   // in-flight load's emits are dropped instead of overwriting fresher rows.
   int _generation = 0;
 
+  // A genre row this thin (after the English/available filtering) reads as
+  // broken rather than intentional - hide it instead of showing a couple of
+  // posters trailing off into empty space. Still tops up in the background;
+  // it reappears once/if it clears this bar.
+  static const int _minGenreRowSize = 6;
+  List<TvSection> _pruneThin(List<TvSection> sections) => sections.where((s) => s.$2.length >= _minGenreRowSize).toList();
+
   /// Extra genre rows shown on the home screen (TMDB TV genre id -> title), so
   /// there's plenty to browse beyond the main category rows. Animation (16) is
   /// deliberately excluded - it lives in the dedicated Anime section instead
@@ -212,7 +219,7 @@ class TvHomeCubit extends Cubit<TvHomeState> {
         trending: trendingPre,
         popular: popularPre,
         topRated: topRatedPre,
-        genreSections: genresSectionsPre,
+        genreSections: _pruneThin(genresSectionsPre),
         genres: genres,
         isLoading: false,
       ));
@@ -256,7 +263,7 @@ class TvHomeCubit extends Cubit<TvHomeState> {
           trending: trendingF,
           popular: popularF,
           topRated: topRatedF,
-          genreSections: genreSectionsF,
+          genreSections: _pruneThin(genreSectionsF),
         ));
       }
 
@@ -277,12 +284,20 @@ class TvHomeCubit extends Cubit<TvHomeState> {
           safeEmitRow();
         }).catchError((_) {}),
       ];
-      // Genre rows top up too (each capped at the prober's default 3 pages) -
+      // Genre rows top up too (each capped at 6 pages, see maxPages below) -
       // without this, a genre whose page-1 picks skew unavailable (e.g.
       // Crime/Mystery) ends up nearly empty instead of refilled.
       for (var i = 0; i < genreRowsRaw.length; i++) {
         final s = genreRowsRaw[i];
-        fillFutures.add(fill(s.$3, (p) => _datasource.discoverTvByGenre(genreId: s.$1, page: p).then((r) => r.shows)).then((filled) {
+        fillFutures.add(fill(
+          s.$3,
+          (p) => _datasource.discoverTvByGenre(genreId: s.$1, page: p).then((r) => r.shows),
+          // Narrower genres (English-only, non-animated - notably Crime/
+          // Mystery) need more pages than the broad rows to reliably reach
+          // the target - 3 pages wasn't always enough, leaving a visibly
+          // sparse row.
+          maxPages: 6,
+        ).then((filled) {
           genreSectionsF = [
             for (var j = 0; j < genreSectionsF.length; j++)
               j == i ? (s.$2, filled) : genreSectionsF[j],

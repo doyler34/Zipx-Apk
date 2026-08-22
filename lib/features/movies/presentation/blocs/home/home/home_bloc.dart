@@ -63,6 +63,14 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   // in-flight load's emits are dropped instead of overwriting fresher rows.
   int _generation = 0;
 
+  // A genre row this thin (after the English/available filtering) reads as
+  // broken rather than intentional - hide it instead of showing a couple of
+  // posters trailing off into empty space. Still tops up in the background;
+  // it reappears once/if it clears this bar.
+  static const int _minGenreRowSize = 6;
+  List<(String, List<MovieModel>)> _pruneThin(List<(String, List<MovieModel>)> sections) =>
+      sections.where((s) => s.$2.length >= _minGenreRowSize).toList();
+
   HomeBloc({
     required this.getGenres,
     required this.getPopular,
@@ -162,7 +170,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
             genres: genresResult,
             topRatedMovies: MoviesResultModel(movies: topRatedPre, totalPages: topRatedResult.totalPages),
             trendingMovies: MoviesResultModel(movies: trendingPre, totalPages: trendingResult.totalPages),
-            genreSections: genreSectionsPre,
+            genreSections: _pruneThin(genreSectionsPre),
           ));
           // Background availability fill (option B): rows are shown above with
           // cache-known-unavailable titles already hidden; now probe each title
@@ -242,7 +250,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         genres: genres,
         topRatedMovies: wrap(topRatedF, topRated),
         trendingMovies: wrap(trendingF, trending),
-        genreSections: genreSectionsF,
+        genreSections: _pruneThin(genreSectionsF),
       ));
     }
 
@@ -271,6 +279,10 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       futures.add(fill(
         MoviesResultModel(movies: g.$3, totalPages: 1),
         (p) => tmdbDatasource.discoverMoviesByGenre(genreId: g.$1, page: p),
+        // Narrower genres (English-only, non-animated) need more pages than
+        // the broad rows to reliably reach the target - 3 pages wasn't
+        // always enough for thinner genres, leaving a visibly sparse row.
+        maxPages: 6,
       ).then((filled) {
         genreSectionsF = [
           for (var j = 0; j < genreSectionsF.length; j++)
