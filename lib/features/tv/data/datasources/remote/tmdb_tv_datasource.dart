@@ -2,7 +2,6 @@ import 'package:dio/dio.dart';
 import 'package:movie_bloc_app/core/dependency_injection/di.dart';
 import 'package:movie_bloc_app/core/settings/user_settings.dart';
 import 'package:movie_bloc_app/core/utils/strings/url_strings.dart';
-import 'package:movie_bloc_app/features/movies/data/models/genre_model.dart';
 
 import '../../models/tv_details_model.dart';
 import '../../models/tv_model.dart';
@@ -52,29 +51,6 @@ class TmdbTvDatasource {
   Future<TvResultModel> getOnTheAirTv({int page = 1}) => _getTvList('on_the_air', page: page);
 
   Future<TvResultModel> getAiringTodayTv({int page = 1}) => _getTvList('airing_today', page: page);
-
-  /// The TMDB TV genre catalogue, reused for the home-screen genre filter.
-  Future<List<GenreModel>> getTvGenres() async {
-    Map<String, dynamic> settings = sl<UserSettings>().getSettings();
-
-    final response = await dio.get(
-      '${UrlStrings.baseUrl}genre/tv/list',
-      queryParameters: {
-        'api_key': settings['api_key'],
-        'language': settings['language'],
-      },
-    );
-
-    return (response.data['genres'] as List? ?? [])
-        .map((e) => GenreModel.fromJson(e))
-        // Hide the genres whose shows never have streams (soap/talk/news/reality)
-        // so users don't open an empty category.
-        .where((g) => !TvModel.unstreamableGenreIds.contains(g.id))
-        // Animation (16) lives in the dedicated Anime section instead - keeping
-        // it here too would just duplicate that content under TV Shows.
-        .where((g) => g.id != 16)
-        .toList();
-  }
 
   /// Shows for a single genre, most-popular first, via TMDB discover.
   Future<TvResultModel> discoverTvByGenre({required int genreId, int page = 1}) async {

@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../common/styles/zipx_ui.dart';
 import '../../../../core/dependency_injection/di.dart';
-import '../../../movies/data/models/genre_model.dart';
 import '../../data/models/tv_model.dart';
 import '../blocs/tv_home_cubit.dart';
 import '../widgets/tv_card.dart';
@@ -78,18 +77,7 @@ class _TvHomeViewState extends State<_TvHomeView> {
                   return _TvGrid(shows: state.searchResults, emptyLabel: 'No TV shows found.');
                 }
 
-                return Column(
-                  children: [
-                    if (state.genres.isNotEmpty) _GenreChips(genres: state.genres, selectedId: state.selectedGenreId),
-                    Expanded(
-                      child: state.isFilteringGenre
-                          ? (state.isLoadingGenre
-                              ? const Center(child: CircularProgressIndicator())
-                              : _TvGrid(shows: state.genreResults, emptyLabel: 'No ${state.selectedGenreName ?? ''} shows found.'))
-                          : _TvSections(state: state),
-                    ),
-                  ],
-                );
+                return _TvSections(state: state);
               },
             ),
           ),
@@ -99,59 +87,7 @@ class _TvHomeViewState extends State<_TvHomeView> {
   }
 }
 
-/// Horizontal genre-filter chips with a leading "All" chip that clears the
-/// filter and returns to the section rows.
-class _GenreChips extends StatelessWidget {
-  const _GenreChips({required this.genres, required this.selectedId});
-
-  final List<GenreModel> genres;
-  final int? selectedId;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 44,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        children: [
-          _chip(context, label: 'All', selected: selectedId == null, onTap: () => context.read<TvHomeCubit>().clearGenre()),
-          for (final genre in genres)
-            _chip(
-              context,
-              label: genre.name,
-              selected: selectedId == genre.id,
-              onTap: () => context.read<TvHomeCubit>().filterByGenre(genre.id, genre.name),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _chip(BuildContext context, {required String label, required bool selected, required VoidCallback onTap}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected ? ZipxUi.red : ZipxUi.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: selected ? ZipxUi.red : Colors.white24, width: 0.6),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(color: Colors.white, fontWeight: selected ? FontWeight.bold : FontWeight.w500),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The stacked category rows shown when no search or genre filter is active.
+/// The stacked category rows shown when no search is active.
 class _TvSections extends StatelessWidget {
   const _TvSections({required this.state});
 
@@ -187,7 +123,7 @@ class _TvSections extends StatelessWidget {
   }
 }
 
-/// Responsive poster grid, reused for search and genre-filter results.
+/// Responsive poster grid, used for search results.
 class _TvGrid extends StatelessWidget {
   const _TvGrid({required this.shows, required this.emptyLabel});
 

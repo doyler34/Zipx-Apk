@@ -6,7 +6,6 @@ import '../../../../core/playback/domain/entities/playback_media_type.dart';
 import '../../../../core/playback/domain/entities/playback_request.dart';
 import '../../../../core/playback/services/availability_prober.dart';
 import '../../../../core/playback/services/stream_availability_service.dart';
-import '../../../movies/data/models/genre_model.dart';
 import '../../data/datasources/remote/tmdb_tv_datasource.dart';
 import '../../data/models/tv_model.dart';
 
@@ -19,14 +18,9 @@ class TvHomeState extends Equatable {
     this.popular = const [],
     this.topRated = const [],
     this.genreSections = const [],
-    this.genres = const [],
     this.searchResults = const [],
-    this.genreResults = const [],
     this.query = '',
-    this.selectedGenreId,
-    this.selectedGenreName,
     this.isLoading = false,
-    this.isLoadingGenre = false,
     this.errorMessage,
   });
 
@@ -34,30 +28,21 @@ class TvHomeState extends Equatable {
   final List<TvModel> popular;
   final List<TvModel> topRated;
   final List<TvSection> genreSections;
-  final List<GenreModel> genres;
   final List<TvModel> searchResults;
-  final List<TvModel> genreResults;
   final String query;
-  final int? selectedGenreId;
-  final String? selectedGenreName;
   final bool isLoading;
-  final bool isLoadingGenre;
   final String? errorMessage;
 
   bool get isSearching => query.trim().isNotEmpty;
-  bool get isFilteringGenre => selectedGenreId != null;
 
   TvHomeState copyWith({
     List<TvModel>? trending,
     List<TvModel>? popular,
     List<TvModel>? topRated,
     List<TvSection>? genreSections,
-    List<GenreModel>? genres,
     List<TvModel>? searchResults,
-    List<TvModel>? genreResults,
     String? query,
     bool? isLoading,
-    bool? isLoadingGenre,
     String? errorMessage,
   }) {
     return TvHomeState(
@@ -65,41 +50,9 @@ class TvHomeState extends Equatable {
       popular: popular ?? this.popular,
       topRated: topRated ?? this.topRated,
       genreSections: genreSections ?? this.genreSections,
-      genres: genres ?? this.genres,
       searchResults: searchResults ?? this.searchResults,
-      genreResults: genreResults ?? this.genreResults,
       query: query ?? this.query,
-      // Genre selection is cleared via clearGenre(); copyWith only ever sets
-      // it through the dedicated methods below, so it isn't a named param here.
-      selectedGenreId: selectedGenreId,
-      selectedGenreName: selectedGenreName,
       isLoading: isLoading ?? this.isLoading,
-      isLoadingGenre: isLoadingGenre ?? this.isLoadingGenre,
-      errorMessage: errorMessage,
-    );
-  }
-
-  // Genre state can't ride copyWith (it needs to go back to null), so it gets
-  // its own builder used by the filter methods.
-  TvHomeState withGenre({
-    int? genreId,
-    String? genreName,
-    List<TvModel>? genreResults,
-    bool? isLoadingGenre,
-  }) {
-    return TvHomeState(
-      trending: trending,
-      popular: popular,
-      topRated: topRated,
-      genreSections: genreSections,
-      genres: genres,
-      searchResults: searchResults,
-      genreResults: genreResults ?? this.genreResults,
-      query: query,
-      selectedGenreId: genreId,
-      selectedGenreName: genreName,
-      isLoading: isLoading,
-      isLoadingGenre: isLoadingGenre ?? this.isLoadingGenre,
       errorMessage: errorMessage,
     );
   }
@@ -110,22 +63,16 @@ class TvHomeState extends Equatable {
         popular,
         topRated,
         genreSections,
-        genres,
         searchResults,
-        genreResults,
         query,
-        selectedGenreId,
-        selectedGenreName,
         isLoading,
-        isLoadingGenre,
         errorMessage,
       ];
 }
 
 /// Lightweight Cubit (rather than the full Bloc event/state boilerplate used
-/// by the movies feature) for the TV browsing this app needs. Loads several
-/// category rows plus the genre catalogue so the home screen mirrors the movie
-/// home, and supports genre filtering and search.
+/// by the movies feature) for the TV browsing this app needs. Loads the
+/// category + genre rows for the home screen and supports search.
 class TvHomeCubit extends Cubit<TvHomeState> {
   TvHomeCubit(this._datasource) : super(const TvHomeState());
 
@@ -157,8 +104,8 @@ class TvHomeCubit extends Cubit<TvHomeState> {
     (10768, 'War & Politics'),
   ];
 
-  /// Loads every home row (categories + genre rows + the genre list) in
-  /// parallel so the screen fills in one pass. On The Air / Airing Today were
+  /// Loads every home row (categories + genre rows) in parallel so the
+  /// screen fills in one pass. On The Air / Airing Today were
   /// dropped entirely (not just topped up deeper) - currently-airing episodes
   /// are genuinely thin on torrent availability right after broadcast once
   /// CAM/TS/SCR are excluded, so they were frequently just empty rows; the
@@ -191,12 +138,9 @@ class TvHomeCubit extends Cubit<TvHomeState> {
           return (g.$1, g.$2, const <TvModel>[]);
         }
       }));
-      // Genres are non-critical: a failure here shouldn't blank the rows.
-      final genresListFuture = _datasource.getTvGenres().catchError((_) => const <GenreModel>[]);
 
       final results = await mainFuture;
       final genreRowsRaw = (await genreRowsFuture).where((s) => s.$3.isNotEmpty).toList();
-      final genres = await genresListFuture;
 
       // Trending/Popular/Top Rated have no discover-style filter to exclude
       // Animation (16) or non-English shows server-side (unlike the genre
@@ -220,7 +164,6 @@ class TvHomeCubit extends Cubit<TvHomeState> {
         popular: popularPre,
         topRated: topRatedPre,
         genreSections: _pruneThin(genresSectionsPre),
-        genres: genres,
         isLoading: false,
       ));
 
@@ -310,20 +253,6 @@ class TvHomeCubit extends Cubit<TvHomeState> {
 
   /// Kept for callers that still expect the old entry point.
   Future<void> loadTrending() => loadHome();
-
-  Future<void> filterByGenre(int genreId, String genreName) async {
-    emit(state.withGenre(genreId: genreId, genreName: genreName, isLoadingGenre: true, genreResults: const []));
-    try {
-      final result = await _datasource.discoverTvByGenre(genreId: genreId);
-      emit(state.withGenre(genreId: genreId, genreName: genreName, genreResults: result.shows, isLoadingGenre: false));
-    } catch (_) {
-      emit(state.withGenre(genreId: genreId, genreName: genreName, genreResults: const [], isLoadingGenre: false));
-    }
-  }
-
-  void clearGenre() {
-    emit(state.withGenre(genreId: null, genreName: null, genreResults: const [], isLoadingGenre: false));
-  }
 
   Future<void> search(String query) async {
     emit(state.copyWith(query: query));
