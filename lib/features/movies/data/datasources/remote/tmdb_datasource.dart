@@ -176,6 +176,13 @@ class TmdbDatasource {
     } else {
       settings['year'] = DateTime.now().year;
     }
+    // Same catalogue definition as discoverMoviesByGenre (the Home genre
+    // rows this "See More" screen is opened from) - without this, "See More"
+    // could include anime/foreign-language titles the row never even
+    // considered, making the two feel like different catalogues rather than
+    // one browsable at different depths.
+    settings['without_genres'] = 16;
+    settings['with_original_language'] = 'en';
 
     final response = await dio.get(
       '${UrlStrings.baseUrl}discover/movie',

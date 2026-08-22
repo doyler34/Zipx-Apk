@@ -103,6 +103,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 final popular = state2.showAdultContent ? state.popularMovies.movies! : state.popularMovies.movies!.where((movie) => !movie.adult).toList();
                 List<MovieModel> cleanGenre(List<MovieModel> movies) =>
                     state2.showAdultContent ? movies : movies.where((movie) => !movie.adult).toList();
+                // A row this thin (after adult-content filtering on top of
+                // the availability/language filtering already applied
+                // upstream) reads as broken rather than intentional - hide it
+                // instead of showing a couple of posters trailing into empty
+                // space. Matches the bar genre sections are already held to.
+                const minRowSize = 6;
                 return FadeIn(
                   child: CustomMaterialIndicator(
                     indicatorBuilder: (context, _) {
@@ -119,7 +125,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: SingleChildScrollView(
                         child: Column(
                           children: [
-                            HeroCarousel(movies: trending),
+                            // Fewer than 3 titles isn't enough for a peeking
+                            // carousel to feel intentional - the left/right
+                            // slots would just repeat the same 1-2 posters.
+                            HeroCarousel(movies: trending.length >= 3 ? trending : const []),
                             ContinueWatchingSection(historyService: sl<PlaybackHistoryService>()),
                             // Each row (header + section) only renders when it
                             // actually has titles - an availability fill that
@@ -131,7 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             // so they were frequently just empty rows.
                             const Header(title: 'Movie Genres'),
                             MovieGenres(genres: state.genres),
-                            if (topRated.isNotEmpty) ...[
+                            if (topRated.length >= minRowSize) ...[
                               Header(
                                 title: 'Top Rated Movies',
                                 onTap: () {
@@ -140,7 +149,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               MoviesSection(movies: topRated, isHomePage: true),
                             ],
-                            if (popular.isNotEmpty) ...[
+                            if (popular.length >= minRowSize) ...[
                               Header(
                                 title: 'Popular Movies',
                                 onTap: () {
@@ -153,7 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             // much better availability than the new-release rows
                             // that used to be here.
                             for (final section in state.genreSections)
-                              if (cleanGenre(section.$2).isNotEmpty) ...[
+                              if (cleanGenre(section.$2).length >= minRowSize) ...[
                                 Header(title: '${section.$1} Movies'),
                                 MoviesSection(movies: cleanGenre(section.$2), isHomePage: true),
                               ],

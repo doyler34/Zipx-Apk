@@ -237,7 +237,9 @@ class TvHomeCubit extends Cubit<TvHomeState> {
             episodeNumber: 1,
             posterPath: s.posterPath,
           );
-      Future<List<TvModel>> fill(List<TvModel> first, Future<List<TvModel>> Function(int) fetch, {int maxPages = 3}) =>
+      // maxPages is a safety ceiling, not the everyday driver - see
+      // AvailabilityProber.fillAvailable's doc for the actual stop conditions.
+      Future<List<TvModel>> fill(List<TvModel> first, Future<List<TvModel>> Function(int) fetch, {int maxPages = 8}) =>
           prober.fillAvailable<TvModel>(
             mediaType: PlaybackMediaType.tv,
             firstPage: first,
@@ -284,19 +286,14 @@ class TvHomeCubit extends Cubit<TvHomeState> {
           safeEmitRow();
         }).catchError((_) {}),
       ];
-      // Genre rows top up too (each capped at 6 pages, see maxPages below) -
-      // without this, a genre whose page-1 picks skew unavailable (e.g.
-      // Crime/Mystery) ends up nearly empty instead of refilled.
+      // Genre rows top up too - without this, a genre whose page-1 picks skew
+      // unavailable (e.g. Crime/Mystery) ends up nearly empty instead of
+      // refilled.
       for (var i = 0; i < genreRowsRaw.length; i++) {
         final s = genreRowsRaw[i];
         fillFutures.add(fill(
           s.$3,
           (p) => _datasource.discoverTvByGenre(genreId: s.$1, page: p).then((r) => r.shows),
-          // Narrower genres (English-only, non-animated - notably Crime/
-          // Mystery) need more pages than the broad rows to reliably reach
-          // the target - 3 pages wasn't always enough, leaving a visibly
-          // sparse row.
-          maxPages: 6,
         ).then((filled) {
           genreSectionsF = [
             for (var j = 0; j < genreSectionsF.length; j++)

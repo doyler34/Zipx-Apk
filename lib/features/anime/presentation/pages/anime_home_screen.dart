@@ -143,8 +143,12 @@ class _AnimeHomeViewState extends State<_AnimeHomeView> {
         child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
       );
 
+  // A row this thin reads as broken rather than intentional - hide it
+  // instead of showing a couple of posters trailing into empty space.
+  static const int _minRowSize = 6;
+
   Widget _movieRow(String title, List<MovieModel> movies) {
-    if (movies.isEmpty) return const SizedBox.shrink();
+    if (movies.length < _minRowSize) return const SizedBox.shrink();
     return TvRow(
       title: title,
       cards: [for (final m in movies) SizedBox(width: 150, child: AnimeMovieCard(movie: m))],
@@ -152,7 +156,7 @@ class _AnimeHomeViewState extends State<_AnimeHomeView> {
   }
 
   Widget _tvRow(String title, List<TvModel> shows) {
-    if (shows.isEmpty) return const SizedBox.shrink();
+    if (shows.length < _minRowSize) return const SizedBox.shrink();
     return TvRow(
       title: title,
       cards: [for (var i = 0; i < shows.length; i++) SizedBox(width: 150, child: TvCard(show: shows[i], autofocus: false, isAnime: true))],

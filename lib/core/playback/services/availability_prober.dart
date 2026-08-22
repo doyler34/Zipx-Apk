@@ -124,19 +124,25 @@ class AvailabilityProber {
     await Future.wait(List.generate(workers, (_) => worker()));
   }
 
-  /// Bounded page top-up: walks successive TMDB pages, probes each, and returns
-  /// up to [target] titles that have a playable stream - stopping at [maxPages],
-  /// when a page returns empty, or once the target is met. So a row of 20 that
-  /// filters down to 8 fetches the next page(s) to refill it instead of looking
-  /// broken. [firstPage] lets the caller pass an already-loaded page 1 to avoid
-  /// re-fetching it.
+  /// Adaptive page top-up: walks successive TMDB pages, probes each, and
+  /// returns up to [target] titles that have a playable stream. Genuinely
+  /// adaptive, not a fixed candidate count - it keeps requesting pages until
+  /// EITHER the target is met, OR TMDB itself runs out (a page comes back
+  /// empty - the natural end of that catalogue slice), OR [maxPages] is hit
+  /// as a hard safety ceiling against a pathological catalogue that never
+  /// stops returning results. [maxPages] defaults high enough that any row
+  /// with a genuinely deep-enough catalogue reaches its target; it only ever
+  /// matters as a backstop, not as the everyday driver. So a row of 20 that
+  /// filters down to 8 on page 1 fetches further pages to refill it instead
+  /// of looking broken. [firstPage] lets the caller pass an already-loaded
+  /// page 1 to avoid re-fetching it.
   Future<List<T>> fillAvailable<T>({
     required PlaybackMediaType mediaType,
     required Future<List<T>> Function(int page) fetchPage,
     required int Function(T) idOf,
     required PlaybackRequest Function(T) toRequest,
     int target = 20,
-    int maxPages = 3,
+    int maxPages = 8,
     int concurrency = 6,
     List<T>? firstPage,
   }) async {

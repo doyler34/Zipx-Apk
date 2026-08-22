@@ -171,8 +171,12 @@ class _TvSections extends StatelessWidget {
     );
   }
 
+  // A row this thin reads as broken rather than intentional - hide it
+  // instead of showing a couple of posters trailing into empty space.
+  static const int _minRowSize = 6;
+
   Widget _row(String title, List<TvModel> shows) {
-    if (shows.isEmpty) return const SizedBox.shrink();
+    if (shows.length < _minRowSize) return const SizedBox.shrink();
     return TvRow(
       title: title,
       cards: [

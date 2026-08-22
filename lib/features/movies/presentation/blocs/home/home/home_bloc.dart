@@ -216,10 +216,12 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         );
 
     // A pageable row: probe + top up to target across up to [maxPages] pages.
+    // maxPages is a safety ceiling, not the everyday driver - see
+    // AvailabilityProber.fillAvailable's doc for the actual stop conditions.
     Future<List<MovieModel>> fill(
       MoviesResultModel first,
       Future<MoviesResultModel> Function(int) fetch, {
-      int maxPages = 3,
+      int maxPages = 8,
     }) =>
         prober.fillAvailable<MovieModel>(
           mediaType: PlaybackMediaType.movie,
@@ -287,10 +289,6 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       futures.add(fill(
         MoviesResultModel(movies: g.$3, totalPages: 1),
         (p) => tmdbDatasource.discoverMoviesByGenre(genreId: g.$1, page: p),
-        // Narrower genres (English-only, non-animated) need more pages than
-        // the broad rows to reliably reach the target - 3 pages wasn't
-        // always enough for thinner genres, leaving a visibly sparse row.
-        maxPages: 6,
       ).then((filled) {
         genreSectionsF = [
           for (var j = 0; j < genreSectionsF.length; j++)

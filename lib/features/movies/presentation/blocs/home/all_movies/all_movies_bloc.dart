@@ -1,5 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:movie_bloc_app/core/dependency_injection/di.dart';
+import 'package:movie_bloc_app/core/playback/domain/entities/playback_media_type.dart';
+import 'package:movie_bloc_app/core/playback/services/stream_availability_service.dart';
 import 'package:movie_bloc_app/core/utils/helpers/helper_functions.dart';
 
 import 'package:movie_bloc_app/features/movies/domain/usecases/get_nowplaying.dart';
@@ -37,6 +40,17 @@ class AllMoviesBloc extends Bloc<AllMoviesEvent, AllMoviesState> {
   // indefinitely. A real user scroll is unbounded (uses auto: false).
   static const int _autoTopUpBudget = 8;
   int _autoTopUpsUsed = 0;
+
+  // Same cache-based availability filter the Home rows already apply, so
+  // "See More" is the same catalogue at a different depth instead of a
+  // separate, unfiltered one - dead-end titles the row hides don't
+  // reappear here. `allMovies` itself stays the raw accumulated list (so
+  // pagination bookkeeping tracks the real TMDB pages); this is only
+  // applied at emit time.
+  List<MovieModel> _filterAvailable(List<MovieModel> movies) {
+    final avail = sl<StreamAvailabilityService>();
+    return movies.where((m) => !avail.isKnownUnavailable(PlaybackMediaType.movie, m.id)).toList();
+  }
 
   AllMoviesBloc({
     required this.getUpcoming,
@@ -88,7 +102,7 @@ class AllMoviesBloc extends Bloc<AllMoviesEvent, AllMoviesState> {
           isMaxPage = true;
         }
 
-        emit(AllMoviesLoaded(movies: allMovies, isMaxPage: isMaxPage));
+        emit(AllMoviesLoaded(movies: _filterAvailable(allMovies), isMaxPage: isMaxPage));
       } catch (e) {
         emit(const AllMoviesError(message: 'Error fetching movies'));
       }
@@ -101,7 +115,7 @@ class AllMoviesBloc extends Bloc<AllMoviesEvent, AllMoviesState> {
           // trigger a manual load-more either) - stop the spinner and show
           // what was actually gathered instead of spinning forever.
           isMaxPage = true;
-          emit(AllMoviesLoaded(movies: allMovies, isMaxPage: isMaxPage));
+          emit(AllMoviesLoaded(movies: _filterAvailable(allMovies), isMaxPage: isMaxPage));
           return;
         }
         _autoTopUpsUsed++;
@@ -139,7 +153,7 @@ class AllMoviesBloc extends Bloc<AllMoviesEvent, AllMoviesState> {
           }
 
           emit(AllMoviesLoading());
-          emit(AllMoviesLoaded(movies: allMovies, isMaxPage: isMaxPage));
+          emit(AllMoviesLoaded(movies: _filterAvailable(allMovies), isMaxPage: isMaxPage));
         } catch (e) {
           currentPage--;
           emit(const AllMoviesError(message: 'Error fetching movies'));
