@@ -216,12 +216,16 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         );
 
     // A pageable row: probe + top up to target across up to [maxPages] pages.
-    // maxPages is a safety ceiling, not the everyday driver - see
-    // AvailabilityProber.fillAvailable's doc for the actual stop conditions.
+    // Deliberately NOT raised to 8 for every row - Popular/Top Rated/Trending
+    // have no genre filter, so a deep page-walk on them digs into the same
+    // popularity-ranked pool every genre row also draws from; with thin
+    // stream-availability coverage, that made unrelated rows converge on the
+    // same handful of "popular enough to survive everywhere" titles instead
+    // of staying genre-distinct. Kept shallow (3) here, matching pre-9096a05.
     Future<List<MovieModel>> fill(
       MoviesResultModel first,
       Future<MoviesResultModel> Function(int) fetch, {
-      int maxPages = 8,
+      int maxPages = 3,
     }) =>
         prober.fillAvailable<MovieModel>(
           mediaType: PlaybackMediaType.movie,
@@ -289,6 +293,10 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       futures.add(fill(
         MoviesResultModel(movies: g.$3, totalPages: 1),
         (p) => tmdbDatasource.discoverMoviesByGenre(genreId: g.$1, page: p),
+        // Narrower genres (English-only, non-animated) need more pages than
+        // the broad rows to reliably reach the target - 3 pages wasn't
+        // always enough for thinner genres, leaving a visibly sparse row.
+        maxPages: 6,
       ).then((filled) {
         genreSectionsF = [
           for (var j = 0; j < genreSectionsF.length; j++)
